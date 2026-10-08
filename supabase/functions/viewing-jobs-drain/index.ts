@@ -13,6 +13,77 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { reduceRequest, type DomainEvent } from '../_shared/viewing-domain.ts';
 import { dueActions, holdingUpdateOnHold, HELD_REFUSALS } from '../_shared/viewing/reminders.ts';
+import { placeOf } from '../_shared/viewing/place.ts';
+import {
+  OPS_DIGEST_JOB, digestDue, escalationUpdate, inquiryMessageUpdate, inquiryUpdates, renderDigest, viewingUpdates,
+  type Update,
+} from '../_shared/viewing/ops-digest.ts';
+import type { InquiryEvent } from '../_shared/viewing-domain.ts';
+
+// deno-lint-ignore no-explicit-any
+type Supa = any;
+
+/**
+ * What changed since the last operators' digest, across viewing requests,
+ * buildings and priority searches (ops-digest.ts). The window starts where the
+ * last digest job ended, so news held back by the gap is carried, not lost,
+ * and ends a minute ago, so an event written mid-pass is in the next window
+ * rather than in neither.
+ */
+async function digestUpdates(db: Supa, from: string, until: string): Promise<Update[]> {
+  const updates: Update[] = [];
+
+  const [{ data: events }, { data: escalations }] = await Promise.all([
+    db.from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
+      .in('type', ['RENTER_REPLIED', 'OUTCOME_RECORDED', 'ITINERARY_DELIVERED', 'ITINERARY_HELD',
+        'REQUEST_CONFIRMED', 'REQUEST_FAILED', 'REQUEST_CANCELLED'])
+      .gt('occurred_at', from).lte('occurred_at', until),
+    db.from('operator_proposals').select('request_id, rationale, created_at')
+      .eq('action', 'ESCALATE').gt('created_at', from).lte('created_at', until),
+  ]);
+  const requestIds = [...new Set([
+    ...((events ?? []) as DomainEvent[]).map(e => e.request_id),
+    ...((escalations ?? []) as { request_id: string }[]).map(p => p.request_id),
+  ])];
+  const { data: refs } = requestIds.length
+    ? await db.from('viewing_requests').select('id, ref').in('id', requestIds)
+    : { data: [] };
+  const refOf = new Map(((refs ?? []) as { id: string; ref: string }[]).map(r => [r.id, r.ref]));
+  for (const id of requestIds) {
+    updates.push(...viewingUpdates(refOf.get(id) ?? 'a request', ((events ?? []) as DomainEvent[]).filter(e => e.request_id === id), id));
+  }
+  for (const p of (escalations ?? []) as { request_id: string; rationale: string; created_at: string }[]) {
+    updates.push(escalationUpdate(refOf.get(p.request_id) ?? 'a request', p.rationale, p.created_at, p.request_id));
+  }
+
+  const [{ data: inqEvents }, { data: inbound }] = await Promise.all([
+    db.from('inquiry_events').select('id, inquiry_id, type, payload, actor, occurred_at')
+      .in('type', ['CONFIRMED', 'BRIEF_CHANGED', 'UNITS_OFFERED', 'CLOSED', 'REOPENED'])
+      .gt('occurred_at', from).lte('occurred_at', until),
+    db.from('complex_inquiry_messages').select('inquiry_id, created_at')
+      .eq('direction', 'inbound').gt('created_at', from).lte('created_at', until),
+  ]);
+  const inquiryIds = [...new Set([
+    ...((inqEvents ?? []) as InquiryEvent[]).map(e => e.inquiry_id),
+    ...((inbound ?? []) as { inquiry_id: string }[]).map(m => m.inquiry_id),
+  ])];
+  if (inquiryIds.length) {
+    const { data: inquiries } = await db.from('complex_inquiries')
+      .select('id, complex_id, area_label, area_district_codes').in('id', inquiryIds);
+    for (const q of (inquiries ?? []) as { id: string; complex_id: string | null; area_label: string | null; area_district_codes: string[] | null }[]) {
+      const place = await placeOf(db, q).catch(() => null);
+      const kind = q.complex_id ? 'BUILDING' : 'SEARCH';
+      const name = place?.name ?? (kind === 'SEARCH' ? 'a priority search' : 'a building');
+      updates.push(...inquiryUpdates(kind, name, ((inqEvents ?? []) as InquiryEvent[]).filter(e => e.inquiry_id === q.id), q.id));
+      // One line per thread per pass, however many messages the renter sent.
+      const last = ((inbound ?? []) as { inquiry_id: string; created_at: string }[])
+        .filter(m => m.inquiry_id === q.id).map(m => m.created_at).sort().pop();
+      if (last) updates.push(inquiryMessageUpdate(kind, name, last, q.id));
+    }
+  }
+  return updates;
+}
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -168,6 +239,35 @@ Deno.serve(async (req) => {
   // Enqueue only. Executing the jobs is a separate pass so a slow send cannot
   // stall the scan, and so a job that fails is retried from its row rather
   // than lost with the request that produced it.
-  console.log(`[viewing-jobs-drain] scanned ${requests.length}, enqueued ${rows.length}, held ${held}`);
-  return json({ success: true, scanned: requests.length, enqueued: rows.length, held });
+  const digest = await queueDigest(db, now).catch((e: Error) => {
+    console.error('[viewing-jobs-drain] digest failed:', e.message);
+    return 'failed';
+  });
+
+  console.log(`[viewing-jobs-drain] scanned ${requests.length}, enqueued ${rows.length}, held ${held}, digest ${digest}`);
+  return json({ success: true, scanned: requests.length, enqueued: rows.length, held, digest });
 });
+
+/**
+ * The operators' digest, if one is due: one job carrying the rendered email,
+ * which viewing-jobs-run sends. Its `until` is the next window's start.
+ */
+async function queueDigest(db: Supa, now: number): Promise<string> {
+  const { data: last } = await db
+    .from('jobs').select('created_at, payload').eq('kind', OPS_DIGEST_JOB)
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  const from = typeof last?.payload?.until === 'string' ? last.payload.until : new Date(now - 15 * 60_000).toISOString();
+  const until = new Date(now - 60_000).toISOString();
+  if (from >= until) return 'none';
+  const updates = await digestUpdates(db, from, until);
+  if (!digestDue(updates, last ? Date.parse(last.created_at) : null, now)) return updates.length ? 'held' : 'none';
+  const alert = renderDigest(updates);
+  if (!alert) return 'none';
+  const { error } = await db.from('jobs').insert({
+    kind: OPS_DIGEST_JOB,
+    run_after: new Date(now).toISOString(),
+    payload: { request_id: null, from, until, subject: alert.subject, text: alert.text, updates: updates.length },
+  });
+  if (error) throw new Error(error.message);
+  return `queued ${updates.length}`;
+}

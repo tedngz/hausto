@@ -601,12 +601,27 @@ number") and listed first in the body with their title, the masked number the
 listing shows and its link, because nobody can be asked about them until a
 person finds the number and saves it with `RECORD_CONTACT`.
 
-**A broker is owed the renter's decision once the request closes** - or, for a
-place the renter removed (`WITHDRAWN`, §9), at once: a removed place whose
-agent was holding time is owed `RELEASE` while the rest of the request goes
-on. A broker still holding a slot at times the renter has since changed
-(`staleHold`) is owed `RELEASE` if the request closes before they are asked
-again.
+**Everything after that comes as a digest** (`_shared/viewing/ops-digest.ts`,
+2026-10-08), to the same recipients. Each pass of `viewing-jobs-drain` (every
+15 minutes) gathers what happened since the last digest across all three kinds
+of request - viewing requests (a renter's reply that needs an answer, an
+opt-out, an agent's outcome, the plan sent or held, a lock-in, a failure, a
+cancellation not made by the renter on the web), availability requests and
+priority searches (a new one confirmed, a renter's message, a changed brief,
+units offered, closed, reopened) - and the AI operator's `ESCALATE`
+proposals. It queues one `OPS_DIGEST` job carrying the rendered email, which
+`viewing-jobs-run` sends once. What needs a person is listed first, each with a
+link straight to it in the console (`#/request/<id>`, `#/inquiry/<id>`); news
+alone waits until the last digest is 30 minutes old. Nobody's words are quoted
+and nothing names the renter. The window runs from the last digest's `until`,
+so news held back is carried rather than lost.
+
+**One ranking for all three kinds** (`_shared/viewing/inbox.ts`): viewing
+requests by `triage`, availability requests by the reply promised from the
+renter's code. The console's Inbox, `/admin-tools`' Requests overview (read-only,
+admin scope) and the digest's links read it, so they agree on what is urgent.
+
+**A broker is owed the renter's decision once the request closes**
 (`realtorDecisionsOwed` in `reminders.ts`): `CONFIRM` for an item the renter
 kept that reached `CONFIRMED`, `RELEASE` for any other item still holding time
 (`CONFIRMED`, `ALTERNATIVE_OFFERED`, `CONTACTED`). A broker who said no is
@@ -615,6 +630,12 @@ recent `REALTOR_NOTIFIED` matches, so a broker confirmed on Monday for a request
 cancelled on Tuesday is owed a release. The drain turns each into a
 `CONFIRM_REALTOR` / `RELEASE_REALTOR` job, which stays open until an operator
 sends it.
+
+Two cases do not wait for the request to close (2026-10-08). A place the
+renter removed (`WITHDRAWN`, §9) owes its broker a `RELEASE` at once, if they
+were holding time, while the rest of the request goes on. And a broker still
+holding a slot at times the renter has since changed (`staleHold`) is owed a
+`RELEASE` if the request closes before they are asked again.
 
 **Waiting replies** (`waitingReplies` in `thread.ts`) are the renter's replies
 whose intent needs an operator, since the last `REPLY_SENT` or

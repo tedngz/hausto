@@ -21,6 +21,7 @@ import { deliver } from '../_shared/viewing/deliver.ts';
 import { INQUIRY_DEADLINE_JOB } from '../_shared/viewing/inquiry-deadline.ts';
 import { runInquiryDeadline } from '../_shared/viewing/concierge.ts';
 import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
+import { OPS_DIGEST_JOB } from '../_shared/viewing/ops-digest.ts';
 import { sendViewingDay } from '../_shared/viewing/viewing-day.ts';
 import { LOCK_IN_DEADLINE_JOB, runLockInDeadline } from '../_shared/viewing/lock-in-deadline.ts';
 import { SupabaseMessageStore } from '../_shared/whatsapp/store.ts';
@@ -36,7 +37,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 /** Kinds this runner owns. Everything else is somebody's to-do, not a task. */
-const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_DAY', INQUIRY_DEADLINE_JOB, LOCK_IN_DEADLINE_JOB];
+const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_DAY', INQUIRY_DEADLINE_JOB, LOCK_IN_DEADLINE_JOB, OPS_DIGEST_JOB];
 
 /** A viewing-day refusal no retry can change: done, with the reason on the row. */
 const VIEWING_DAY_FINAL = new Set(['unknown_request', 'not_due', 'too_many_consecutive', 'template_unavailable']);
@@ -100,6 +101,23 @@ Deno.serve(async (req) => {
   let skipped = 0;
 
   for (const job of jobs) {
+    // The operators' digest (ops-digest.ts): the drain rendered it; this sends
+    // it, once. A failed send is recorded rather than retried - the next
+    // digest carries on from its window, and stale news is not worth a second
+    // email.
+    if (job.kind === OPS_DIGEST_JOB) {
+      const p = job.payload as { subject?: string; text?: string };
+      const r = p.subject && p.text
+        ? await sendIntakeAlert(db, { subject: p.subject, text: p.text }, Deno.env.get('RESEND_API_KEY'))
+        : { sent: 0, skipped: 'empty digest' };
+      await db.from('jobs').update({
+        completed_at: new Date().toISOString(),
+        last_error: r.sent > 0 ? null : r.skipped ?? 'not sent',
+      }).eq('id', job.id);
+      if (r.sent > 0) sent++; else skipped++;
+      continue;
+    }
+
     // An availability request's 16h/22h reminder (PLAN-v3 S7.1c): an email to
     // the ops team, only if nobody has answered yet. Never retried into a
     // second email - a reminder that failed is logged, not repeated.

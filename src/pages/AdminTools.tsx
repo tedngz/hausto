@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw, Pause, Play, Settings2, Eye, MapPin, Image as ImageIcon, ExternalLink } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw, Pause, Play, Settings2, Eye, MapPin, Image as ImageIcon, ExternalLink, ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +13,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject } from "@/data/hcmcApartmentProjects";
 import { RealtorApplicationsPanel } from "@/components/admin/RealtorApplicationsPanel";
 import { FastTrackQueuePanel } from "@/components/admin/FastTrackQueuePanel";
-import { ViewingFlowQueuePanel } from "@/components/admin/ViewingFlowQueuePanel";
+import { RequestsOverview } from "@/components/admin/RequestsOverview";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ConciergeRequestsPanel } from "@/components/admin/ConciergeRequestsPanel";
 import { ImageConflictsPanel } from "@/components/admin/ImageConflictsPanel";
 import { OpenAIUsagePanel } from "@/components/admin/OpenAIUsagePanel";
@@ -59,6 +61,10 @@ function explainVerificationReason(reason: string | null | undefined): string {
 const AdminTools = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  // The open tab lives in the URL (?tab=listings), so a link lands on it.
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') ?? 'requests';
+  const setTab = (t: string) => setParams(prev => { const n = new URLSearchParams(prev); n.set('tab', t); return n; }, { replace: true });
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -979,7 +985,7 @@ const AdminTools = () => {
   };
 
   return (
-    <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
+    <div className="container mx-auto px-3 py-4 md:p-6 max-w-6xl space-y-4 md:space-y-6">
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
@@ -989,518 +995,488 @@ const AdminTools = () => {
       </div>
 
 
-      <OpenAIUsagePanel />
+      {/* Grouped by what the work is (2026-10-08). Requests first: they are
+          what a person acts on today; the rest is the platform behind them. */}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="h-auto flex-wrap justify-start">
+          <TabsTrigger value="requests">Requests</TabsTrigger>
+          <TabsTrigger value="listings">Listings &amp; crawling</TabsTrigger>
+          <TabsTrigger value="ai">AI &amp; search</TabsTrigger>
+          <TabsTrigger value="agents">Agents</TabsTrigger>
+        </TabsList>
 
-      <ViewingFlowQueuePanel />
+        <TabsContent value="requests" className="mt-4 space-y-4">
+          <RequestsOverview />
+          {/* Retired surfaces whose rows are still real history. */}
+          <Collapsible>
+            <CollapsibleTrigger className="group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+              Older request systems - Fast-Track and email availability requests
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 space-y-4">
+              <FastTrackQueuePanel />
+              <ConciergeRequestsPanel />
+            </CollapsibleContent>
+          </Collapsible>
+        </TabsContent>
 
-      <FastTrackQueuePanel />
+        <TabsContent value="listings" className="mt-4 space-y-4 md:space-y-6">
+          <ImageConflictsPanel />
 
-      <ConciergeRequestsPanel />
-
-
-      <ImageConflictsPanel />
-
-      <RealtorApplicationsPanel />
-
-
-      {/* Crawl External Listings - moved to top */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Globe className="h-5 w-5" />
-            Crawl External Listings
-          </CardTitle>
-          <CardDescription>
-            Crawl marketplace listings from batdongsan.com.vn and nhatot.vn, store them in the database with vibe analysis.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>City</Label>
-              <select
-                value={crawlCity}
-                onChange={(e) => setCrawlCity(e.target.value as 'ho_chi_minh' | 'hanoi' | 'da_nang')}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="ho_chi_minh">Ho Chi Minh City</option>
-                <option value="hanoi">Hanoi</option>
-                <option value="da_nang">Da Nang</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label>Marketplaces</Label>
-              <div className="flex flex-col gap-2 pt-1">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={crawlMarketplaces.batdongsan}
-                    onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, batdongsan: e.target.checked }))}
-                    className="rounded"
-                  />
-                  batdongsan.com.vn
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={crawlMarketplaces.nhatot}
-                    onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, nhatot: e.target.checked }))}
-                    className="rounded"
-                  />
-                  nhatot.vn
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={crawlMarketplaces.housingsgn}
-                    onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, housingsgn: e.target.checked }))}
-                    className="rounded"
-                  />
-                  housingsgn.com
-                </label>
+        {/* Crawl External Listings - moved to top */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Crawl External Listings
+            </CardTitle>
+            <CardDescription>
+              Crawl marketplace listings from batdongsan.com.vn and nhatot.vn, store them in the database with vibe analysis.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>City</Label>
+                <select
+                  value={crawlCity}
+                  onChange={(e) => setCrawlCity(e.target.value as 'ho_chi_minh' | 'hanoi' | 'da_nang')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="ho_chi_minh">Ho Chi Minh City</option>
+                  <option value="hanoi">Hanoi</option>
+                  <option value="da_nang">Da Nang</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Marketplaces</Label>
+                <div className="flex flex-col gap-2 pt-1">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={crawlMarketplaces.batdongsan}
+                      onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, batdongsan: e.target.checked }))}
+                      className="rounded"
+                    />
+                    batdongsan.com.vn
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={crawlMarketplaces.nhatot}
+                      onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, nhatot: e.target.checked }))}
+                      className="rounded"
+                    />
+                    nhatot.vn
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={crawlMarketplaces.housingsgn}
+                      onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, housingsgn: e.target.checked }))}
+                      className="rounded"
+                    />
+                    housingsgn.com
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-            <div className="flex items-center gap-2">
-              <Switch checked={crawlForceRefresh} onCheckedChange={setCrawlForceRefresh} id="force-refresh" />
-              <Label htmlFor="force-refresh" className="text-sm">Force refresh (skip cache)</Label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+              <div className="flex items-center gap-2">
+                <Switch checked={crawlForceRefresh} onCheckedChange={setCrawlForceRefresh} id="force-refresh" />
+                <Label htmlFor="force-refresh" className="text-sm">Force refresh (skip cache)</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={crawlRunVibe} onCheckedChange={setCrawlRunVibe} id="run-vibe" />
+                <Label htmlFor="run-vibe" className="text-sm">Run vibe analysis</Label>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={crawlRunVibe} onCheckedChange={setCrawlRunVibe} id="run-vibe" />
-              <Label htmlFor="run-vibe" className="text-sm">Run vibe analysis</Label>
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Max listings per location</Label>
-              <span className="text-sm font-bold text-primary">{crawlMaxListings}</span>
-            </div>
-            <Slider
-              value={[crawlMaxListings]}
-              onValueChange={(v) => setCrawlMaxListings(v[0])}
-              min={1}
-              max={10}
-              step={1}
-              className="w-full"
-            />
-            <p className="text-xs text-muted-foreground">Controls how many individual listing pages are scraped per location/marketplace combo.</p>
-          </div>
-
-          <Button
-            onClick={handleCrawlListings}
-            disabled={isCrawling}
-            size="lg"
-            className="w-full"
-          >
-            {isCrawling ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {crawlProgress 
-                  ? `Crawling ${crawlProgress.location} (${crawlProgress.current}/${crawlProgress.total})...`
-                  : 'Starting Crawl...'
-                }
-              </>
-            ) : (
-              <>
-                <Globe className="mr-2 h-4 w-4" />
-                Start Crawl
-              </>
-            )}
-          </Button>
-
-          {crawlResults && (
-            <div className="p-4 bg-muted rounded-lg space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="font-semibold">Crawl Results</p>
-                <Badge>{crawlResults.duration}</Badge>
+                <Label className="text-sm">Max listings per location</Label>
+                <span className="text-sm font-bold text-primary">{crawlMaxListings}</span>
               </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Found</p>
-                  <p className="text-2xl font-bold">{crawlResults.totalFound}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">New</p>
-                  <p className="text-2xl font-bold text-primary">{crawlResults.totalNew || 0}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Updated</p>
-                  <p className="text-2xl font-bold text-accent-foreground">{crawlResults.totalUpdated || 0}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Duplicates Skipped</p>
-                  <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalDuplicatesSkipped || 0}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Vibe Analyzed</p>
-                  <p className="text-2xl font-bold">{crawlResults.totalVibeAnalyzed}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Cache Skipped</p>
-                  <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalSkipped}</p>
-                </div>
-              </div>
+              <Slider
+                value={[crawlMaxListings]}
+                onValueChange={(v) => setCrawlMaxListings(v[0])}
+                min={1}
+                max={10}
+                step={1}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">Controls how many individual listing pages are scraped per location/marketplace combo.</p>
+            </div>
 
-              {crawlResults.results && crawlResults.results.length > 0 && (
-                <div className="space-y-1 pt-2 border-t">
-                  <p className="text-xs font-semibold text-muted-foreground">Details:</p>
-                  {crawlResults.results.map((r: any, idx: number) => (
-                    <div key={idx} className="text-xs flex items-center justify-between p-1.5 bg-background rounded">
-                      <span>{r.location} / {r.marketplace}</span>
-                      <div className="flex gap-2">
-                        {r.skipped ? (
-                          <Badge variant="secondary" className="text-xs">Skipped</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs">
-                            {r.propertiesFound} found, {r.propertiesStored} stored
-                          </Badge>
-                        )}
-                        {r.error && <Badge variant="destructive" className="text-xs">Error</Badge>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <Button
+              onClick={handleCrawlListings}
+              disabled={isCrawling}
+              size="lg"
+              className="w-full"
+            >
+              {isCrawling ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {crawlProgress 
+                    ? `Crawling ${crawlProgress.location} (${crawlProgress.current}/${crawlProgress.total})...`
+                    : 'Starting Crawl...'
+                  }
+                </>
+              ) : (
+                <>
+                  <Globe className="mr-2 h-4 w-4" />
+                  Start Crawl
+                </>
               )}
-            </div>
-          )}
+            </Button>
 
-          <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
-            <p><strong>Note:</strong> Crawling uses Firecrawl + GPT-4o-mini for scraping and extraction. Each location/marketplace combo takes ~30-60s.</p>
-            <p><strong>Cache:</strong> Results are cached for 6 hours unless force refresh is enabled.</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Project-Targeted Crawl */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Project-Targeted Crawl (HCMC)
-          </CardTitle>
-          <CardDescription>
-            Crawl Batdongsan / Nhatot for listings in specific apartment projects, capped by max monthly rent.
-            Results are post-filtered by project name + aliases so only on-target listings are stored.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Min price (M VND/month)</Label>
-              <div className="flex items-center gap-2">
-                <Slider value={[projectCrawlMinPriceM]} onValueChange={(v) => setProjectCrawlMinPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
-                <span className="text-sm font-mono w-16 text-right">{projectCrawlMinPriceM}M</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Max listings / project</Label>
-              <div className="flex items-center gap-2">
-                <Slider value={[projectCrawlMaxListings]} onValueChange={(v) => setProjectCrawlMaxListings(v[0])} min={3} max={30} step={1} className="flex-1" />
-                <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxListings}</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Marketplaces</Label>
-              <div className="flex flex-wrap items-center gap-4 pt-1">
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={projectCrawlMarketplaces.batdongsan} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, batdongsan: !!c }))} />
-                  Batdongsan
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={projectCrawlMarketplaces.nhatot} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, nhatot: !!c }))} />
-                  Nhatot
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={projectCrawlMarketplaces.housingsgn} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, housingsgn: !!c }))} />
-                  Housingsgn
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Switch checked={projectCrawlRunVibe} onCheckedChange={setProjectCrawlRunVibe} />
-                  Vibe
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Projects ({selectedProjectKeys.size} selected)</Label>
-              <Button size="sm" variant="ghost" onClick={() => setSelectedProjectKeys(new Set())} disabled={selectedProjectKeys.size === 0}>Clear</Button>
-            </div>
-            <Input placeholder="Filter projects (e.g. Vinhomes, Celadon, Thao Dien)…" value={projectCrawlSearch} onChange={(e) => setProjectCrawlSearch(e.target.value)} />
-            <div className="max-h-80 overflow-y-auto border rounded-md p-3 space-y-3">
-              {Object.entries(groupProjectsByDistrict()).map(([district, list]) => {
-                const q = projectCrawlSearch.toLowerCase().trim();
-                const visible = list.filter(p => !q || p.name.toLowerCase().includes(q) || (p.aliases || []).some(a => a.toLowerCase().includes(q)) || p.district.toLowerCase().includes(q));
-                if (visible.length === 0) return null;
-                const visibleKeys = visible.map(p => `${p.district}|${p.name}`);
-                const allSelected = visibleKeys.every(k => selectedProjectKeys.has(k));
-                return (
-                  <div key={district} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold uppercase text-muted-foreground">{district}</div>
-                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => {
-                        setSelectedProjectKeys(prev => {
-                          const next = new Set(prev);
-                          if (allSelected) visibleKeys.forEach(k => next.delete(k));
-                          else visibleKeys.forEach(k => next.add(k));
-                          return next;
-                        });
-                      }}>{allSelected ? 'Unselect all' : 'Select all'}</Button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
-                      {visible.map(p => {
-                        const key = `${p.district}|${p.name}`;
-                        const checked = selectedProjectKeys.has(key);
-                        return (
-                          <label key={key} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/50 cursor-pointer">
-                            <Checkbox checked={checked} onCheckedChange={(c) => {
-                              setSelectedProjectKeys(prev => {
-                                const next = new Set(prev);
-                                if (c) next.add(key); else next.delete(key);
-                                return next;
-                              });
-                            }} />
-                            <span className="truncate">{p.name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
+            {crawlResults && (
+              <div className="p-4 bg-muted rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold">Crawl Results</p>
+                  <Badge>{crawlResults.duration}</Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Found</p>
+                    <p className="text-2xl font-bold">{crawlResults.totalFound}</p>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <Button onClick={handleProjectCrawl} disabled={isProjectCrawling || selectedProjectKeys.size === 0}>
-            {isProjectCrawling ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Crawling projects…</>) : (<><Search className="h-4 w-4 mr-2" /> Start project crawl ({selectedProjectKeys.size})</>)}
-          </Button>
-
-          {projectCrawlProgress && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Project {projectCrawlProgress.current} of {projectCrawlProgress.total}</span>
-                <span className="text-muted-foreground truncate ml-2">{projectCrawlProgress.project}</span>
-              </div>
-              <Progress value={(projectCrawlProgress.current / projectCrawlProgress.total) * 100} />
-            </div>
-          )}
-
-          {projectCrawlResults && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Found</div><div className="font-semibold">{projectCrawlResults.totalFound}</div></div>
-                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">New</div><div className="font-semibold text-primary">{projectCrawlResults.totalNew}</div></div>
-                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Updated</div><div className="font-semibold">{projectCrawlResults.totalUpdated}</div></div>
-                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Stored</div><div className="font-semibold">{projectCrawlResults.totalStored}</div></div>
-              </div>
-              {Array.isArray(projectCrawlResults.results) && projectCrawlResults.results.length > 0 && (
-                <div className="border rounded">
-                  <div className="px-3 py-2 text-xs font-semibold bg-muted/40 border-b grid grid-cols-12 gap-2">
-                    <div className="col-span-5">Project · district</div>
-                    <div className="col-span-2">Marketplace</div>
-                    <div className="col-span-1 text-right">Found</div>
-                    <div className="col-span-1 text-right">New</div>
-                    <div className="col-span-1 text-right">Upd</div>
-                    <div className="col-span-2 text-right">Status</div>
+                  <div>
+                    <p className="text-muted-foreground">New</p>
+                    <p className="text-2xl font-bold text-primary">{crawlResults.totalNew || 0}</p>
                   </div>
-                  <div className="max-h-64 overflow-auto divide-y text-xs">
-                    {projectCrawlResults.results.map((r: any, idx: number) => (
-                      <div key={idx} className="px-3 py-2 grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-5 truncate font-medium">{r.location}</div>
-                        <div className="col-span-2 text-muted-foreground">{r.marketplace}</div>
-                        <div className="col-span-1 text-right">{r.propertiesFound}</div>
-                        <div className="col-span-1 text-right text-primary">{r.newListings}</div>
-                        <div className="col-span-1 text-right">{r.updatedListings}</div>
-                        <div className="col-span-2 text-right text-muted-foreground truncate">
-                          {r.skipped ? 'cached' : r.error ? `❌ ${r.error}` : `${r.propertiesStored} stored`}
+                  <div>
+                    <p className="text-muted-foreground">Updated</p>
+                    <p className="text-2xl font-bold text-accent-foreground">{crawlResults.totalUpdated || 0}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Duplicates Skipped</p>
+                    <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalDuplicatesSkipped || 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Vibe Analyzed</p>
+                    <p className="text-2xl font-bold">{crawlResults.totalVibeAnalyzed}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Cache Skipped</p>
+                    <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalSkipped}</p>
+                  </div>
+                </div>
+
+                {crawlResults.results && crawlResults.results.length > 0 && (
+                  <div className="space-y-1 pt-2 border-t">
+                    <p className="text-xs font-semibold text-muted-foreground">Details:</p>
+                    {crawlResults.results.map((r: any, idx: number) => (
+                      <div key={idx} className="text-xs flex items-center justify-between p-1.5 bg-background rounded">
+                        <span>{r.location} / {r.marketplace}</span>
+                        <div className="flex gap-2">
+                          {r.skipped ? (
+                            <Badge variant="secondary" className="text-xs">Skipped</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">
+                              {r.propertiesFound} found, {r.propertiesStored} stored
+                            </Badge>
+                          )}
+                          {r.error && <Badge variant="destructive" className="text-xs">Error</Badge>}
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Raw Marketplace Harvest — uses Firecrawl credits, skips OpenAI */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            Raw Marketplace Harvest
-          </CardTitle>
-          <CardDescription>
-            Burn Firecrawl credits to scrape marketplaces and store raw listings (hidden, no OpenAI cost).
-            Each click runs ONE batch and auto-chains the next batch via QStash every ~5s until Firecrawl is out of credits.
-            Listings stay <code>is_active=false</code> until you run vibe analysis later.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              onClick={async () => {
-                try {
-                  const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest' } });
-                  if (error) throw error;
-                  const s = data?.summary;
-                  const newN = s?.newListings || 0;
-                  const updN = s?.updatedListings || 0;
-                  toast.success('Raw harvest (districts) — batch started', {
-                    description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
-                  });
-                } catch (err: any) {
-                  toast.error('Raw harvest failed', { description: err.message });
-                }
-              }}
-            >
-              <Sparkles className="h-4 w-4 mr-1" />
-              Start Raw Harvest (Districts)
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={async () => {
-                try {
-                  const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest-projects' } });
-                  if (error) throw error;
-                  const s = data?.summary;
-                  const newN = s?.newListings || 0;
-                  const updN = s?.updatedListings || 0;
-                  toast.success('Raw harvest (HCMC projects) — batch started', {
-                    description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
-                  });
-                } catch (err: any) {
-                  toast.error('Raw harvest (projects) failed', { description: err.message });
-                }
-              }}
-            >
-              <Sparkles className="h-4 w-4 mr-1" />
-              Start Raw Harvest (HCMC Projects)
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-status' } });
-                  if (error) throw error;
-                  const s = data?.session;
-                  const p = data?.projectsSession;
-                  toast.message('Raw harvest session', {
-                    description: [
-                      s ? `Districts: ${s.runs} runs · +${s.newListings} new · last ${s.lastTarget || '-'}${s.outOfCredits ? ' · OOC' : ''}` : 'Districts: none yet',
-                      p ? `Projects: ${p.runs} runs · +${p.newListings} new · last ${p.lastTarget || '-'}${p.outOfCredits ? ' · OOC' : ''}` : 'Projects: none yet',
-                    ].join(' | '),
-                  });
-                } catch (err: any) {
-                  toast.error('Status failed', { description: err.message });
-                }
-              }}
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Check Raw Status
-            </Button>
-          </div>
-          <div className="text-xs text-muted-foreground space-y-1 border-t pt-2">
-            <p><strong>Note on the toast:</strong> "+0 new, N re-saved" is normal — it means Firecrawl returned listings already stored. The chain keeps moving to fresh targets automatically.</p>
-            <p><strong>To convert raw → live later:</strong> run vibe analysis on rows where <code>raw_only=true</code> (one-click button coming, or use existing process-vibe-queue).</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Verify External Listings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5" />
-            Verify External Listings
-          </CardTitle>
-          <CardDescription>
-            Check active external listings against their source sites (Nhatot, Batdongsan, Airbnb).
-            Listings detected as removed/expired twice in a row are auto-deactivated. Runs daily via cron.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button onClick={handleVerifyExternalListings} disabled={isVerifyingListings}>
-            {isVerifyingListings ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verifying (up to 50)…</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-2" /> Verify external listings now</>
+                )}
+              </div>
             )}
-          </Button>
 
-          {verifyListingsResult && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Checked</div><div className="font-semibold">{verifyListingsResult.checked}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Alive</div><div className="font-semibold text-primary">{verifyListingsResult.alive}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Dead hits</div><div className="font-semibold">{verifyListingsResult.dead_increment}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Deactivated</div><div className="font-semibold text-destructive">{verifyListingsResult.deactivated}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Errors</div><div className="font-semibold">{verifyListingsResult.errors}</div></div>
+            <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
+              <p><strong>Note:</strong> Crawling uses Firecrawl + GPT-4o-mini for scraping and extraction. Each location/marketplace combo takes ~30-60s.</p>
+              <p><strong>Cache:</strong> Results are cached for 6 hours unless force refresh is enabled.</p>
             </div>
-          )}
+          </CardContent>
+        </Card>
 
-          {/* Recently auto-deactivated — explains WHY each listing was removed */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">
-                Recently removed listings ({deactivatedListings?.length || 0})
-              </Label>
-              <span className="text-[10px] text-muted-foreground">Auto-deactivated after 2 failed checks</span>
+        {/* Project-Targeted Crawl */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Project-Targeted Crawl (HCMC)
+            </CardTitle>
+            <CardDescription>
+              Crawl Batdongsan / Nhatot for listings in specific apartment projects, capped by max monthly rent.
+              Results are post-filtered by project name + aliases so only on-target listings are stored.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Min price (M VND/month)</Label>
+                <div className="flex items-center gap-2">
+                  <Slider value={[projectCrawlMinPriceM]} onValueChange={(v) => setProjectCrawlMinPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
+                  <span className="text-sm font-mono w-16 text-right">{projectCrawlMinPriceM}M</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Max listings / project</Label>
+                <div className="flex items-center gap-2">
+                  <Slider value={[projectCrawlMaxListings]} onValueChange={(v) => setProjectCrawlMaxListings(v[0])} min={3} max={30} step={1} className="flex-1" />
+                  <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxListings}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Marketplaces</Label>
+                <div className="flex flex-wrap items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={projectCrawlMarketplaces.batdongsan} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, batdongsan: !!c }))} />
+                    Batdongsan
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={projectCrawlMarketplaces.nhatot} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, nhatot: !!c }))} />
+                    Nhatot
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={projectCrawlMarketplaces.housingsgn} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, housingsgn: !!c }))} />
+                    Housingsgn
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Switch checked={projectCrawlRunVibe} onCheckedChange={setProjectCrawlRunVibe} />
+                    Vibe
+                  </label>
+                </div>
+              </div>
             </div>
-            <div className="border rounded-md divide-y max-h-80 overflow-auto">
-              {(deactivatedListings || []).map((row: any) => (
-                <div key={row.id} className="p-3 text-xs space-y-1.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium truncate">{row.title}</div>
-                      <div className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                        <span className="capitalize">{row.source}</span>
-                        {row.source_url && (
-                          <a
-                            href={row.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-0.5 text-primary hover:underline"
-                          >
-                            view source <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>Projects ({selectedProjectKeys.size} selected)</Label>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedProjectKeys(new Set())} disabled={selectedProjectKeys.size === 0}>Clear</Button>
+              </div>
+              <Input placeholder="Filter projects (e.g. Vinhomes, Celadon, Thao Dien)…" value={projectCrawlSearch} onChange={(e) => setProjectCrawlSearch(e.target.value)} />
+              <div className="max-h-80 overflow-y-auto border rounded-md p-3 space-y-3">
+                {Object.entries(groupProjectsByDistrict()).map(([district, list]) => {
+                  const q = projectCrawlSearch.toLowerCase().trim();
+                  const visible = list.filter(p => !q || p.name.toLowerCase().includes(q) || (p.aliases || []).some(a => a.toLowerCase().includes(q)) || p.district.toLowerCase().includes(q));
+                  if (visible.length === 0) return null;
+                  const visibleKeys = visible.map(p => `${p.district}|${p.name}`);
+                  const allSelected = visibleKeys.every(k => selectedProjectKeys.has(k));
+                  return (
+                    <div key={district} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold uppercase text-muted-foreground">{district}</div>
+                        <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => {
+                          setSelectedProjectKeys(prev => {
+                            const next = new Set(prev);
+                            if (allSelected) visibleKeys.forEach(k => next.delete(k));
+                            else visibleKeys.forEach(k => next.add(k));
+                            return next;
+                          });
+                        }}>{allSelected ? 'Unselect all' : 'Select all'}</Button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                        {visible.map(p => {
+                          const key = `${p.district}|${p.name}`;
+                          const checked = selectedProjectKeys.has(key);
+                          return (
+                            <label key={key} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/50 cursor-pointer">
+                              <Checkbox checked={checked} onCheckedChange={(c) => {
+                                setSelectedProjectKeys(prev => {
+                                  const next = new Set(prev);
+                                  if (c) next.add(key); else next.delete(key);
+                                  return next;
+                                });
+                              }} />
+                              <span className="truncate">{p.name}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
-                    <Badge variant="destructive" className="text-[10px] shrink-0">removed</Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-                    <span>
-                      <strong className="text-foreground">Reason:</strong> {explainVerificationReason(row.last_verification_reason)}
-                    </span>
-                    <span>
-                      <strong className="text-foreground">Removed:</strong> {row.deactivated_at ? getTimeAgo(row.deactivated_at) : '—'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {(!deactivatedListings || deactivatedListings.length === 0) && (
-                <div className="p-3 text-xs text-muted-foreground text-center">No listings have been auto-removed yet.</div>
-              )}
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Watchlist — active listings, oldest verified first, with current health */}
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Active watchlist (oldest verified first)</Label>
-            <div className="border rounded-md divide-y max-h-80 overflow-auto">
-              {(verifyStats || []).map((row: any) => {
-                const status = row.last_verification_status || 'pending';
-                const fails = row.verification_failures || 0;
-                return (
-                  <div key={row.id} className="p-2.5 text-xs space-y-1">
+            <Button onClick={handleProjectCrawl} disabled={isProjectCrawling || selectedProjectKeys.size === 0}>
+              {isProjectCrawling ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Crawling projects…</>) : (<><Search className="h-4 w-4 mr-2" /> Start project crawl ({selectedProjectKeys.size})</>)}
+            </Button>
+
+            {projectCrawlProgress && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Project {projectCrawlProgress.current} of {projectCrawlProgress.total}</span>
+                  <span className="text-muted-foreground truncate ml-2">{projectCrawlProgress.project}</span>
+                </div>
+                <Progress value={(projectCrawlProgress.current / projectCrawlProgress.total) * 100} />
+              </div>
+            )}
+
+            {projectCrawlResults && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Found</div><div className="font-semibold">{projectCrawlResults.totalFound}</div></div>
+                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">New</div><div className="font-semibold text-primary">{projectCrawlResults.totalNew}</div></div>
+                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Updated</div><div className="font-semibold">{projectCrawlResults.totalUpdated}</div></div>
+                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Stored</div><div className="font-semibold">{projectCrawlResults.totalStored}</div></div>
+                </div>
+                {Array.isArray(projectCrawlResults.results) && projectCrawlResults.results.length > 0 && (
+                  <div className="border rounded">
+                    <div className="px-3 py-2 text-xs font-semibold bg-muted/40 border-b grid grid-cols-12 gap-2">
+                      <div className="col-span-5">Project · district</div>
+                      <div className="col-span-2">Marketplace</div>
+                      <div className="col-span-1 text-right">Found</div>
+                      <div className="col-span-1 text-right">New</div>
+                      <div className="col-span-1 text-right">Upd</div>
+                      <div className="col-span-2 text-right">Status</div>
+                    </div>
+                    <div className="max-h-64 overflow-auto divide-y text-xs">
+                      {projectCrawlResults.results.map((r: any, idx: number) => (
+                        <div key={idx} className="px-3 py-2 grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-5 truncate font-medium">{r.location}</div>
+                          <div className="col-span-2 text-muted-foreground">{r.marketplace}</div>
+                          <div className="col-span-1 text-right">{r.propertiesFound}</div>
+                          <div className="col-span-1 text-right text-primary">{r.newListings}</div>
+                          <div className="col-span-1 text-right">{r.updatedListings}</div>
+                          <div className="col-span-2 text-right text-muted-foreground truncate">
+                            {r.skipped ? 'cached' : r.error ? `❌ ${r.error}` : `${r.propertiesStored} stored`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Raw Marketplace Harvest — uses Firecrawl credits, skips OpenAI */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Raw Marketplace Harvest
+            </CardTitle>
+            <CardDescription>
+              Burn Firecrawl credits to scrape marketplaces and store raw listings (hidden, no OpenAI cost).
+              Each click runs ONE batch and auto-chains the next batch via QStash every ~5s until Firecrawl is out of credits.
+              Listings stay <code>is_active=false</code> until you run vibe analysis later.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest' } });
+                    if (error) throw error;
+                    const s = data?.summary;
+                    const newN = s?.newListings || 0;
+                    const updN = s?.updatedListings || 0;
+                    toast.success('Raw harvest (districts) — batch started', {
+                      description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
+                    });
+                  } catch (err: any) {
+                    toast.error('Raw harvest failed', { description: err.message });
+                  }
+                }}
+              >
+                <Sparkles className="h-4 w-4 mr-1" />
+                Start Raw Harvest (Districts)
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest-projects' } });
+                    if (error) throw error;
+                    const s = data?.summary;
+                    const newN = s?.newListings || 0;
+                    const updN = s?.updatedListings || 0;
+                    toast.success('Raw harvest (HCMC projects) — batch started', {
+                      description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
+                    });
+                  } catch (err: any) {
+                    toast.error('Raw harvest (projects) failed', { description: err.message });
+                  }
+                }}
+              >
+                <Sparkles className="h-4 w-4 mr-1" />
+                Start Raw Harvest (HCMC Projects)
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-status' } });
+                    if (error) throw error;
+                    const s = data?.session;
+                    const p = data?.projectsSession;
+                    toast.message('Raw harvest session', {
+                      description: [
+                        s ? `Districts: ${s.runs} runs · +${s.newListings} new · last ${s.lastTarget || '-'}${s.outOfCredits ? ' · OOC' : ''}` : 'Districts: none yet',
+                        p ? `Projects: ${p.runs} runs · +${p.newListings} new · last ${p.lastTarget || '-'}${p.outOfCredits ? ' · OOC' : ''}` : 'Projects: none yet',
+                      ].join(' | '),
+                    });
+                  } catch (err: any) {
+                    toast.error('Status failed', { description: err.message });
+                  }
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Check Raw Status
+              </Button>
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1 border-t pt-2">
+              <p><strong>Note on the toast:</strong> "+0 new, N re-saved" is normal — it means Firecrawl returned listings already stored. The chain keeps moving to fresh targets automatically.</p>
+              <p><strong>To convert raw → live later:</strong> run vibe analysis on rows where <code>raw_only=true</code> (one-click button coming, or use existing process-vibe-queue).</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Verify External Listings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5" />
+              Verify External Listings
+            </CardTitle>
+            <CardDescription>
+              Check active external listings against their source sites (Nhatot, Batdongsan, Airbnb).
+              Listings detected as removed/expired twice in a row are auto-deactivated. Runs daily via cron.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleVerifyExternalListings} disabled={isVerifyingListings}>
+              {isVerifyingListings ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verifying (up to 50)…</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-2" /> Verify external listings now</>
+              )}
+            </Button>
+
+            {verifyListingsResult && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Checked</div><div className="font-semibold">{verifyListingsResult.checked}</div></div>
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Alive</div><div className="font-semibold text-primary">{verifyListingsResult.alive}</div></div>
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Dead hits</div><div className="font-semibold">{verifyListingsResult.dead_increment}</div></div>
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Deactivated</div><div className="font-semibold text-destructive">{verifyListingsResult.deactivated}</div></div>
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Errors</div><div className="font-semibold">{verifyListingsResult.errors}</div></div>
+              </div>
+            )}
+
+            {/* Recently auto-deactivated — explains WHY each listing was removed */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">
+                  Recently removed listings ({deactivatedListings?.length || 0})
+                </Label>
+                <span className="text-[10px] text-muted-foreground">Auto-deactivated after 2 failed checks</span>
+              </div>
+              <div className="border rounded-md divide-y max-h-80 overflow-auto">
+                {(deactivatedListings || []).map((row: any) => (
+                  <div key={row.id} className="p-3 text-xs space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{row.title}</div>
@@ -1513,945 +1489,1252 @@ const AdminTools = () => {
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-0.5 text-primary hover:underline"
                             >
-                              source <ExternalLink className="h-3 w-3" />
+                              view source <ExternalLink className="h-3 w-3" />
                             </a>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {fails > 0 && (
-                          <Badge variant="destructive" className="text-[10px]">
-                            {fails}/2 fails
+                      <Badge variant="destructive" className="text-[10px] shrink-0">removed</Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+                      <span>
+                        <strong className="text-foreground">Reason:</strong> {explainVerificationReason(row.last_verification_reason)}
+                      </span>
+                      <span>
+                        <strong className="text-foreground">Removed:</strong> {row.deactivated_at ? getTimeAgo(row.deactivated_at) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {(!deactivatedListings || deactivatedListings.length === 0) && (
+                  <div className="p-3 text-xs text-muted-foreground text-center">No listings have been auto-removed yet.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Watchlist — active listings, oldest verified first, with current health */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Active watchlist (oldest verified first)</Label>
+              <div className="border rounded-md divide-y max-h-80 overflow-auto">
+                {(verifyStats || []).map((row: any) => {
+                  const status = row.last_verification_status || 'pending';
+                  const fails = row.verification_failures || 0;
+                  return (
+                    <div key={row.id} className="p-2.5 text-xs space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate">{row.title}</div>
+                          <div className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                            <span className="capitalize">{row.source}</span>
+                            {row.source_url && (
+                              <a
+                                href={row.source_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                              >
+                                source <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {fails > 0 && (
+                            <Badge variant="destructive" className="text-[10px]">
+                              {fails}/2 fails
+                            </Badge>
+                          )}
+                          <Badge
+                            variant={status === 'alive' ? 'secondary' : status === 'dead' ? 'destructive' : 'outline'}
+                            className="text-[10px] capitalize"
+                          >
+                            {status}
                           </Badge>
-                        )}
-                        <Badge
-                          variant={status === 'alive' ? 'secondary' : status === 'dead' ? 'destructive' : 'outline'}
-                          className="text-[10px] capitalize"
+                          <span className="text-muted-foreground whitespace-nowrap">
+                            {row.last_verified_at ? getTimeAgo(row.last_verified_at) : 'never'}
+                          </span>
+                        </div>
+                      </div>
+                      {status !== 'alive' && row.last_verification_reason && (
+                        <div className="text-muted-foreground pl-0.5">
+                          <strong className="text-foreground">Last issue:</strong> {explainVerificationReason(row.last_verification_reason)}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        <div className="text-muted-foreground truncate">
+                          {row.contact_phone ? (
+                            <span><strong className="text-foreground">📞 {row.contact_phone}</strong></span>
+                          ) : (
+                            <span>No phone · {row.phone_extraction_attempts ?? 0}/3 attempts</span>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] px-2"
+                          disabled={reExtractingId === row.id || (!row.contact_phone && (row.phone_extraction_attempts ?? 0) >= 3 && reExtractingId !== row.id)}
+                          onClick={() => handleReExtractPhone(row)}
                         >
-                          {status}
-                        </Badge>
-                        <span className="text-muted-foreground whitespace-nowrap">
-                          {row.last_verified_at ? getTimeAgo(row.last_verified_at) : 'never'}
-                        </span>
+                          {reExtractingId === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Re-extract phone'}
+                        </Button>
                       </div>
                     </div>
-                    {status !== 'alive' && row.last_verification_reason && (
-                      <div className="text-muted-foreground pl-0.5">
-                        <strong className="text-foreground">Last issue:</strong> {explainVerificationReason(row.last_verification_reason)}
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between gap-2 pt-0.5">
-                      <div className="text-muted-foreground truncate">
-                        {row.contact_phone ? (
-                          <span><strong className="text-foreground">📞 {row.contact_phone}</strong></span>
-                        ) : (
-                          <span>No phone · {row.phone_extraction_attempts ?? 0}/3 attempts</span>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 text-[10px] px-2"
-                        disabled={reExtractingId === row.id || (!row.contact_phone && (row.phone_extraction_attempts ?? 0) >= 3 && reExtractingId !== row.id)}
-                        onClick={() => handleReExtractPhone(row)}
-                      >
-                        {reExtractingId === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Re-extract phone'}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-              {(!verifyStats || verifyStats.length === 0) && (
-                <div className="p-3 text-xs text-muted-foreground text-center">No active external listings.</div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Batch Re-analyze Image Highlights */}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            Backfill Image Highlights
-          </CardTitle>
-          <CardDescription>
-            Re-analyze external properties that have legacy <code>per_image</code> data but missing <code>image_analyses</code> in vibe_analysis.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button
-            onClick={handleBatchReanalyzeImageHighlights}
-            disabled={isBatchReanalyzing}
-            size="lg"
-            className="w-full"
-          >
-            {isBatchReanalyzing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Re-analyzing...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Backfill Image Highlights
-              </>
-            )}
-          </Button>
-
-          {backfillProgress && (
-            <div className="space-y-3 p-4 bg-muted rounded-lg">
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>{backfillProgress.current} of {backfillProgress.total} properties</span>
-                <span>{Math.round((backfillProgress.current / backfillProgress.total) * 100)}%</span>
-              </div>
-              <Progress value={(backfillProgress.current / backfillProgress.total) * 100} className="h-2" />
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span className="truncate">{backfillProgress.currentTitle}</span>
-              </div>
-              <div className="flex gap-4 text-xs">
-                <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-primary" /> {backfillProgress.fixed} fixed</span>
-                <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" /> {backfillProgress.errors} errors</span>
-              </div>
-            </div>
-          )}
-
-          {batchReanalyzeResults && (
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <p className="font-semibold">Backfill Results</p>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Found</p>
-                  <p className="text-2xl font-bold">{batchReanalyzeResults.total}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Fixed</p>
-                  <p className="text-2xl font-bold text-primary">{batchReanalyzeResults.fixed}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Errors</p>
-                  <p className="text-2xl font-bold text-destructive">{batchReanalyzeResults.errors}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <p className="text-xs text-muted-foreground">
-            Finds properties with old <code>per_image</code> format or missing <code>image_analyses</code>, then calls analyze-vibe to generate proper per-image highlights.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Mirror crawled images to Supabase Storage */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            Mirror Crawled Images to Storage
-          </CardTitle>
-          <CardDescription>
-            Downloads remote CDN images on external listings into the <code>external-property-images</code> bucket so they survive source-listing removal. "Mirror Everything" loops until done (incl. raw + inactive).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Mirror progress status */}
-          <div className="p-4 rounded-lg border bg-card space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="font-semibold text-sm">Mirror Progress</h4>
-              <Button size="sm" variant="ghost" onClick={loadMirrorStatus} disabled={mirrorStatusLoading}>
-                {mirrorStatusLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-              </Button>
-            </div>
-            {!mirrorStatus && !mirrorStatusLoading && (
-              <p className="text-xs text-muted-foreground">No data yet.</p>
-            )}
-            {mirrorStatus && (
-              <>
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-muted-foreground">Images mirrored</span>
-                    <span className="font-medium">{mirrorStatus.mirrored_images} / {mirrorStatus.total_images} ({mirrorStatus.mirrored_pct}%)</span>
-                  </div>
-                  <Progress value={mirrorStatus.mirrored_pct} className="h-2" />
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="p-2 rounded bg-muted">
-                    <div className="text-muted-foreground">Listings w/ images</div>
-                    <div className="font-semibold text-sm">{mirrorStatus.rows_with_images}</div>
-                  </div>
-                  <div className="p-2 rounded bg-muted">
-                    <div className="text-muted-foreground">Active listings</div>
-                    <div className="font-semibold text-sm">{mirrorStatus.active_rows}</div>
-                  </div>
-                  <div className="p-2 rounded bg-muted">
-                    <div className="text-muted-foreground">Rows w/ remote URLs</div>
-                    <div className="font-semibold text-sm">{mirrorStatus.rows_with_unmirrored}</div>
-                  </div>
-                  <div className="p-2 rounded bg-muted">
-                    <div className="text-muted-foreground">Active rows pending</div>
-                    <div className={`font-semibold text-sm ${mirrorStatus.active_rows_with_unmirrored === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {mirrorStatus.active_rows_with_unmirrored}
-                    </div>
-                  </div>
-                </div>
-                {mirrorStatus.active_rows_with_unmirrored === 0 && mirrorStatus.remote_images > 0 && (
-                  <p className="text-xs text-emerald-600">All active listings fully mirrored. Remaining {mirrorStatus.remote_images} remote images are on inactive/raw rows.</p>
-                )}
-                {mirrorStatus.remote_images === 0 && (
-                  <p className="text-xs text-emerald-600">Every crawled image is mirrored to storage.</p>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button
-              onClick={async () => {
-                try {
-                  setMirrorRunning(true);
-                  let totalProcessed = 0;
-                  let rounds = 0;
-                  let idleStreak = 0;
-                  const maxRounds = 1000;
-                  while (rounds < maxRounds) {
-                    rounds++;
-                    const { data, error } = await supabase.functions.invoke('backfill-external-images', {
-                      body: { batchSize: 10, includeRaw: true, includeInactive: true },
-                    });
-                    if (error) throw error;
-                    const processed = Number(data?.processed ?? 0);
-                    const bumped = Number(data?.bumped_already_done ?? 0);
-                    totalProcessed += processed;
-                    setMirrorResult({ ...data, totalProcessed, rounds });
-                    // Truly done only when there's nothing left to mirror AND
-                    // nothing left to advance past (cursor exhausted).
-                    if (processed === 0 && bumped === 0) {
-                      idleStreak++;
-                      if (idleStreak >= 2) break;
-                    } else {
-                      idleStreak = 0;
-                    }
-                    if (rounds % 5 === 0) loadMirrorStatus();
-                    await new Promise((r) => setTimeout(r, 250));
-                  }
-                  await loadMirrorStatus();
-                  toast.success(`Mirror Remaining done — ${totalProcessed} listings across ${rounds} rounds`);
-                } catch (e: any) {
-                  toast.error('Mirror failed', { description: e?.message || String(e) });
-                } finally {
-                  setMirrorRunning(false);
-                }
-              }}
-              disabled={mirrorRunning || (mirrorStatus && mirrorStatus.remote_images === 0)}
-              size="lg"
-              className="w-full"
-            >
-              {mirrorRunning ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring remaining...</>
-              ) : (
-                <><Sparkles className="mr-2 h-4 w-4" />Mirror Remaining{mirrorStatus ? ` (${mirrorStatus.remote_images.toLocaleString()} images / ${mirrorStatus.rows_with_unmirrored} listings)` : ''}</>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  setMirrorRunning(true);
-                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: false, includeInactive: false } });
-                  if (error) throw error;
-                  setMirrorResult(data);
-                  toast.success(`Mirrored ${data?.processed ?? 0} listings`);
-                } catch (e: any) {
-                  toast.error('Mirror failed', { description: e?.message || String(e) });
-                } finally {
-                  setMirrorRunning(false);
-                }
-              }}
-              disabled={mirrorRunning}
-              size="lg"
-              className="w-full"
-            >
-              Active Processed Only
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                if (!confirm('Repair listings whose mirrored images collided with other listings?\n\nThis will:\n• Restore images from raw_data.original_image_urls when available\n• Otherwise hide the listing and mark it for re-crawl')) return;
-                try {
-                  setMirrorRunning(true);
-                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { action: 'repair-collisions' } });
-                  if (error) throw error;
-                  setMirrorResult(data);
-                  toast.success(`Repair done — restored ${data?.rows_restored_from_raw_data ?? 0}, cleared ${data?.rows_cleared_for_recrawl ?? 0}`);
-                  await loadMirrorStatus();
-                } catch (e: any) {
-                  toast.error('Repair failed', { description: e?.message || String(e) });
-                } finally {
-                  setMirrorRunning(false);
-                }
-              }}
-              disabled={mirrorRunning}
-              size="lg"
-              className="w-full"
-            >
-              Repair Collisions
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  setLanguageRunning(true);
-                  const { data, error } = await supabase.functions.invoke('backfill-listing-language', { body: { batchSize: 20 } });
-                  if (error) throw error;
-                  setMirrorResult(data);
-                  toast.success(
-                    `Rewrote ${data?.rewritten ?? 0} listing(s) in English`,
-                    { description: `${data?.remaining ?? 0} still to go` },
                   );
-                } catch (e: any) {
-                  toast.error('Translation backfill failed', { description: e?.message || String(e) });
-                } finally {
-                  setLanguageRunning(false);
-                }
-              }}
-              disabled={languageRunning}
+                })}
+                {(!verifyStats || verifyStats.length === 0) && (
+                  <div className="p-3 text-xs text-muted-foreground text-center">No active external listings.</div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Batch Re-analyze Image Highlights */}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Backfill Image Highlights
+            </CardTitle>
+            <CardDescription>
+              Re-analyze external properties that have legacy <code>per_image</code> data but missing <code>image_analyses</code> in vibe_analysis.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              onClick={handleBatchReanalyzeImageHighlights}
+              disabled={isBatchReanalyzing}
               size="lg"
               className="w-full"
             >
-              {languageRunning ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rewriting in English...</>
+              {isBatchReanalyzing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Re-analyzing...
+                </>
               ) : (
-                'Translate Vietnamese Listings'
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Backfill Image Highlights
+                </>
               )}
             </Button>
-          </div>
-          {mirrorResult && (
-            <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
-              {mirrorResult.totalProcessed !== undefined && (
-                <p>Total mirrored so far: <span className="font-semibold">{mirrorResult.totalProcessed}</span> (round {mirrorResult.rounds})</p>
-              )}
-              <p>Last batch processed: <span className="font-semibold">{mirrorResult.processed}</span></p>
-              <p>Remaining candidates this run: <span className="font-semibold">{mirrorResult.remaining_candidates}</span></p>
-              <p className="text-xs text-muted-foreground">~669 listings / ~4,123 images to mirror (~600 MB est.). New crawls auto-mirror after vibe analysis.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
-        <CardHeader className="px-4 md:px-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <CardTitle className="flex flex-wrap items-center gap-2 text-base md:text-lg">
-                <Clock className="h-5 w-5" />
-                Auto-Crawl Schedule
-                {isPaused && <Badge variant="destructive" className="text-xs">Paused</Badge>}
-                {!isPaused && <Badge variant="default" className="text-xs bg-emerald-600">Active</Badge>}
-                {crawlConfigStorageError && <Badge variant="outline" className="text-xs">Storage unavailable</Badge>}
-              </CardTitle>
-              <CardDescription className="mt-1 text-xs md:text-sm">
-                Cron runs every 30 min. The function checks config and crawls the least-recently-crawled location.
-              </CardDescription>
-            </div>
-            <Button
-              variant={isPaused ? 'default' : 'destructive'}
-              size="sm"
-              onClick={handleTogglePause}
-              disabled={isSavingConfig || !!crawlConfigStorageError}
-              className="shrink-0 self-start"
-            >
-              {isSavingConfig ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : isPaused ? (
-                <><Play className="h-4 w-4 mr-1" /> Resume</>
-              ) : (
-                <><Pause className="h-4 w-4 mr-1" /> Pause</>
-              )}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {crawlConfigStorageError && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-              Auto-crawl is fail-closed as paused because Upstash Redis config storage is unavailable: {crawlConfigStorageError}
-            </div>
-          )}
+            {backfillProgress && (
+              <div className="space-y-3 p-4 bg-muted rounded-lg">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>{backfillProgress.current} of {backfillProgress.total} properties</span>
+                  <span>{Math.round((backfillProgress.current / backfillProgress.total) * 100)}%</span>
+                </div>
+                <Progress value={(backfillProgress.current / backfillProgress.total) * 100} className="h-2" />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="truncate">{backfillProgress.currentTitle}</span>
+                </div>
+                <div className="flex gap-4 text-xs">
+                  <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-primary" /> {backfillProgress.fixed} fixed</span>
+                  <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" /> {backfillProgress.errors} errors</span>
+                </div>
+              </div>
+            )}
 
-          {/* Crawl Settings */}
-          <div className="border rounded-lg p-3 space-y-3">
-            <p className="text-sm font-semibold flex items-center gap-1">
-              <Settings2 className="h-4 w-4" /> Crawl Settings
+            {batchReanalyzeResults && (
+              <div className="p-4 bg-muted rounded-lg space-y-2">
+                <p className="font-semibold">Backfill Results</p>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Found</p>
+                    <p className="text-2xl font-bold">{batchReanalyzeResults.total}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Fixed</p>
+                    <p className="text-2xl font-bold text-primary">{batchReanalyzeResults.fixed}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Errors</p>
+                    <p className="text-2xl font-bold text-destructive">{batchReanalyzeResults.errors}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Finds properties with old <code>per_image</code> format or missing <code>image_analyses</code>, then calls analyze-vibe to generate proper per-image highlights.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Re-crawl cooldown</Label>
-                  <span className="text-xs font-bold text-primary">
-                    {effectiveFrequency >= 60 
-                      ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
-                      : `${effectiveFrequency}min`}
-                  </span>
-                </div>
-                <Slider
-                  value={[effectiveFrequency]}
-                  onValueChange={(v) => setLocalFrequency(v[0])}
-                  min={30}
-                  max={4320}
-                  step={30}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  How long before the same location can be re-crawled
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Max listings per run</Label>
-                  <span className="text-xs font-bold text-primary">{effectiveMaxListings}</span>
-                </div>
-                <Slider
-                  value={[effectiveMaxListings]}
-                  onValueChange={(v) => setLocalMaxListings(v[0])}
-                  min={1}
-                  max={10}
-                  step={1}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Maximum listings scraped per location per run
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Min price (VND/month)</Label>
-                  <span className="text-xs font-bold text-primary">{(effectiveMinPrice / 1e6).toFixed(1)}M</span>
-                </div>
-                <Slider
-                  value={[effectiveMinPrice]}
-                  onValueChange={(v) => setLocalMinPrice(v[0])}
-                  min={0}
-                  max={20_000_000}
-                  step={500_000}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Listings below this rent are skipped - keeps inventory mid-range for our target renters
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs">Source platforms</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {ALL_MARKETPLACES.map((mp) => {
-                    const active = effectiveMarketplaces.includes(mp);
-                    return (
-                      <button
-                        key={mp}
-                        type="button"
-                        onClick={() => {
-                          const next = active
-                            ? effectiveMarketplaces.filter((m) => m !== mp)
-                            : [...effectiveMarketplaces, mp];
-                          if (next.length === 0) {
-                            toast.error('Keep at least one platform enabled');
-                            return;
-                          }
-                          setLocalMarketplaces(next);
-                        }}
-                        className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
-                          active
-                            ? 'bg-primary text-primary-foreground border-primary'
-                            : 'bg-background border-border text-muted-foreground hover:border-primary/50'
-                        }`}
-                      >
-                        {mp}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  The rotation only crawls the selected platforms
-                </p>
-              </div>
-            </div>
-            {hasUnsavedChanges && (
-              <div className="flex justify-end pt-1">
-                <Button
-                  size="sm"
-                  onClick={handleSaveConfig}
-                  disabled={isSavingConfig}
-                  className="h-7 text-xs"
-                >
-                  {isSavingConfig ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                  Save Settings
+          </CardContent>
+        </Card>
+
+        {/* Mirror crawled images to Supabase Storage */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Mirror Crawled Images to Storage
+            </CardTitle>
+            <CardDescription>
+              Downloads remote CDN images on external listings into the <code>external-property-images</code> bucket so they survive source-listing removal. "Mirror Everything" loops until done (incl. raw + inactive).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Mirror progress status */}
+            <div className="p-4 rounded-lg border bg-card space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-semibold text-sm">Mirror Progress</h4>
+                <Button size="sm" variant="ghost" onClick={loadMirrorStatus} disabled={mirrorStatusLoading}>
+                  {mirrorStatusLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                 </Button>
               </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Cron Interval</p>
-              <p className="text-sm font-bold">Every 30 min</p>
+              {!mirrorStatus && !mirrorStatusLoading && (
+                <p className="text-xs text-muted-foreground">No data yet.</p>
+              )}
+              {mirrorStatus && (
+                <>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-muted-foreground">Images mirrored</span>
+                      <span className="font-medium">{mirrorStatus.mirrored_images} / {mirrorStatus.total_images} ({mirrorStatus.mirrored_pct}%)</span>
+                    </div>
+                    <Progress value={mirrorStatus.mirrored_pct} className="h-2" />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="p-2 rounded bg-muted">
+                      <div className="text-muted-foreground">Listings w/ images</div>
+                      <div className="font-semibold text-sm">{mirrorStatus.rows_with_images}</div>
+                    </div>
+                    <div className="p-2 rounded bg-muted">
+                      <div className="text-muted-foreground">Active listings</div>
+                      <div className="font-semibold text-sm">{mirrorStatus.active_rows}</div>
+                    </div>
+                    <div className="p-2 rounded bg-muted">
+                      <div className="text-muted-foreground">Rows w/ remote URLs</div>
+                      <div className="font-semibold text-sm">{mirrorStatus.rows_with_unmirrored}</div>
+                    </div>
+                    <div className="p-2 rounded bg-muted">
+                      <div className="text-muted-foreground">Active rows pending</div>
+                      <div className={`font-semibold text-sm ${mirrorStatus.active_rows_with_unmirrored === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {mirrorStatus.active_rows_with_unmirrored}
+                      </div>
+                    </div>
+                  </div>
+                  {mirrorStatus.active_rows_with_unmirrored === 0 && mirrorStatus.remote_images > 0 && (
+                    <p className="text-xs text-emerald-600">All active listings fully mirrored. Remaining {mirrorStatus.remote_images} remote images are on inactive/raw rows.</p>
+                  )}
+                  {mirrorStatus.remote_images === 0 && (
+                    <p className="text-xs text-emerald-600">Every crawled image is mirrored to storage.</p>
+                  )}
+                </>
+              )}
             </div>
-            <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Locations</p>
-              <p className="text-sm font-bold">20 districts</p>
-            </div>
-            <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Marketplaces</p>
-              <p className="text-sm font-bold">{effectiveMarketplaces.join(' + ') || 'none'}</p>
-            </div>
-            <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Cooldown</p>
-              <p className="text-sm font-bold">
-                {effectiveFrequency >= 60 
-                  ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
-                  : `${effectiveFrequency}min`}
-              </p>
-            </div>
-          </div>
 
-          {/* Dynamic Coverage Tracker */}
-          <div className="text-sm space-y-3 border-t pt-3">
-            <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> District Coverage Tracker</p>
-            {(() => {
-               const ALL_DISTRICTS: Record<string, { label: string; districts: string[] }> = {
-                ho_chi_minh: {
-                  label: 'Ho Chi Minh City',
-                  districts: ['District 1','District 3','District 4','District 7','District 10','Binh Thanh','Phu Nhuan','Tan Binh','Go Vap','Thu Duc'],
-                },
-                hanoi: {
-                  label: 'Hanoi',
-                  districts: ['Ba Dinh','Hoan Kiem','Dong Da','Cau Giay','Hai Ba Trung','Tay Ho','Long Bien'],
-                },
-                da_nang: {
-                  label: 'Da Nang',
-                  districts: ['Hai Chau','Son Tra','Ngu Hanh Son'],
-                },
-              };
-
-              const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
-
-              const matchesDistrict = (districtName: string, locationKey: string): boolean => {
-                const norm = normalize(districtName);
-                const normKey = normalize(locationKey);
-                // Direct containment
-                if (normKey.includes(norm) || norm.includes(normKey)) return true;
-                // For "district N", also match "q N" and "quan N"
-                const distMatch = norm.match(/^district (\d+)$/);
-                if (distMatch) {
-                  const n = distMatch[1];
-                  if (normKey.includes(`district ${n}`) || normKey.includes(`q${n}`) || normKey.includes(`quan ${n}`)) return true;
-                }
-                return false;
-              };
-
-              const totalDistricts = Object.values(ALL_DISTRICTS).reduce((sum, c) => sum + c.districts.length, 0);
-              let totalCrawled = 0;
-
-              return (
-                <div className="space-y-4">
-                  {Object.entries(ALL_DISTRICTS).map(([cityKey, cityData]) => {
-                    const crawledCount = cityData.districts.filter(d => {
-                      if (!districtCoverage) return false;
-                      for (const [key] of districtCoverage) {
-                        if (matchesDistrict(d, key)) return true;
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                onClick={async () => {
+                  try {
+                    setMirrorRunning(true);
+                    let totalProcessed = 0;
+                    let rounds = 0;
+                    let idleStreak = 0;
+                    const maxRounds = 1000;
+                    while (rounds < maxRounds) {
+                      rounds++;
+                      const { data, error } = await supabase.functions.invoke('backfill-external-images', {
+                        body: { batchSize: 10, includeRaw: true, includeInactive: true },
+                      });
+                      if (error) throw error;
+                      const processed = Number(data?.processed ?? 0);
+                      const bumped = Number(data?.bumped_already_done ?? 0);
+                      totalProcessed += processed;
+                      setMirrorResult({ ...data, totalProcessed, rounds });
+                      // Truly done only when there's nothing left to mirror AND
+                      // nothing left to advance past (cursor exhausted).
+                      if (processed === 0 && bumped === 0) {
+                        idleStreak++;
+                        if (idleStreak >= 2) break;
+                      } else {
+                        idleStreak = 0;
                       }
-                      return false;
-                    }).length;
-                    totalCrawled += crawledCount;
-                    const pct = Math.round((crawledCount / cityData.districts.length) * 100);
+                      if (rounds % 5 === 0) loadMirrorStatus();
+                      await new Promise((r) => setTimeout(r, 250));
+                    }
+                    await loadMirrorStatus();
+                    toast.success(`Mirror Remaining done — ${totalProcessed} listings across ${rounds} rounds`);
+                  } catch (e: any) {
+                    toast.error('Mirror failed', { description: e?.message || String(e) });
+                  } finally {
+                    setMirrorRunning(false);
+                  }
+                }}
+                disabled={mirrorRunning || (mirrorStatus && mirrorStatus.remote_images === 0)}
+                size="lg"
+                className="w-full"
+              >
+                {mirrorRunning ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring remaining...</>
+                ) : (
+                  <><Sparkles className="mr-2 h-4 w-4" />Mirror Remaining{mirrorStatus ? ` (${mirrorStatus.remote_images.toLocaleString()} images / ${mirrorStatus.rows_with_unmirrored} listings)` : ''}</>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    setMirrorRunning(true);
+                    const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: false, includeInactive: false } });
+                    if (error) throw error;
+                    setMirrorResult(data);
+                    toast.success(`Mirrored ${data?.processed ?? 0} listings`);
+                  } catch (e: any) {
+                    toast.error('Mirror failed', { description: e?.message || String(e) });
+                  } finally {
+                    setMirrorRunning(false);
+                  }
+                }}
+                disabled={mirrorRunning}
+                size="lg"
+                className="w-full"
+              >
+                Active Processed Only
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!confirm('Repair listings whose mirrored images collided with other listings?\n\nThis will:\n• Restore images from raw_data.original_image_urls when available\n• Otherwise hide the listing and mark it for re-crawl')) return;
+                  try {
+                    setMirrorRunning(true);
+                    const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { action: 'repair-collisions' } });
+                    if (error) throw error;
+                    setMirrorResult(data);
+                    toast.success(`Repair done — restored ${data?.rows_restored_from_raw_data ?? 0}, cleared ${data?.rows_cleared_for_recrawl ?? 0}`);
+                    await loadMirrorStatus();
+                  } catch (e: any) {
+                    toast.error('Repair failed', { description: e?.message || String(e) });
+                  } finally {
+                    setMirrorRunning(false);
+                  }
+                }}
+                disabled={mirrorRunning}
+                size="lg"
+                className="w-full"
+              >
+                Repair Collisions
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    setLanguageRunning(true);
+                    const { data, error } = await supabase.functions.invoke('backfill-listing-language', { body: { batchSize: 20 } });
+                    if (error) throw error;
+                    setMirrorResult(data);
+                    toast.success(
+                      `Rewrote ${data?.rewritten ?? 0} listing(s) in English`,
+                      { description: `${data?.remaining ?? 0} still to go` },
+                    );
+                  } catch (e: any) {
+                    toast.error('Translation backfill failed', { description: e?.message || String(e) });
+                  } finally {
+                    setLanguageRunning(false);
+                  }
+                }}
+                disabled={languageRunning}
+                size="lg"
+                className="w-full"
+              >
+                {languageRunning ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rewriting in English...</>
+                ) : (
+                  'Translate Vietnamese Listings'
+                )}
+              </Button>
+            </div>
+            {mirrorResult && (
+              <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
+                {mirrorResult.totalProcessed !== undefined && (
+                  <p>Total mirrored so far: <span className="font-semibold">{mirrorResult.totalProcessed}</span> (round {mirrorResult.rounds})</p>
+                )}
+                <p>Last batch processed: <span className="font-semibold">{mirrorResult.processed}</span></p>
+                <p>Remaining candidates this run: <span className="font-semibold">{mirrorResult.remaining_candidates}</span></p>
+                <p className="text-xs text-muted-foreground">~669 listings / ~4,123 images to mirror (~600 MB est.). New crawls auto-mirror after vibe analysis.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-                    return (
-                      <div key={cityKey} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium text-xs">{cityData.label} ({crawledCount}/{cityData.districts.length})</p>
-                          <Badge variant={pct === 100 ? 'default' : pct > 0 ? 'secondary' : 'outline'} className="text-xs">
-                            {pct}%
-                          </Badge>
-                        </div>
-                        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {cityData.districts.map(district => {
-                            let info: { lastCrawled: string; sources: Set<string>; count: number } | null = null;
-                            if (districtCoverage) {
-                              for (const [key, val] of districtCoverage) {
-                                if (matchesDistrict(district, key)) {
-                                  // Merge if multiple location keys match the same district
-                                  if (!info) {
-                                    info = { ...val, sources: new Set(val.sources) };
-                                  } else {
-                                    val.sources.forEach(s => info!.sources.add(s));
-                                    info.count += val.count;
-                                    if (val.lastCrawled > info.lastCrawled) info.lastCrawled = val.lastCrawled;
+        <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
+          <CardHeader className="px-4 md:px-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex flex-wrap items-center gap-2 text-base md:text-lg">
+                  <Clock className="h-5 w-5" />
+                  Auto-Crawl Schedule
+                  {isPaused && <Badge variant="destructive" className="text-xs">Paused</Badge>}
+                  {!isPaused && <Badge variant="default" className="text-xs bg-emerald-600">Active</Badge>}
+                  {crawlConfigStorageError && <Badge variant="outline" className="text-xs">Storage unavailable</Badge>}
+                </CardTitle>
+                <CardDescription className="mt-1 text-xs md:text-sm">
+                  Cron runs every 30 min. The function checks config and crawls the least-recently-crawled location.
+                </CardDescription>
+              </div>
+              <Button
+                variant={isPaused ? 'default' : 'destructive'}
+                size="sm"
+                onClick={handleTogglePause}
+                disabled={isSavingConfig || !!crawlConfigStorageError}
+                className="shrink-0 self-start"
+              >
+                {isSavingConfig ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isPaused ? (
+                  <><Play className="h-4 w-4 mr-1" /> Resume</>
+                ) : (
+                  <><Pause className="h-4 w-4 mr-1" /> Pause</>
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {crawlConfigStorageError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                Auto-crawl is fail-closed as paused because Upstash Redis config storage is unavailable: {crawlConfigStorageError}
+              </div>
+            )}
+
+            {/* Crawl Settings */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-sm font-semibold flex items-center gap-1">
+                <Settings2 className="h-4 w-4" /> Crawl Settings
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Re-crawl cooldown</Label>
+                    <span className="text-xs font-bold text-primary">
+                      {effectiveFrequency >= 60 
+                        ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
+                        : `${effectiveFrequency}min`}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[effectiveFrequency]}
+                    onValueChange={(v) => setLocalFrequency(v[0])}
+                    min={30}
+                    max={4320}
+                    step={30}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    How long before the same location can be re-crawled
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Max listings per run</Label>
+                    <span className="text-xs font-bold text-primary">{effectiveMaxListings}</span>
+                  </div>
+                  <Slider
+                    value={[effectiveMaxListings]}
+                    onValueChange={(v) => setLocalMaxListings(v[0])}
+                    min={1}
+                    max={10}
+                    step={1}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Maximum listings scraped per location per run
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Min price (VND/month)</Label>
+                    <span className="text-xs font-bold text-primary">{(effectiveMinPrice / 1e6).toFixed(1)}M</span>
+                  </div>
+                  <Slider
+                    value={[effectiveMinPrice]}
+                    onValueChange={(v) => setLocalMinPrice(v[0])}
+                    min={0}
+                    max={20_000_000}
+                    step={500_000}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Listings below this rent are skipped - keeps inventory mid-range for our target renters
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Source platforms</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ALL_MARKETPLACES.map((mp) => {
+                      const active = effectiveMarketplaces.includes(mp);
+                      return (
+                        <button
+                          key={mp}
+                          type="button"
+                          onClick={() => {
+                            const next = active
+                              ? effectiveMarketplaces.filter((m) => m !== mp)
+                              : [...effectiveMarketplaces, mp];
+                            if (next.length === 0) {
+                              toast.error('Keep at least one platform enabled');
+                              return;
+                            }
+                            setLocalMarketplaces(next);
+                          }}
+                          className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
+                            active
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background border-border text-muted-foreground hover:border-primary/50'
+                          }`}
+                        >
+                          {mp}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    The rotation only crawls the selected platforms
+                  </p>
+                </div>
+              </div>
+              {hasUnsavedChanges && (
+                <div className="flex justify-end pt-1">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveConfig}
+                    disabled={isSavingConfig}
+                    className="h-7 text-xs"
+                  >
+                    {isSavingConfig ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                    Save Settings
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="p-3 bg-muted rounded-lg text-center">
+                <p className="text-xs text-muted-foreground">Cron Interval</p>
+                <p className="text-sm font-bold">Every 30 min</p>
+              </div>
+              <div className="p-3 bg-muted rounded-lg text-center">
+                <p className="text-xs text-muted-foreground">Locations</p>
+                <p className="text-sm font-bold">20 districts</p>
+              </div>
+              <div className="p-3 bg-muted rounded-lg text-center">
+                <p className="text-xs text-muted-foreground">Marketplaces</p>
+                <p className="text-sm font-bold">{effectiveMarketplaces.join(' + ') || 'none'}</p>
+              </div>
+              <div className="p-3 bg-muted rounded-lg text-center">
+                <p className="text-xs text-muted-foreground">Cooldown</p>
+                <p className="text-sm font-bold">
+                  {effectiveFrequency >= 60 
+                    ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
+                    : `${effectiveFrequency}min`}
+                </p>
+              </div>
+            </div>
+
+            {/* Dynamic Coverage Tracker */}
+            <div className="text-sm space-y-3 border-t pt-3">
+              <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> District Coverage Tracker</p>
+              {(() => {
+                 const ALL_DISTRICTS: Record<string, { label: string; districts: string[] }> = {
+                  ho_chi_minh: {
+                    label: 'Ho Chi Minh City',
+                    districts: ['District 1','District 3','District 4','District 7','District 10','Binh Thanh','Phu Nhuan','Tan Binh','Go Vap','Thu Duc'],
+                  },
+                  hanoi: {
+                    label: 'Hanoi',
+                    districts: ['Ba Dinh','Hoan Kiem','Dong Da','Cau Giay','Hai Ba Trung','Tay Ho','Long Bien'],
+                  },
+                  da_nang: {
+                    label: 'Da Nang',
+                    districts: ['Hai Chau','Son Tra','Ngu Hanh Son'],
+                  },
+                };
+
+                const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
+                const matchesDistrict = (districtName: string, locationKey: string): boolean => {
+                  const norm = normalize(districtName);
+                  const normKey = normalize(locationKey);
+                  // Direct containment
+                  if (normKey.includes(norm) || norm.includes(normKey)) return true;
+                  // For "district N", also match "q N" and "quan N"
+                  const distMatch = norm.match(/^district (\d+)$/);
+                  if (distMatch) {
+                    const n = distMatch[1];
+                    if (normKey.includes(`district ${n}`) || normKey.includes(`q${n}`) || normKey.includes(`quan ${n}`)) return true;
+                  }
+                  return false;
+                };
+
+                const totalDistricts = Object.values(ALL_DISTRICTS).reduce((sum, c) => sum + c.districts.length, 0);
+                let totalCrawled = 0;
+
+                return (
+                  <div className="space-y-4">
+                    {Object.entries(ALL_DISTRICTS).map(([cityKey, cityData]) => {
+                      const crawledCount = cityData.districts.filter(d => {
+                        if (!districtCoverage) return false;
+                        for (const [key] of districtCoverage) {
+                          if (matchesDistrict(d, key)) return true;
+                        }
+                        return false;
+                      }).length;
+                      totalCrawled += crawledCount;
+                      const pct = Math.round((crawledCount / cityData.districts.length) * 100);
+
+                      return (
+                        <div key={cityKey} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium text-xs">{cityData.label} ({crawledCount}/{cityData.districts.length})</p>
+                            <Badge variant={pct === 100 ? 'default' : pct > 0 ? 'secondary' : 'outline'} className="text-xs">
+                              {pct}%
+                            </Badge>
+                          </div>
+                          <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {cityData.districts.map(district => {
+                              let info: { lastCrawled: string; sources: Set<string>; count: number } | null = null;
+                              if (districtCoverage) {
+                                for (const [key, val] of districtCoverage) {
+                                  if (matchesDistrict(district, key)) {
+                                    // Merge if multiple location keys match the same district
+                                    if (!info) {
+                                      info = { ...val, sources: new Set(val.sources) };
+                                    } else {
+                                      val.sources.forEach(s => info!.sources.add(s));
+                                      info.count += val.count;
+                                      if (val.lastCrawled > info.lastCrawled) info.lastCrawled = val.lastCrawled;
+                                    }
                                   }
                                 }
                               }
-                            }
-                            const isCrawled = !!info;
-                            const displayName = district.replace(/^quận /, 'Q');
-                            return (
-                              <span
-                                key={district}
-                                title={isCrawled
-                                  ? `Last crawled: ${getTimeAgo(info!.lastCrawled)} · ${info!.count} listings · Sources: ${Array.from(info!.sources).join(', ')}`
-                                  : 'Not yet crawled'}
-                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
-                                  isCrawled
-                                    ? 'bg-primary/10 text-primary border-primary/20'
-                                    : 'bg-muted text-muted-foreground border-border'
-                                }`}
-                              >
-                                {isCrawled ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5 opacity-40" />}
-                                {displayName}
-                                {isCrawled && <span className="opacity-60">({getTimeAgo(info!.lastCrawled)})</span>}
-                              </span>
-                            );
-                          })}
+                              const isCrawled = !!info;
+                              const displayName = district.replace(/^quận /, 'Q');
+                              return (
+                                <span
+                                  key={district}
+                                  title={isCrawled
+                                    ? `Last crawled: ${getTimeAgo(info!.lastCrawled)} · ${info!.count} listings · Sources: ${Array.from(info!.sources).join(', ')}`
+                                    : 'Not yet crawled'}
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                    isCrawled
+                                      ? 'bg-primary/10 text-primary border-primary/20'
+                                      : 'bg-muted text-muted-foreground border-border'
+                                  }`}
+                                >
+                                  {isCrawled ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5 opacity-40" />}
+                                  {displayName}
+                                  {isCrawled && <span className="opacity-60">({getTimeAgo(info!.lastCrawled)})</span>}
+                                </span>
+                              );
+                            })}
+                          </div>
                         </div>
+                      );
+                    })}
+                    <div className="flex items-center justify-between pt-1 border-t text-xs text-muted-foreground">
+                      <span>Total: {totalCrawled}/{totalDistricts} districts crawled</span>
+                      <span>{Math.round((totalCrawled / totalDistricts) * 100)}% coverage</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="text-sm text-muted-foreground space-y-1 border-t pt-3">
+              <p><strong>Deduplication:</strong> URL normalization + database check prevents duplicate entries.</p>
+              <p><strong>Fake filter:</strong> Listings with price &lt;2M or &gt;200M VND, no images, sale keywords, or non-residential keywords are automatically rejected.</p>
+              <p><strong>Freshness:</strong> Skips locations crawled within the cooldown period (default 48h). Listings stay active for as long as their source link is live - they are retired only when verification finds the source page gone.</p>
+              <p><strong>Credit saving:</strong> Search pages use direct HTTP fetch; Firecrawl credits (max 5/run) reserved for detail pages only.</p>
+            </div>
+
+            {/* Active Listings Stats */}
+            {crawlStats && (
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-sm font-semibold flex items-center gap-1">
+                  <Activity className="h-4 w-4" /> Active Listings: {crawlStats.total}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(crawlStats.byCitySource).map(([key, count]) => {
+                    const [city, source] = key.split('/');
+                    const cityLabel = city === 'ho_chi_minh' ? 'HCM' : city === 'hanoi' ? 'Hanoi' : city === 'da_nang' ? 'Da Nang' : city;
+                    return (
+                      <Badge key={key} variant="outline" className="text-xs">
+                        {cityLabel} / {source}: {count}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Crawl Activity Log */}
+            <div className="border-t pt-3 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <p className="text-sm font-semibold flex items-center gap-1">
+                  <Clock className="h-4 w-4" /> Recent Crawl Runs
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => refetchCrawlActivity()}
+                    className="h-7 text-xs"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Refresh
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={isManualCrawlTriggering}
+                    onClick={async () => {
+                      setIsManualCrawlTriggering(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: {} });
+                        if (error) throw error;
+                        toast.success('Auto-crawl triggered', {
+                          description: data?.summary 
+                            ? `${data.summary.target?.location}/${data.summary.target?.marketplace}: ${data.summary.newListings || 0} new, ${data.summary.filteredOut || 0} filtered`
+                            : data?.message || 'Completed'
+                        });
+                        refetchCrawlActivity();
+                      } catch (err: any) {
+                        toast.error('Failed to trigger crawl', { description: err.message });
+                      } finally {
+                        setIsManualCrawlTriggering(false);
+                      }
+                    }}
+                    className="h-7 text-xs"
+                  >
+                    {isManualCrawlTriggering ? (
+                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running...</>
+                    ) : (
+                      <>Trigger Now</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {crawlActivity && crawlActivity.length > 0 ? (
+                <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                  {crawlActivity.map((run, idx) => {
+                    const timeAgo = getTimeAgo(run.timestamp);
+                    const cityLabel = run.city === 'ho_chi_minh' ? 'HCM' : run.city === 'hanoi' ? 'Hanoi' : run.city === 'da_nang' ? 'Da Nang' : run.city;
+                    const isExpanded = expandedRunIdx === idx;
+                    return (
+                      <div key={idx} className="space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between p-2 bg-muted/50 rounded text-xs gap-1.5 sm:gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
+                            <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
+                            <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
+                            
+                          </div>
+                          <Badge
+                            className="text-xs shrink-0 cursor-pointer hover:bg-primary/80 transition-colors"
+                            onClick={() => handleExpandRun(idx, run.propertyIds)}
+                          >
+                            {run.count} listings {isExpanded ? '▲' : '▼'}
+                          </Badge>
+                        </div>
+                        {isExpanded && (
+                          <div className="ml-4 border-l-2 border-primary/20 pl-3 space-y-1.5">
+                            {isLoadingRunProperties ? (
+                              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Loading properties...
+                              </div>
+                            ) : expandedRunProperties.length > 0 ? (
+                              expandedRunProperties.map((prop) => {
+                                const vibeAnalysis = prop.vibe_analysis as any;
+                                const imageCount = (prop.images || []).length;
+                                // New: badge keys off vibe_status enum (set by analyze-vibe / queue consumer)
+                                // when ALL images successfully produced highlights. Fallback to legacy heuristic
+                                // for properties analyzed before the enum existed.
+                                const vibeStatus = (prop as any).vibe_status as string | undefined;
+                                const analyses =
+                                  (Array.isArray(vibeAnalysis?.image_analyses) && vibeAnalysis.image_analyses) ||
+                                  (Array.isArray(vibeAnalysis?.per_image) && vibeAnalysis.per_image) ||
+                                  [];
+                                const legacyHasPerImage =
+                                  imageCount > 0 &&
+                                  analyses.length >= imageCount &&
+                                  analyses.slice(0, imageCount).every((a: any) => {
+                                    const hl = String(a?.image_highlight || '').trim();
+                                    const detail = String(a?.detailed_analysis || '');
+                                    if (!hl || hl.length < 4) return false;
+                                    if (/rate.?limit|api error|rate_limit_exceeded|analysis failed/i.test(detail)) return false;
+                                    return true;
+                                  });
+                                const hasPerImage = vibeStatus
+                                  ? vibeStatus === 'complete'
+                                  : legacyHasPerImage;
+                                return (
+                                  <div
+                                    key={prop.id}
+                                    className="flex items-center gap-2 p-1.5 bg-background rounded border cursor-pointer hover:border-primary/50 transition-colors text-xs"
+                                    onClick={() => setPreviewProperty(prop)}
+                                  >
+                                    {imageCount > 0 ? (
+                                      <img
+                                        src={prop.images[0]}
+                                        alt=""
+                                        className="h-10 w-14 rounded object-cover shrink-0"
+                                        loading="lazy"
+                                      />
+                                    ) : (
+                                      <div className="h-10 w-14 rounded bg-muted flex items-center justify-center shrink-0">
+                                        <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-medium truncate">{prop.title}</p>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-primary font-bold">
+                                          {prop.price ? `${(prop.price / 1_000_000).toFixed(1)}M` : 'N/A'}
+                                        </span>
+                                        <Badge variant={hasPerImage ? 'default' : 'destructive'} className="text-[8px] px-1 py-0 h-3.5">
+                                          {hasPerImage ? '✓ vibe' : '✗ vibe'}
+                                        </Badge>
+                                        <span className="text-muted-foreground truncate">{prop.location}</span>
+                                      </div>
+                                    </div>
+                                    <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="text-xs text-muted-foreground italic py-1">No properties found.</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
-                  <div className="flex items-center justify-between pt-1 border-t text-xs text-muted-foreground">
-                    <span>Total: {totalCrawled}/{totalDistricts} districts crawled</span>
-                    <span>{Math.round((totalCrawled / totalDistricts) * 100)}% coverage</span>
-                  </div>
                 </div>
-              );
-            })()}
-          </div>
-
-          <div className="text-sm text-muted-foreground space-y-1 border-t pt-3">
-            <p><strong>Deduplication:</strong> URL normalization + database check prevents duplicate entries.</p>
-            <p><strong>Fake filter:</strong> Listings with price &lt;2M or &gt;200M VND, no images, sale keywords, or non-residential keywords are automatically rejected.</p>
-            <p><strong>Freshness:</strong> Skips locations crawled within the cooldown period (default 48h). Listings stay active for as long as their source link is live - they are retired only when verification finds the source page gone.</p>
-            <p><strong>Credit saving:</strong> Search pages use direct HTTP fetch; Firecrawl credits (max 5/run) reserved for detail pages only.</p>
-          </div>
-
-          {/* Active Listings Stats */}
-          {crawlStats && (
-            <div className="border-t pt-3 space-y-2">
-              <p className="text-sm font-semibold flex items-center gap-1">
-                <Activity className="h-4 w-4" /> Active Listings: {crawlStats.total}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(crawlStats.byCitySource).map(([key, count]) => {
-                  const [city, source] = key.split('/');
-                  const cityLabel = city === 'ho_chi_minh' ? 'HCM' : city === 'hanoi' ? 'Hanoi' : city === 'da_nang' ? 'Da Nang' : city;
-                  return (
-                    <Badge key={key} variant="outline" className="text-xs">
-                      {cityLabel} / {source}: {count}
-                    </Badge>
-                  );
-                })}
-              </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">No crawl runs recorded yet. Cron job runs every 30 minutes.</p>
+              )}
             </div>
-          )}
+          </CardContent>
+        </Card>
 
-          {/* Crawl Activity Log */}
-          <div className="border-t pt-3 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <p className="text-sm font-semibold flex items-center gap-1">
-                <Clock className="h-4 w-4" /> Recent Crawl Runs
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => refetchCrawlActivity()}
-                  className="h-7 text-xs"
-                >
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Refresh
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={isManualCrawlTriggering}
-                  onClick={async () => {
-                    setIsManualCrawlTriggering(true);
-                    try {
-                      const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: {} });
-                      if (error) throw error;
-                      toast.success('Auto-crawl triggered', {
-                        description: data?.summary 
-                          ? `${data.summary.target?.location}/${data.summary.target?.marketplace}: ${data.summary.newListings || 0} new, ${data.summary.filteredOut || 0} filtered`
-                          : data?.message || 'Completed'
-                      });
-                      refetchCrawlActivity();
-                    } catch (err: any) {
-                      toast.error('Failed to trigger crawl', { description: err.message });
-                    } finally {
-                      setIsManualCrawlTriggering(false);
-                    }
-                  }}
-                  className="h-7 text-xs"
-                >
-                  {isManualCrawlTriggering ? (
-                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running...</>
-                  ) : (
-                    <>Trigger Now</>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {crawlActivity && crawlActivity.length > 0 ? (
-              <div className="space-y-1.5 max-h-80 overflow-y-auto">
-                {crawlActivity.map((run, idx) => {
-                  const timeAgo = getTimeAgo(run.timestamp);
-                  const cityLabel = run.city === 'ho_chi_minh' ? 'HCM' : run.city === 'hanoi' ? 'Hanoi' : run.city === 'da_nang' ? 'Da Nang' : run.city;
-                  const isExpanded = expandedRunIdx === idx;
-                  return (
-                    <div key={idx} className="space-y-1.5">
-                      <div className="flex flex-wrap items-center justify-between p-2 bg-muted/50 rounded text-xs gap-1.5 sm:gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
-                          <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
-                          <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
-                          
-                        </div>
-                        <Badge
-                          className="text-xs shrink-0 cursor-pointer hover:bg-primary/80 transition-colors"
-                          onClick={() => handleExpandRun(idx, run.propertyIds)}
-                        >
-                          {run.count} listings {isExpanded ? '▲' : '▼'}
-                        </Badge>
-                      </div>
-                      {isExpanded && (
-                        <div className="ml-4 border-l-2 border-primary/20 pl-3 space-y-1.5">
-                          {isLoadingRunProperties ? (
-                            <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-                              <Loader2 className="h-3 w-3 animate-spin" /> Loading properties...
-                            </div>
-                          ) : expandedRunProperties.length > 0 ? (
-                            expandedRunProperties.map((prop) => {
-                              const vibeAnalysis = prop.vibe_analysis as any;
-                              const imageCount = (prop.images || []).length;
-                              // New: badge keys off vibe_status enum (set by analyze-vibe / queue consumer)
-                              // when ALL images successfully produced highlights. Fallback to legacy heuristic
-                              // for properties analyzed before the enum existed.
-                              const vibeStatus = (prop as any).vibe_status as string | undefined;
-                              const analyses =
-                                (Array.isArray(vibeAnalysis?.image_analyses) && vibeAnalysis.image_analyses) ||
-                                (Array.isArray(vibeAnalysis?.per_image) && vibeAnalysis.per_image) ||
-                                [];
-                              const legacyHasPerImage =
-                                imageCount > 0 &&
-                                analyses.length >= imageCount &&
-                                analyses.slice(0, imageCount).every((a: any) => {
-                                  const hl = String(a?.image_highlight || '').trim();
-                                  const detail = String(a?.detailed_analysis || '');
-                                  if (!hl || hl.length < 4) return false;
-                                  if (/rate.?limit|api error|rate_limit_exceeded|analysis failed/i.test(detail)) return false;
-                                  return true;
-                                });
-                              const hasPerImage = vibeStatus
-                                ? vibeStatus === 'complete'
-                                : legacyHasPerImage;
-                              return (
-                                <div
-                                  key={prop.id}
-                                  className="flex items-center gap-2 p-1.5 bg-background rounded border cursor-pointer hover:border-primary/50 transition-colors text-xs"
-                                  onClick={() => setPreviewProperty(prop)}
-                                >
-                                  {imageCount > 0 ? (
-                                    <img
-                                      src={prop.images[0]}
-                                      alt=""
-                                      className="h-10 w-14 rounded object-cover shrink-0"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div className="h-10 w-14 rounded bg-muted flex items-center justify-center shrink-0">
-                                      <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
-                                    </div>
-                                  )}
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-medium truncate">{prop.title}</p>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-primary font-bold">
-                                        {prop.price ? `${(prop.price / 1_000_000).toFixed(1)}M` : 'N/A'}
-                                      </span>
-                                      <Badge variant={hasPerImage ? 'default' : 'destructive'} className="text-[8px] px-1 py-0 h-3.5">
-                                        {hasPerImage ? '✓ vibe' : '✗ vibe'}
-                                      </Badge>
-                                      <span className="text-muted-foreground truncate">{prop.location}</span>
-                                    </div>
-                                  </div>
-                                  <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <p className="text-xs text-muted-foreground italic py-1">No properties found.</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+        {/* Crawler Rejections */}
+        <Card>
+          <CardHeader className="px-4 md:px-6">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <XCircle className="h-5 w-5" />
+              Crawler Rejections
+              {rejections && rejections.length > 0 && (
+                <Badge variant="outline" className="text-xs">{rejections.length}</Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-xs md:text-sm">
+              URLs the crawler refused to insert (e.g. outdoor-only galleries, missing interiors).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 md:px-6">
+            {!rejections || rejections.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No rejections logged yet.</p>
             ) : (
-              <p className="text-xs text-muted-foreground italic">No crawl runs recorded yet. Cron job runs every 30 minutes.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Vibe Analysis Queue */}
-      <Card>
-        <CardHeader className="px-4 md:px-6">
-          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-            <Activity className="h-5 w-5" />
-            Vibe Analysis Queue
-          </CardTitle>
-          <CardDescription className="text-xs md:text-sm">
-            Background processor for per-image vibe analysis. Listings only become discoverable once <code>vibe_status = complete</code>.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-4 md:px-6 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Queued</div>
-              <div className="text-2xl font-semibold">{vibeQueueStats?.queued ?? '—'}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Processing</div>
-              <div className="text-2xl font-semibold">{vibeQueueStats?.processing ?? '—'}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Failed</div>
-              <div className="text-2xl font-semibold text-destructive">{vibeQueueStats?.failed ?? '—'}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Properties pending</div>
-              <div className="text-2xl font-semibold">{vibeQueueStats?.pendingProperties ?? '—'}</div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                const t = toast.loading('Processing vibe queue batch...');
-                try {
-                  const { data, error } = await supabase.functions.invoke('process-vibe-queue', { body: { batchSize: 4 } });
-                  if (error) throw error;
-                  toast.success(`Processed ${data?.processed ?? 0}, completed ${data?.completed ?? 0}`, { id: t });
-                  refetchVibeQueue();
-                } catch (e: any) {
-                  toast.error(`Queue run failed: ${e.message}`, { id: t });
-                }
-              }}
-            >
-              <Play className="h-4 w-4 mr-1" />
-              Process batch now
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                const t = toast.loading('Finding listings with missing highlights...');
-                try {
-                  const { data, error } = await supabase.functions.invoke('backfill-image-highlights', {
-                    body: { limit: 200, requeue_only: true, missing_only: true },
-                  });
-                  if (error) throw error;
-                  const enq = data?.enqueued ?? 0;
-                  const total = data?.total ?? 0;
-                  const skipped = data?.skippedBelowFloor ?? 0;
-                  toast.success(
-                    total === 0
-                      ? 'No listings with missing highlights found'
-                      : `Enqueued ${enq} of ${total} listings missing highlights` +
-                        (skipped > 0 ? ` · ${skipped} below the image floor, run the backfill directly for those` : ''),
-                    { id: t }
-                  );
-                  refetchVibeQueue();
-                } catch (e: any) {
-                  toast.error(`Requeue failed: ${e.message}`, { id: t });
-                }
-              }}
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Re-enqueue missing highlights
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Crawler Rejections */}
-      <Card>
-        <CardHeader className="px-4 md:px-6">
-          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-            <XCircle className="h-5 w-5" />
-            Crawler Rejections
-            {rejections && rejections.length > 0 && (
-              <Badge variant="outline" className="text-xs">{rejections.length}</Badge>
-            )}
-          </CardTitle>
-          <CardDescription className="text-xs md:text-sm">
-            URLs the crawler refused to insert (e.g. outdoor-only galleries, missing interiors).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-4 md:px-6">
-          {!rejections || rejections.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No rejections logged yet.</p>
-          ) : (
-            <div className="divide-y border rounded-md max-h-[420px] overflow-y-auto">
-              {rejections.map((r: any) => (
-                <div key={r.id} className="p-2.5 text-xs space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Badge variant="outline" className="text-[10px] capitalize">{r.source}</Badge>
-                      <Badge variant="destructive" className="text-[10px]">{r.reason}</Badge>
+              <div className="divide-y border rounded-md max-h-[420px] overflow-y-auto">
+                {rejections.map((r: any) => (
+                  <div key={r.id} className="p-2.5 text-xs space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className="text-[10px] capitalize">{r.source}</Badge>
+                        <Badge variant="destructive" className="text-[10px]">{r.reason}</Badge>
+                      </div>
+                      <span className="text-muted-foreground whitespace-nowrap">{getTimeAgo(r.rejected_at)}</span>
                     </div>
-                    <span className="text-muted-foreground whitespace-nowrap">{getTimeAgo(r.rejected_at)}</span>
+                    <a
+                      href={r.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block truncate text-primary hover:underline"
+                    >
+                      {r.source_url}
+                    </a>
+                    {Array.isArray(r.sample_images) && r.sample_images.length > 0 && (
+                      <div className="flex gap-1 overflow-x-auto pt-1">
+                        {r.sample_images.slice(0, 4).map((img: string, i: number) => (
+                          <img
+                            key={i}
+                            src={img}
+                            alt=""
+                            className="h-12 w-16 object-cover rounded border flex-shrink-0"
+                            loading="lazy"
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <a
-                    href={r.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block truncate text-primary hover:underline"
-                  >
-                    {r.source_url}
-                  </a>
-                  {Array.isArray(r.sample_images) && r.sample_images.length > 0 && (
-                    <div className="flex gap-1 overflow-x-auto pt-1">
-                      {r.sample_images.slice(0, 4).map((img: string, i: number) => (
-                        <img
-                          key={i}
-                          src={img}
-                          alt=""
-                          className="h-12 w-16 object-cover rounded border flex-shrink-0"
-                          loading="lazy"
-                        />
-                      ))}
+                ))}
+              </div>
+            )}
+            <div className="mt-3">
+              <Button size="sm" variant="ghost" onClick={() => refetchRejections()}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+
+
+        </TabsContent>
+
+        <TabsContent value="ai" className="mt-4 space-y-4 md:space-y-6">
+          <OpenAIUsagePanel />
+
+        {/* Vibe Analysis Queue */}
+        <Card>
+          <CardHeader className="px-4 md:px-6">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <Activity className="h-5 w-5" />
+              Vibe Analysis Queue
+            </CardTitle>
+            <CardDescription className="text-xs md:text-sm">
+              Background processor for per-image vibe analysis. Listings only become discoverable once <code>vibe_status = complete</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 md:px-6 space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Queued</div>
+                <div className="text-2xl font-semibold">{vibeQueueStats?.queued ?? '—'}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Processing</div>
+                <div className="text-2xl font-semibold">{vibeQueueStats?.processing ?? '—'}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Failed</div>
+                <div className="text-2xl font-semibold text-destructive">{vibeQueueStats?.failed ?? '—'}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Properties pending</div>
+                <div className="text-2xl font-semibold">{vibeQueueStats?.pendingProperties ?? '—'}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const t = toast.loading('Processing vibe queue batch...');
+                  try {
+                    const { data, error } = await supabase.functions.invoke('process-vibe-queue', { body: { batchSize: 4 } });
+                    if (error) throw error;
+                    toast.success(`Processed ${data?.processed ?? 0}, completed ${data?.completed ?? 0}`, { id: t });
+                    refetchVibeQueue();
+                  } catch (e: any) {
+                    toast.error(`Queue run failed: ${e.message}`, { id: t });
+                  }
+                }}
+              >
+                <Play className="h-4 w-4 mr-1" />
+                Process batch now
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const t = toast.loading('Finding listings with missing highlights...');
+                  try {
+                    const { data, error } = await supabase.functions.invoke('backfill-image-highlights', {
+                      body: { limit: 200, requeue_only: true, missing_only: true },
+                    });
+                    if (error) throw error;
+                    const enq = data?.enqueued ?? 0;
+                    const total = data?.total ?? 0;
+                    const skipped = data?.skippedBelowFloor ?? 0;
+                    toast.success(
+                      total === 0
+                        ? 'No listings with missing highlights found'
+                        : `Enqueued ${enq} of ${total} listings missing highlights` +
+                          (skipped > 0 ? ` · ${skipped} below the image floor, run the backfill directly for those` : ''),
+                      { id: t }
+                    );
+                    refetchVibeQueue();
+                  } catch (e: any) {
+                    toast.error(`Requeue failed: ${e.message}`, { id: t });
+                  }
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Re-enqueue missing highlights
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Vector DB - Batch Generate Embeddings
+            </CardTitle>
+            <CardDescription>
+              Generate embeddings for all existing properties in the database. This enables semantic search for properties uploaded before vector DB integration.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button 
+              onClick={handleBatchGenerate} 
+              disabled={isGenerating}
+              size="lg"
+              className="w-full"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating Embeddings...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate All Property Embeddings
+                </>
+              )}
+            </Button>
+
+            {results && (
+              <div className="p-4 bg-muted rounded-lg space-y-2">
+                <p className="font-semibold">Results:</p>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Total Properties</p>
+                    <p className="text-2xl font-bold">{results.total}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Processed</p>
+                    <p className="text-2xl font-bold text-green-600">{results.processed}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Errors</p>
+                    <p className="text-2xl font-bold text-destructive">{results.errors}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p><strong>Note:</strong> This operation processes properties in batches of 10 with 1-second delays to respect rate limits.</p>
+              <p><strong>Cost:</strong> Approximately $0.02 per 1000 properties (OpenAI embeddings).</p>
+              <p><strong>Duration:</strong> ~10 seconds per 100 properties.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Verify Embeddings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Verify Embeddings in Redis
+            </CardTitle>
+            <CardDescription>
+              Check Redis to verify that all properties have embeddings stored and view coverage statistics.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button 
+              onClick={handleVerify} 
+              disabled={isVerifying}
+              size="lg"
+              variant="outline"
+              className="w-full"
+            >
+              {isVerifying ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Verify Redis Embeddings
+                </>
+              )}
+            </Button>
+
+            {verificationResults && (
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold">Coverage Status:</p>
+                    <Badge 
+                      variant={verificationResults.coveragePercent === 100 ? "default" : "destructive"}
+                      className="text-lg px-3 py-1"
+                    >
+                      {verificationResults.coveragePercent}%
+                    </Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t">
+                    <div>
+                      <p className="text-muted-foreground">Total Properties</p>
+                      <p className="text-2xl font-bold">{verificationResults.totalProperties}</p>
                     </div>
+                    <div>
+                      <p className="text-muted-foreground">Embeddings Found</p>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <p className="text-2xl font-bold text-green-600">{verificationResults.embeddingsFound}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Missing</p>
+                      <div className="flex items-center gap-2">
+                        {verificationResults.totalMissing > 0 && <XCircle className="h-4 w-4 text-destructive" />}
+                        <p className="text-2xl font-bold text-destructive">{verificationResults.totalMissing}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {verificationResults.sampleEmbeddings.length > 0 && (
+                  <div className="p-4 bg-muted rounded-lg space-y-2">
+                    <p className="font-semibold text-sm">Sample Embeddings:</p>
+                    {verificationResults.sampleEmbeddings.map((sample, idx) => (
+                      <div key={idx} className="text-xs space-y-1 p-2 bg-background rounded">
+                        <p className="font-mono text-muted-foreground">{sample.propertyId}</p>
+                        <p className="font-semibold truncate">{sample.title}</p>
+                        <div className="flex gap-2 text-muted-foreground">
+                          <span>Dimensions: {sample.dimensions}</span>
+                          <span>•</span>
+                          <span>Metadata: {sample.hasMetadata ? '✓' : '✗'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {verificationResults.totalMissing > 0 && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm">
+                    <p className="font-semibold text-destructive mb-1">Missing Embeddings Detected</p>
+                    <p className="text-muted-foreground">
+                      Run the batch generation again to generate embeddings for {verificationResults.totalMissing} properties.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Test Vector Search */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Test Vector Search
+            </CardTitle>
+            <CardDescription>
+              Test semantic property search with natural language queries to verify vector DB is working correctly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="testQuery">Natural Language Query</Label>
+              <Textarea
+                id="testQuery"
+                value={testQuery}
+                onChange={(e) => setTestQuery(e.target.value)}
+                placeholder="Describe what you're looking for..."
+                rows={3}
+              />
+            </div>
+            
+            <Button 
+              onClick={handleTestVectorSearch} 
+              disabled={isTesting || !testQuery.trim()}
+              size="lg"
+              className="w-full"
+            >
+              {isTesting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Search className="mr-2 h-4 w-4" />
+                  Test Vector Search
+                </>
+              )}
+            </Button>
+
+            {testResults && (
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-semibold">Search Results:</p>
+                    <Badge>{testResults.results?.length || 0} matches</Badge>
+                  </div>
+                  
+                  {testResults.cached && (
+                    <p className="text-xs text-muted-foreground mb-2">⚡ Cached result</p>
                   )}
                 </div>
-              ))}
+
+                {testResults.results && testResults.results.length > 0 && (
+                  <div className="space-y-2">
+                    {testResults.results.slice(0, 5).map((result: any, idx: number) => (
+                      <div key={idx} className="p-3 bg-background rounded border space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold truncate">{result.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">{result.location}</p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0">
+                            {(result.similarity * 100).toFixed(1)}%
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          ${result.price?.toLocaleString()}
+                          {result.styles && ` • ${result.styles.slice(0, 2).join(', ')}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {testResults.processingTime && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Processed in {testResults.processingTime}ms
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
+              <p><strong>Try queries like:</strong></p>
+              <ul className="list-disc list-inside space-y-0.5 text-xs">
+                <li>"Bright apartment with modern kitchen"</li>
+                <li>"Cozy space perfect for remote work"</li>
+                <li>"Luxury penthouse with city views"</li>
+                <li>"Industrial loft with high ceilings"</li>
+              </ul>
             </div>
-          )}
-          <div className="mt-3">
-            <Button size="sm" variant="ghost" onClick={() => refetchRejections()}>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        </TabsContent>
 
-
+        <TabsContent value="agents" className="mt-4 space-y-4">
+          <RealtorApplicationsPanel />
+        </TabsContent>
+      </Tabs>
 
       {/* Property Preview Dialog */}
       <Dialog open={!!previewProperty} onOpenChange={(open) => !open && setPreviewProperty(null)}>
@@ -2588,259 +2871,6 @@ const AdminTools = () => {
           })()}
         </DialogContent>
       </Dialog>
-
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            Vector DB - Batch Generate Embeddings
-          </CardTitle>
-          <CardDescription>
-            Generate embeddings for all existing properties in the database. This enables semantic search for properties uploaded before vector DB integration.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button 
-            onClick={handleBatchGenerate} 
-            disabled={isGenerating}
-            size="lg"
-            className="w-full"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating Embeddings...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate All Property Embeddings
-              </>
-            )}
-          </Button>
-
-          {results && (
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <p className="font-semibold">Results:</p>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Total Properties</p>
-                  <p className="text-2xl font-bold">{results.total}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Processed</p>
-                  <p className="text-2xl font-bold text-green-600">{results.processed}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Errors</p>
-                  <p className="text-2xl font-bold text-destructive">{results.errors}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="text-sm text-muted-foreground space-y-1">
-            <p><strong>Note:</strong> This operation processes properties in batches of 10 with 1-second delays to respect rate limits.</p>
-            <p><strong>Cost:</strong> Approximately $0.02 per 1000 properties (OpenAI embeddings).</p>
-            <p><strong>Duration:</strong> ~10 seconds per 100 properties.</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Verify Embeddings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5" />
-            Verify Embeddings in Redis
-          </CardTitle>
-          <CardDescription>
-            Check Redis to verify that all properties have embeddings stored and view coverage statistics.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button 
-            onClick={handleVerify} 
-            disabled={isVerifying}
-            size="lg"
-            variant="outline"
-            className="w-full"
-          >
-            {isVerifying ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Verify Redis Embeddings
-              </>
-            )}
-          </Button>
-
-          {verificationResults && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold">Coverage Status:</p>
-                  <Badge 
-                    variant={verificationResults.coveragePercent === 100 ? "default" : "destructive"}
-                    className="text-lg px-3 py-1"
-                  >
-                    {verificationResults.coveragePercent}%
-                  </Badge>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t">
-                  <div>
-                    <p className="text-muted-foreground">Total Properties</p>
-                    <p className="text-2xl font-bold">{verificationResults.totalProperties}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Embeddings Found</p>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <p className="text-2xl font-bold text-green-600">{verificationResults.embeddingsFound}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Missing</p>
-                    <div className="flex items-center gap-2">
-                      {verificationResults.totalMissing > 0 && <XCircle className="h-4 w-4 text-destructive" />}
-                      <p className="text-2xl font-bold text-destructive">{verificationResults.totalMissing}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {verificationResults.sampleEmbeddings.length > 0 && (
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <p className="font-semibold text-sm">Sample Embeddings:</p>
-                  {verificationResults.sampleEmbeddings.map((sample, idx) => (
-                    <div key={idx} className="text-xs space-y-1 p-2 bg-background rounded">
-                      <p className="font-mono text-muted-foreground">{sample.propertyId}</p>
-                      <p className="font-semibold truncate">{sample.title}</p>
-                      <div className="flex gap-2 text-muted-foreground">
-                        <span>Dimensions: {sample.dimensions}</span>
-                        <span>•</span>
-                        <span>Metadata: {sample.hasMetadata ? '✓' : '✗'}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {verificationResults.totalMissing > 0 && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm">
-                  <p className="font-semibold text-destructive mb-1">Missing Embeddings Detected</p>
-                  <p className="text-muted-foreground">
-                    Run the batch generation again to generate embeddings for {verificationResults.totalMissing} properties.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Test Vector Search */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Test Vector Search
-          </CardTitle>
-          <CardDescription>
-            Test semantic property search with natural language queries to verify vector DB is working correctly.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="testQuery">Natural Language Query</Label>
-            <Textarea
-              id="testQuery"
-              value={testQuery}
-              onChange={(e) => setTestQuery(e.target.value)}
-              placeholder="Describe what you're looking for..."
-              rows={3}
-            />
-          </div>
-          
-          <Button 
-            onClick={handleTestVectorSearch} 
-            disabled={isTesting || !testQuery.trim()}
-            size="lg"
-            className="w-full"
-          >
-            {isTesting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Searching...
-              </>
-            ) : (
-              <>
-                <Search className="mr-2 h-4 w-4" />
-                Test Vector Search
-              </>
-            )}
-          </Button>
-
-          {testResults && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold">Search Results:</p>
-                  <Badge>{testResults.results?.length || 0} matches</Badge>
-                </div>
-                
-                {testResults.cached && (
-                  <p className="text-xs text-muted-foreground mb-2">⚡ Cached result</p>
-                )}
-              </div>
-
-              {testResults.results && testResults.results.length > 0 && (
-                <div className="space-y-2">
-                  {testResults.results.slice(0, 5).map((result: any, idx: number) => (
-                    <div key={idx} className="p-3 bg-background rounded border space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold truncate">{result.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">{result.location}</p>
-                        </div>
-                        <Badge variant="outline" className="shrink-0">
-                          {(result.similarity * 100).toFixed(1)}%
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        ${result.price?.toLocaleString()}
-                        {result.styles && ` • ${result.styles.slice(0, 2).join(', ')}`}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {testResults.processingTime && (
-                <p className="text-xs text-muted-foreground text-center">
-                  Processed in {testResults.processingTime}ms
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
-            <p><strong>Try queries like:</strong></p>
-            <ul className="list-disc list-inside space-y-0.5 text-xs">
-              <li>"Bright apartment with modern kitchen"</li>
-              <li>"Cozy space perfect for remote work"</li>
-              <li>"Luxury penthouse with city views"</li>
-              <li>"Industrial loft with high ceilings"</li>
-            </ul>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };
