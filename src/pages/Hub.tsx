@@ -9,7 +9,6 @@ import { ComplexDirectory } from '@/components/ComplexDirectory';
 import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
 import { OnboardingQuiz } from '@/components/OnboardingQuiz';
 import { Profile } from '@/components/Profile';
-import { FastTrackRequestsCard } from '@/components/FastTrackRequestsCard';
 import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { UsageMeter } from '@/components/UsageMeter';
 import { HomeAI } from '@/components/HomeAI';
@@ -256,7 +255,6 @@ const Hub = () => {
                 <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
                   <div className="flex flex-col gap-6 lg:col-span-2">
                     <Profile userType="renter" />
-                    <FastTrackRequestsCard />
                   </div>
                   <div className="flex flex-col gap-6 lg:col-span-1">
                     <SubscriptionStatus

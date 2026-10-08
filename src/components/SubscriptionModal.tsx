@@ -51,7 +51,7 @@ const PASS: Feature[] = [
   { lead: 'Priority search', rest: ' - our team puts your search first and sends you places that fit' },
   { lead: 'Match alerts', rest: ' - new places that fit you, up to 2 a week on WhatsApp' },
   { lead: 'Unlimited AI credits' },
-  { lead: 'Unlimited Deep Scans' },
+  { lead: 'Unlimited Deep Scans', rest: ' - an honest read of any place, with its price history and time on the market' },
 ];
 
 const reasonMessages = {

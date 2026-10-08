@@ -4,7 +4,6 @@ import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyListingCard } from '@/components/PropertyListingCard';
-import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { HomeAI } from '@/components/HomeAI';
 import { ChatDock, RAIL_MIN_VIEWPORT } from '@/components/chat/ChatDock';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
@@ -32,8 +31,6 @@ const PropertyDetail = () => {
   const [showRealtorProfile, setShowRealtorProfile] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [source, setSource] = useState<'internal' | 'external'>('internal');
-  const [isRelist, setIsRelist] = useState(false);
-  const [firstSeenAt, setFirstSeenAt] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   // Opened from an availability request's offer (`?inq=`): remembered so the
@@ -161,8 +158,6 @@ const PropertyDetail = () => {
           setApartment(transformedApartment);
         } else if (data.source === 'external') {
           const extProperty = data.property;
-          setIsRelist(!!extProperty.is_relist);
-          setFirstSeenAt(extProperty.created_at ?? null);
           // Whether the ad carries a number - never the number. Seeded so
           // "Request viewing" opens straight on its choice (ViewingChoice).
           queryClient.setQueryData<AgentNumberInfo>(agentNumberKey(extProperty.id), {
@@ -328,13 +323,6 @@ const PropertyDetail = () => {
             />
           </div>
 
-
-          <ListingHistoryNote
-            listingId={apartment.id}
-            enabled={source === 'external'}
-            firstSeenAt={firstSeenAt}
-            isRelist={isRelist}
-          />
 
           {/* No second CTA here. The card's "Request viewing" is the only one,
               and the modal it opens asks a signed-out visitor to sign in - so a

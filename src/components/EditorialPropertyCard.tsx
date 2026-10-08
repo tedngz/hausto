@@ -182,6 +182,9 @@ export const EditorialPropertyCard = ({
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const { formatPrice } = useCurrency();
+  const ctaCount = [showShortlist, !!onContact, !!onSchedule && !showShortlist].filter(Boolean).length;
+  const loneCta = ctaCount === 1 && !compact;
+  const ctaClass = loneCta ? 'w-full sm:w-auto sm:min-w-64 sm:px-12 rounded-full' : 'flex-1 rounded-full';
 
   // Touch devices have no hover: keep the slideshow arrows visible.
   useEffect(() => {
@@ -713,14 +716,16 @@ export const EditorialPropertyCard = ({
           </div>
         )}
 
-        {/* CTAs */}
+        {/* CTAs. A lone button on a full-size card is held to a pill's width
+            and centred over the centred small print under it - stretched
+            across a wide modal it read as a banner, not a button. */}
         {(onContact || onSchedule || showShortlist) && (
-          <div className="flex items-center gap-2 pt-0.5">
+          <div className={`flex items-center gap-2 pt-0.5 ${loneCta ? 'justify-center' : ''}`}>
             {/* One button, not two. See RequestViewingModal for why. */}
             {showShortlist && (
               <Button
                 size={compact ? 'sm' : 'default'}
-                className="flex-1 rounded-full"
+                className={ctaClass}
                 onClick={e => { e.stopPropagation(); setRequestOpen(true); }}
               >
                 Request viewing
@@ -730,7 +735,7 @@ export const EditorialPropertyCard = ({
               <Button
                 size={compact ? 'sm' : 'default'}
                 variant={onSchedule ? 'outline' : 'default'}
-                className="flex-1 rounded-full"
+                className={ctaClass}
                 onClick={e => {
                   e.stopPropagation();
                   onContact();
@@ -746,7 +751,7 @@ export const EditorialPropertyCard = ({
             {onSchedule && !showShortlist && (
               <Button
                 size={compact ? 'sm' : 'default'}
-                className="flex-1 rounded-full"
+                className={ctaClass}
                 onClick={e => {
                   e.stopPropagation();
                   onSchedule();

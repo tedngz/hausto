@@ -12,7 +12,6 @@ import type { PropertyType } from '@/hooks/useDeepAnalysis';
 import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
-import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { useHasAgentNumber } from '@/hooks/useHasAgentNumber';
 
 // The one way a listing opens over the page it was found on - browse, the AI's
@@ -82,23 +81,17 @@ export const ListingPreviewDialog = ({
   // row, and this is the one preview both surfaces share, so it is topped up
   // here rather than in each caller.
   //
-  // A crawled listing's history note needs when we first saw it and whether
-  // it is a relist, which no caller passes, so they come with the same read.
   const isExternal = propertyType === 'external';
   const { data: listingFacts } = useQuery({
     queryKey: ['listing-preview-facts', propertyType, apartment?.id],
     enabled: open && !!apartment?.id,
     staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<{ description: string | null; createdAt: string | null; isRelist: boolean }> => {
+    queryFn: async (): Promise<{ description: string | null }> => {
       const { data } = isExternal
-        ? await supabase.from('external_properties').select('description, created_at, is_relist').eq('id', apartment!.id).maybeSingle()
+        ? await supabase.from('external_properties').select('description').eq('id', apartment!.id).maybeSingle()
         : await supabase.from('properties').select('description').eq('id', apartment!.id).maybeSingle();
-      const row = data as { description?: string | null; created_at?: string | null; is_relist?: boolean | null } | null;
-      return {
-        description: row?.description ?? null,
-        createdAt: row?.created_at ?? null,
-        isRelist: !!row?.is_relist,
-      };
+      const row = data as { description?: string | null } | null;
+      return { description: row?.description ?? null };
     },
   });
   const fullDescription = listingFacts?.description ?? null;
@@ -201,22 +194,8 @@ export const ListingPreviewDialog = ({
               footer={bookingOffer}
             />
           )}
-          {/* What we have seen of it over time, as the listing page shows it
-              under its card. Facts about the place, not an action, so it sits
-              outside the card rather than in its footer. */}
-          {/* Wrapped: in the dialog's grid the note's own mx-auto would
-              shrink it to its text instead of the card's width. */}
-          {apartment && isExternal && (
-            <div>
-              <ListingHistoryNote
-                listingId={apartment.id}
-                enabled
-                firstSeenAt={listingFacts?.createdAt ?? null}
-                isRelist={listingFacts?.isRelist ?? false}
-                className="mt-3 max-w-none rounded-2xl border-border bg-card"
-              />
-            </div>
-          )}
+          {/* What we have seen of the listing over time - price moves, days on
+              the market - is in its Deep Scan now (ListingHistoryNote). */}
         </DialogContent>
       </Dialog>
     </>

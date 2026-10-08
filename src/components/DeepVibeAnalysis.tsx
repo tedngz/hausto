@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, MapPin, Sparkles, Train } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { usePass } from '@/hooks/usePass';
 import { useDeepAnalysis, type PropertyType } from '@/hooks/useDeepAnalysis';
+import { ListingHistoryNote, useHasListingHistory } from '@/components/ListingHistoryNote';
 
 interface DeepVibeAnalysisProps {
   propertyId: string;
@@ -81,6 +82,11 @@ export const DeepVibeAnalysis = ({
     propertyId,
     propertyType,
   );
+  // A crawled listing's history - price moves, days on the market, a relist -
+  // is part of the read (2026-10-08). Asked only once there is a read to put
+  // it in; realtors' own listings have no snapshots.
+  const crawled = propertyType === 'external';
+  const hasHistory = useHasListingHistory(propertyId, crawled && !!analysis && !ctaOnly);
 
   // Asked for elsewhere and answered here: read it once, on arrival. The ref
   // keeps a re-render from asking twice.
@@ -162,6 +168,12 @@ export const DeepVibeAnalysis = ({
             )}
           </div>
 
+          {hasHistory && (
+            <Section title="On the market">
+              <ListingHistoryNote listingId={propertyId} enabled />
+            </Section>
+          )}
+
           {analysis.worth_viewing && (
             <p className="text-sm border-t border-border pt-3 font-medium">
               {analysis.worth_viewing}
@@ -212,7 +224,9 @@ export const DeepVibeAnalysis = ({
         <p className="text-xs text-muted-foreground mt-1 break-words">
           {ctaOnly && analysis
             ? 'Already read for you - open it in the chat, beside the listing it read.'
-            : 'The layout and light, who it suits, the honest downsides, and how the area fits you.'}
+            : crawled
+              ? 'The layout and light, who it suits, the honest downsides, how the area fits you, and its price history and time on the market.'
+              : 'The layout and light, who it suits, the honest downsides, and how the area fits you.'}
         </p>
       </div>
       <Button onClick={onPress} disabled={isGenerating} className={isStacked ? 'w-full' : 'shrink-0'}>
