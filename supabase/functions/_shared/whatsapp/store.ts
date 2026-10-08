@@ -3,7 +3,7 @@
 // Deliberately thin: every rule lives in send.ts, and this only knows how to
 // read and write rows. If a decision appears in here, it is in the wrong place.
 
-import { DuplicateKeyError, type MessageStore, type NewMessage, type StoredMessage, type StoredRenter } from './send.ts';
+import { DuplicateKeyError, isAcknowledgement, type MessageStore, type NewMessage, type StoredMessage, type StoredRenter } from './send.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -63,14 +63,16 @@ export class SupabaseMessageStore implements MessageStore {
 
     const { data } = await this.db
       .from('messages')
-      .select('direction')
+      .select('direction, idempotency_key')
       .eq('to_phone', renter.phone_e164)
       .order('created_at', { ascending: false })
       .limit(20);
 
     let n = 0;
-    for (const m of (data ?? []) as { direction: string }[]) {
+    for (const m of (data ?? []) as { direction: string; idempotency_key?: string | null }[]) {
       if (m.direction === 'IN') break;
+      // A receipt answers the renter's message; it is not one of ours in a row.
+      if (isAcknowledgement(m.idempotency_key)) continue;
       n++;
     }
     return n;

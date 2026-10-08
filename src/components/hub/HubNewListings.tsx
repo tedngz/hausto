@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useNewListings } from '@/hooks/useNewListings';
 import { districtOf } from '@/utils/districts';
+import { useCurrency, VND_TO_USD_RATE } from '@/contexts/CurrencyContext';
 
 const RELATIVE = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
@@ -34,6 +35,7 @@ const sinceLabel = (seenAt: number): string => {
  * everything else is still there tomorrow.
  */
 export const HubNewListings = () => {
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { listings, total, isScoped, seenAt, loading, markAllSeen } = useNewListings();
@@ -97,7 +99,7 @@ export const HubNewListings = () => {
                   {r.size && !/not specified|n\/a|bed/i.test(r.size) ? ` · ${r.size}` : ''}
                 </span>
                 <span className="font-serif text-sm font-semibold">
-                  {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
+                  {r.price_vnd || r.price_usd ? formatPrice(r.price_vnd ?? r.price_usd! * VND_TO_USD_RATE) : '-'}
                   <span className="text-[10.5px] font-normal text-muted-foreground"> /mo</span>
                 </span>
               </div>

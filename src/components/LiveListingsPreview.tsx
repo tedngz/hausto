@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MapPin } from 'lucide-react';
+import { useCurrency, VND_TO_USD_RATE } from '@/contexts/CurrencyContext';
 
 // Landing-page preview of the browse table: the freshest verified listings,
 // rendered in the same row format so the landing "is" the product. Public
@@ -14,6 +15,7 @@ type PreviewRow = {
   id: string;
   title: string;
   location: string;
+  price_vnd?: number | null;
   price_usd: number | null;
   rooms: string | null;
   size: string | null;
@@ -35,6 +37,7 @@ const districtOf = (location: string): string => {
 };
 
 export const LiveListingsPreview = () => {
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   // The hub is the front door for everyone now - a signed-out visitor gets the
   // same table there, minus the parts that need an account.
@@ -117,7 +120,7 @@ export const LiveListingsPreview = () => {
               )}
               <div className="text-right flex-shrink-0">
                 <p className="text-sm font-semibold whitespace-nowrap">
-                  {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
+                  {r.price_vnd || r.price_usd ? formatPrice(r.price_vnd ?? r.price_usd! * VND_TO_USD_RATE) : '-'}
                   <span className="text-xs text-muted-foreground font-normal">/mo</span>
                 </p>
                 {fresh !== null && fresh <= 30 && (

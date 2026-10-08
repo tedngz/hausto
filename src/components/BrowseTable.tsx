@@ -32,6 +32,7 @@ import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANE_CENTRED, HUB_PANEL_POSITION } from '@/lib/hubLayout';
 import { ListingPreviewDialog } from '@/components/ListingPreviewDialog';
 import type { Apartment } from '@/types';
+import { useCurrency, VND_TO_USD_RATE } from '@/contexts/CurrencyContext';
 
 // The verified-listings table. Public data from public-property-search (no
 // contact details); rendered standalone at /browse, as the Browse view inside
@@ -162,9 +163,42 @@ export const BrowseTable = ({
   const [maxBudget, setMaxBudget] = useState('');
   const [freshOnly, setFreshOnly] = useState(false);
 
+  // Prices and the budget filter follow the currency picked in the nav: a
+  // budget is typed in it (millions, in dong) and sent to the search in USD,
+  // the unit public-property-search takes, at the rate it converts with.
+  const { currency, formatPrice } = useCurrency();
+  const toUsd = (v: string): string => {
+    const n = Number(v);
+    if (!(n > 0)) return '';
+    return String(Math.round(currency === 'USD' ? n : (n * 1_000_000) / VND_TO_USD_RATE));
+  };
+  const toVnd = (v: string): number | null => {
+    const n = Number(v);
+    return n > 0 ? Math.round(currency === 'USD' ? n * VND_TO_USD_RATE : n * 1_000_000) : null;
+  };
+  // A budget typed before the currency changed keeps its value, restated.
+  const typedIn = useRef(currency);
+  useEffect(() => {
+    if (typedIn.current === currency) return;
+    const restate = (v: string) => {
+      const n = Number(v);
+      if (!(n > 0)) return v;
+      return currency === 'USD'
+        ? String(Math.round((n * 1_000_000) / VND_TO_USD_RATE))
+        : String(Math.round((n * VND_TO_USD_RATE) / 100_000) / 10);
+    };
+    setMinBudget(restate);
+    setMaxBudget(restate);
+    typedIn.current = currency;
+  }, [currency]);
+  const priceOf = (r: BrowseRow): string => {
+    const vnd = r.price_vnd ?? (r.price_usd ? r.price_usd * VND_TO_USD_RATE : null);
+    return vnd ? formatPrice(vnd) : '-';
+  };
+
   // City and budget are server-side filters (they change what gets fetched);
   // district, rooms and freshness are applied to the result below.
-  const { rows, loading, error } = useBrowseListings({ city, minBudget, maxBudget });
+  const { rows, loading, error } = useBrowseListings({ city, minBudget: toUsd(minBudget), maxBudget: toUsd(maxBudget) });
 
   const changeCity = (c: string) => {
     setCity(c);
@@ -390,7 +424,7 @@ export const BrowseTable = ({
   }, [compareOpen, onCompareOpenChange]);
 
   const compareFields: { label: string; get: (r: BrowseRow) => string }[] = [
-    { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd.toLocaleString()}/mo` : '-') },
+    { label: 'Price', get: (r) => { const p = priceOf(r); return p === '-' ? p : `${p}/mo`; } },
     { label: 'Rooms', get: (r) => r.rooms || '-' },
     { label: 'Size', get: (r) => (r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '-') },
     { label: 'Verified live', get: (r) => verifiedLabel(r.last_verified_at) },
@@ -458,20 +492,20 @@ export const BrowseTable = ({
         <div className="flex items-center gap-1.5">
           <Input
             type="number"
-            placeholder="Min $"
+            placeholder={currency === 'USD' ? 'Min $' : 'Min M₫'}
             value={minBudget}
             onChange={(e) => setMinBudget(e.target.value)}
             className="w-[90px] bg-background"
-            aria-label="Minimum monthly budget in USD"
+            aria-label={currency === 'USD' ? 'Minimum monthly budget in USD' : 'Minimum monthly budget in millions of dong'}
           />
           <span className="text-muted-foreground text-sm">-</span>
           <Input
             type="number"
-            placeholder="Max $"
+            placeholder={currency === 'USD' ? 'Max $' : 'Max M₫'}
             value={maxBudget}
             onChange={(e) => setMaxBudget(e.target.value)}
             className="w-[90px] bg-background"
-            aria-label="Maximum monthly budget in USD"
+            aria-label={currency === 'USD' ? 'Maximum monthly budget in USD' : 'Maximum monthly budget in millions of dong'}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -548,7 +582,7 @@ export const BrowseTable = ({
                         {r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '-'}
                       </TableCell>
                       <TableCell className="text-sm font-medium whitespace-nowrap">
-                        {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
+                        {priceOf(r)}
                         <span className="text-xs text-muted-foreground font-normal">/mo</span>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
@@ -596,7 +630,7 @@ export const BrowseTable = ({
               prefill={{
                 districts: city === 'hcmc' ? districts : [],
                 bedrooms: roomsFilter === 'all' ? null : roomsFilter === 'studio' ? 1 : Number(roomsFilter),
-                budgetMaxVnd: Number(maxBudget) > 0 ? Math.round(Number(maxBudget) * 25_000) : null,
+                budgetMaxVnd: toVnd(maxBudget),
               }}
             />
           )}

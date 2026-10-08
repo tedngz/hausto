@@ -464,6 +464,27 @@ export function buildDeepLink(businessPhoneE164: string, ref: string): string {
   return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 }
 
+/**
+ * The answer to that first message (2026-10-08): the request is in, which
+ * places, what happens next and when. Before this the handshake was answered
+ * with silence until the plan or a holding update, and a renter who had just
+ * tapped "send" could not tell whether anyone had seen it.
+ *
+ * One message, sent at once; it does not count towards the three-in-a-row
+ * rule (send.ts ACKNOWLEDGEMENT_PURPOSES). No "booking" (invariant 6): the
+ * agents have not answered.
+ */
+export function renderRequestReceived(opts: { ref: string; titles: string[]; siteUrl: string }): string {
+  const n = opts.titles.length;
+  return [
+    `Thanks - we have your request ${opts.ref}${n === 1 ? ` for ${opts.titles[0]}` : n > 1 ? ` for ${n} places:` : '.'}`,
+    ...(n > 1 ? opts.titles.map((t, i) => `${i + 1}. ${t}`) : []),
+    '',
+    `We are asking the ${n === 1 ? 'agent' : 'agents'} now and will message you here with the times that are free, usually within 24 hours.`,
+    `To change your times or places, open Viewings on ${opts.siteUrl.replace(/^https?:\/\//, '')}/hub.`,
+  ].join('\n');
+}
+
 /** Pull a ref out of an inbound message body, for routing the first reply. */
 export function refFromMessage(body: string): string | null {
   const m = String(body ?? '').toUpperCase().match(new RegExp(`HV-[${REF_ALPHABET}]{4}`));

@@ -477,7 +477,7 @@ Event types:
 | `ITINERARY_HELD` | request | `{message_id, ordered_item_ids[], template}` - the plan was ready with the renter's window shut, so a template went instead (§9). Moves no state; sets `heldItinerary` on the view until an `ITINERARY_DELIVERED` clears it, and a hold logged after a delivery is ignored |
 | `HOLDING_UPDATE_SENT` | request | `{message_id}` - something the renter heard that was not the itinerary |
 | `SUGGESTIONS_OFFERED` | request | `{listing_ids[], source, message_id}` - listings put in front of the renter, in the order shown (today `source: SUBSTITUTES`). What a reply of "2" resolves against (`selection.ts`); answers a waiting `SEARCH` or `SELECTION` (§4). No state |
-| `RENTER_REPLIED` | request | `{intent, message_id, handshake?}` - `intent` ∈ `CONFIRM`, `DECLINE`, `RESCHEDULE`, `QUESTION`, `SELECTION`, `SEARCH`, `OPT_OUT`, `UNKNOWN`. `handshake: true` on the first ref-carrying message, which answers nothing |
+| `RENTER_REPLIED` | request | `{intent, message_id, handshake?}` - `intent` ∈ `CONFIRM`, `DECLINE`, `RESCHEDULE`, `QUESTION`, `SELECTION`, `SEARCH`, `OPT_OUT`, `UNKNOWN`. `handshake: true` on the first ref-carrying message, which is no question for an operator - it is answered with the receipt (§5) |
 | `REPLY_SENT` | request | `{message_id}` - an operator's free-text WhatsApp reply. Moves the silence clock (§9) and clears waiting replies; no state |
 | `REPLIES_ACKNOWLEDGED` | request | `{message_ids[]}` - replies read and judged to need no answer. Clears waiting replies; no state, no clock |
 | `LOCK_IN_CHECKOUT_OPENED` | request | `{checkout_id, expires_at}` - a Pass checkout opened from the lock-in page (§9). Moves no state; adds to `checkouts` on the view, once per checkout. One opened before the deadline holds the plan until it expires |
@@ -675,6 +675,12 @@ The Cloud API 24-hour customer service window is a real constraint:
 - From 2026-10-01 Meta bills service and utility messages sent inside the window.
   Consolidate: one message carrying a full itinerary, not a sequence of turns.
   **Any code path that sends 3+ messages in a row to the same renter is a bug.**
+  One kind of message is not counted: an acknowledgement sent at once in
+  answer to the renter's own message (`ACKNOWLEDGEMENT_PURPOSES` in `send.ts`,
+  today only the receipt below). It is part of their exchange, not the start
+  of a run of ours, and counting it would make the plan or the viewing-day
+  message a refused third. `ops_request_thread` and `/dev/phone` count the same
+  way.
 
 Adapter: `_shared/whatsapp/adapter.ts` exports a `WhatsAppAdapter` interface
 with two implementations - `MockAdapter` (the default in dev and in all tests,
@@ -690,6 +696,16 @@ afterwards sendable. The webhook routes that first message by the ref it
 carries, falling back to the renter's newest request for a bare reply - and to
 nothing at all for a ref that does not resolve, since attaching a message to the
 wrong thread is worse than attaching it to none.
+
+**That first message is answered with a receipt** (owner's decision,
+2026-10-08), agent on or off, while the request is still being worked
+(`SUBMITTED` or `CONTACTING`): the ref, the places, that we are asking the
+agents and will message the free times here, usually within 24 hours, and
+where to change the times or places (`renderRequestReceived`, `REQUEST_RECEIVED`
+in `agent.ts`). Once per request - it is keyed on it - and logged as
+`HOLDING_UPDATE_SENT`, since it is something the renter heard. Until then the
+first thing a renter heard was the plan or a holding update a day later, and
+nothing told them anyone had seen the request.
 
 **Which thread a reply answers** (`handleInbound` in `routing.ts`). A renter can
 have an itinerary, two buildings' availability requests and a weekly alert on
@@ -737,12 +753,14 @@ rendering takes a DTO with no realtor contact field on it.
 so the number a crawled ad prints is no longer something to keep from them: the
 ad is public on its marketplace, and what the Pass sells is dealing with the
 agents, not owning their numbers. It is offered behind "Request viewing", not
-beside it (invariant 8): for one place whose ad lists a number,
-`RequestViewingModal` opens on a choice (`ViewingChoice`), "How do you want to
-see it?" - **We arrange it** (the Pass's, past one free place - §9) or **Call
+beside it (invariant 8): for one place, `RequestViewingModal` opens on a
+choice (`ViewingChoice`), "How do you want to see it?" - **We arrange it** (the Pass's, past one free place - §9) or **Call
 the agent yourself** (free; the agent
-gets the renter's number, and many speak only the local language). Several places, or
-an ad with no number, go straight to the request. The same modal opens from
+gets the renter's number, and many speak only the local language). Every renter
+sees both, Pass or not; an ad with no number says so under the second rather
+than the choice being skipped (2026-10-08: half the active ads list none, and
+the screen changing from place to place read as a Pass difference). Several
+places go straight to the request. The same modal opens from
 every card, the listing page and the listing preview, so there is one place to
 change. It is held in one place:
 

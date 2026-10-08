@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 export type Currency = 'VND' | 'USD';
 
@@ -8,32 +8,37 @@ interface CurrencyContextType {
   setCurrency: (currency: Currency) => void;
   formatPrice: (price: number) => string;
   convertPrice: (priceInVND: number) => number;
+  /** A figure stored in USD (a building's rent bands), in the chosen currency. */
+  formatUsd: (priceInUSD: number) => string;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
-// 1 USD = 24,500 VND (approximate exchange rate)
-const VND_TO_USD_RATE = 24500;
+// 1 USD = 24,500 VND (approximate exchange rate) - the rate public-property-search
+// converts with, so a filter typed in one currency and a price shown in the
+// other agree.
+export const VND_TO_USD_RATE = 24500;
 
-const currencySymbols = {
-  VND: '₫',
-  USD: '$'
-};
+// The choice outlives the page. Each page wraps its own provider, so without
+// this a renter who picked USD on a listing was back in VND on the hub.
+const STORAGE_KEY = 'hausto-currency';
+const CHANGED_EVENT = 'hausto:currency';
 
-export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currency, setCurrency] = useState<Currency>('VND');
+function savedCurrency(): Currency {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === 'USD' ? 'USD' : 'VND';
+  } catch {
+    return 'VND';
+  }
+}
 
-  const convertPrice = (priceInVND: number) => {
-    if (currency === 'VND') {
-      return priceInVND;
-    } else {
-      return Math.round(priceInVND / VND_TO_USD_RATE);
-    }
-  };
+function formatterFor(currency: Currency) {
+  const convertPrice = (priceInVND: number) =>
+    currency === 'VND' ? priceInVND : Math.round(priceInVND / VND_TO_USD_RATE);
 
   const formatPrice = (priceInVND: number) => {
     const convertedPrice = convertPrice(priceInVND);
-    
+
     if (currency === 'VND') {
       // Format VND in millions for readability (English)
       if (convertedPrice >= 1000000000) {
@@ -52,8 +57,30 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const formatUsd = (priceInUSD: number) => formatPrice(priceInUSD * VND_TO_USD_RATE);
+
+  return { convertPrice, formatPrice, formatUsd };
+}
+
+export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [currency, setCurrencyState] = useState<Currency>(savedCurrency);
+
+  // Any provider's change reaches every other one on the page - a nav bar's
+  // dropdown and the pane it sits over can sit under different providers.
+  useEffect(() => {
+    const onChange = (e: Event) => setCurrencyState((e as CustomEvent<Currency>).detail);
+    window.addEventListener(CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(CHANGED_EVENT, onChange);
+  }, []);
+
+  const setCurrency = (next: Currency) => {
+    setCurrencyState(next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch { /* private mode: this page only */ }
+    window.dispatchEvent(new CustomEvent<Currency>(CHANGED_EVENT, { detail: next }));
+  };
+
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, formatPrice, convertPrice }}>
+    <CurrencyContext.Provider value={{ currency, setCurrency, ...formatterFor(currency) }}>
       {children}
     </CurrencyContext.Provider>
   );
@@ -61,11 +88,16 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 // The hook lives beside its provider; editing this file reloads the page
 // rather than hot-swapping, which is the price of keeping the pair together.
+//
+// Outside a provider it answers in the saved currency rather than throwing: a
+// price shown on a page that forgot its provider is a smaller fault than the
+// page failing to render.
 // eslint-disable-next-line react-refresh/only-export-components
-export const useCurrency = () => {
+export const useCurrency = (): CurrencyContextType => {
   const context = useContext(CurrencyContext);
   if (context === undefined) {
-    throw new Error('useCurrency must be used within a CurrencyProvider');
+    const currency = savedCurrency();
+    return { currency, setCurrency: () => {}, ...formatterFor(currency) };
   }
   return context;
 };

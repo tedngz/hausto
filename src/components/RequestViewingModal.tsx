@@ -29,10 +29,11 @@
 // here**: a renter who met a price only after requesting may report the
 // message, and reports lower the WhatsApp number's quality rating.
 //
-// **For one place whose ad lists the agent's number, it opens on a choice**
-// (ViewingChoice, SPEC §6): we arrange it, or call the agent yourself. The
-// card still carries one button; the choice is behind it. Several places, or
-// an ad with no number, go straight to the steps below.
+// **For one place, it opens on a choice** (ViewingChoice, SPEC §6): we
+// arrange it, or call the agent yourself - the same two for every renter, Pass
+// or not. An ad with no number says so on the second. The card still carries
+// one button; the choice is behind it. Several places go straight to the
+// steps below.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -159,7 +160,10 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const { data: agentInfo, isLoading: agentLoading } = useHasAgentNumber(single?.listingId, open && !!single);
   const beforeChoice = !!single && !submitted && !arranging;
   const checkingChoice = beforeChoice && agentLoading;
-  const choosing = beforeChoice && agentInfo?.hasNumber === true;
+  // Every renter, Pass or not, gets the same two options for one place
+  // (2026-10-08): whether the ad lists a number decides only what the second
+  // option can offer, not whether it is shown.
+  const choosing = beforeChoice && !agentLoading;
 
   useEffect(() => {
     if (!identity) return;
@@ -334,6 +338,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
             listingId={single.listingId}
             title={single.title}
             hasPass={hasPass}
+            hasNumber={agentInfo?.hasNumber === true}
             sourceName={agentInfo?.sourceName}
             onArrange={() => setArranging(true)}
           />

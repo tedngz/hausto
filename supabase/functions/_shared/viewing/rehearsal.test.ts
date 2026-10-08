@@ -144,10 +144,25 @@ describe('dress rehearsal', () => {
 
     const handshakeText = decodeURIComponent(link.split('?text=')[1]);
     say(`RENTER → us  (taps the link)`, handshakeText);
-    await inbound(handshakeText);
+    const first = await inbound(handshakeText);
     expect(db.tables.renters[0].service_window_expires_at).toBeTruthy();
     log(`\n  → window open until ${db.tables.renters[0].service_window_expires_at}`);
     expect(view().state).toBe('SUBMITTED');
+
+    // The receipt: the one answer the first message gets, agent on or off.
+    const receipt = decideAction({
+      enabled: false, intent: first.intent, text: handshakeText, requestId: first.requestId,
+      optedOut: first.optedOut, confirmed: first.confirmed, received: first.received,
+    });
+    expect(receipt.kind).toBe('REQUEST_RECEIVED');
+    // deno-lint-ignore no-explicit-any
+    await performAction(db as any, adapter, receipt, {
+      renterId: first.renterId, requestId: first.requestId, providerMessageId: 'wamid.handshake',
+    });
+    const receiptBody = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    say('us → RENTER  (the receipt)', receiptBody);
+    expect(receiptBody).toContain(`Thanks - we have your request ${ref} for 5 places:`);
+    expect(receiptBody).not.toMatch(/book/i);
 
     // 2. Ops works the five. Partial success is the happy path (CLAUDE.md §5).
     record(itemIds[0], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-19T02:00:00Z', durationMinutes: 30 }] });
@@ -169,7 +184,8 @@ describe('dress rehearsal', () => {
     });
     expect(result.ok).toBe(true);
 
-    const outbound = db.tables.messages.filter(m => m.direction === 'OUT');
+    // After the receipt, which answered the renter's own message.
+    const outbound = db.tables.messages.filter(m => m.direction === 'OUT').slice(1);
     say('us → RENTER  (the itinerary)', String(outbound[0].body));
 
     // The rule the whole send service exists to hold.

@@ -9,6 +9,8 @@ interface ViewingChoiceProps {
   listingId: string;
   title: string;
   hasPass: boolean;
+  /** Whether the ad lists the agent's number - what the second option can offer. */
+  hasNumber: boolean;
   /** The marketplace the ad is on, for "Original ad on ...". */
   sourceName?: string;
   /** "We arrange it": on to the request's own steps. */
@@ -16,21 +18,22 @@ interface ViewingChoiceProps {
 }
 
 /**
- * The first screen of RequestViewingModal for one place whose ad lists the
- * agent's number: how does the renter want to see it? (SPEC §6, owner's
- * decision 2026-10-07.) We arrange it - the Pass's, with one free place per
- * WhatsApp number (requestGate) - or they call the agent themselves, free,
- * with the number from the ad.
+ * The first screen of RequestViewingModal for one place: how does the renter
+ * want to see it? (SPEC §6, owner's decisions 2026-10-07 and -08.) We arrange
+ * it - the Pass's, with one free place per WhatsApp number (requestGate) - or
+ * they call the agent themselves, free, with the number from the ad. Every
+ * renter sees both, Pass or not; where the ad lists no number the second says
+ * so rather than disappearing, so the screen is the same for every place.
  *
  * Still one button on the card (invariant 8): the choice is behind it, not
  * beside it. "We arrange it" comes first and carries the primary button,
  * because it is what Hausto is for; calling says what it costs the renter -
  * the agent gets their number.
  */
-export function ViewingChoice({ listingId, title, hasPass, sourceName, onArrange }: ViewingChoiceProps) {
+export function ViewingChoice({ listingId, title, hasPass, hasNumber, sourceName, onArrange }: ViewingChoiceProps) {
   const { signedIn, loading, result, reveal, refusal, refusalText } = useAgentReveal(listingId);
   const revealed = result?.ok ? result : null;
-  const canAsk = !revealed && refusal !== 'daily_limit' && refusal !== 'no_number' && refusal !== 'unknown_listing';
+  const canAsk = hasNumber && !revealed && refusal !== 'daily_limit' && refusal !== 'no_number' && refusal !== 'unknown_listing';
 
   return (
     <>
@@ -68,7 +71,12 @@ export function ViewingChoice({ listingId, title, hasPass, sourceName, onArrange
             <span className="text-xs font-medium text-muted-foreground">Free</span>
           </div>
 
-          {revealed ? (
+          {!hasNumber ? (
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              This ad does not list the agent's number, so there is none to show. We can still arrange it
+              for you above.
+            </p>
+          ) : revealed ? (
             <div className="mt-2 space-y-2">
               <p className="text-xs text-muted-foreground">The agent's number, from the ad</p>
               <AgentNumber phoneE164={revealed.phoneE164} sourceUrl={revealed.sourceUrl} sourceName={sourceName} />
