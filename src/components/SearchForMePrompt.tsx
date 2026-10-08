@@ -23,8 +23,8 @@ export function SearchForMePrompt({ prefill, found, className }: {
       <div className="flex-1 text-left">
         <p className="text-sm font-medium">{found === 0 ? 'Nothing here that fits?' : 'Only a few here?'} We can look for you.</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          A person searches Facebook groups and agents' circles, and sends places that fit on WhatsApp within{' '}
-          {REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent. Priority search comes with the Pass.
+          Our team finds places that fit and sends them on WhatsApp within {REPLY_WITHIN_HOURS.AREA} hours.
+          Comes with the Pass.
         </p>
       </div>
       {/* Renters know it as Priority search, the name the Pass sells it by;

@@ -25,7 +25,7 @@ interface SubscriptionModalProps {
  * itself (SPEC §6); the Pass sells not having to, for every place and every
  * building. Never request credits or counts.
  *
- * What Hausto is for - dealing with the agents, in Vietnamese, without the
+ * What Hausto is for - dealing with the agents, in the local language, without the
  * renter's number reaching them - is said once, in the header.
  *
  * The Pass lists only what it adds over Free. A row-for-row comparison made
@@ -112,7 +112,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
               ? reasonMessages[reason]
               : pass?.active
                 ? 'Your Pass covers every viewing we confirm while it runs.'
-                : 'We deal with the agents for you, in Vietnamese, and your number never reaches them. Your first viewing is on us - the Pass has us arrange every one after that.'}
+                : 'We deal with the agents for you, in the local language, and your number never reaches them. Your first viewing is on us - the Pass has us arrange every one after that.'}
           </DialogDescription>
         </DialogHeader>
 

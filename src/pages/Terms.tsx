@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { ScrollToTop } from '@/components/ScrollToTop';
 import { PASS_DAYS, PASS_PRICE_USD } from '@/hooks/usePass';
 
 // The Pass's refund policy, as agreed on 2026-10-08 (SPEC §9, "Refunds").
@@ -18,6 +19,7 @@ const CONTACT = 'hello@hausto.com';
 
 const Terms = () => (
   <>
+    <ScrollToTop />
     <Helmet>
       <title>Refund policy - Hausto</title>
       <meta
