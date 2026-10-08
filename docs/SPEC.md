@@ -264,8 +264,16 @@ join:
   not counting opted-out numbers.
 
 A joining place takes the request's windows and WhatsApp thread, so the modal
-asks for neither. Choosing different times instead - a request of its own - was
-possible until the one-request rule above; it no longer is. `viewing-request-open` tells the modal which request it
+asks for no number. It may **add** times (2026-10-08, `extendAvailability`):
+the renter wants this place at another time than the ones they gave. Added,
+never replacing - every agent already asked keeps their answer, and the
+joining place's agent is asked about all of the request's times, old and new.
+The added windows pass intake's checks, the request holds at most six still
+ahead, and the join writes them to the row and logs `AVAILABILITY_ADDED`; a
+failure undoes the join. Replacing the times is the Viewings tab's "Change
+times" (§9), which asks every agent again. Choosing different times as a
+request of its own was possible until the one-request rule above; it no longer
+is. `viewing-request-open` tells the modal which request it
 would join; `viewing-request-create` decides again at submit (with `joinRef`)
 and answers `409 join_closed` if that request has moved on, rather than
 quietly opening a different one. A join writes only `ITEM_ADDED` (and
@@ -483,6 +491,7 @@ Event types:
 | `LOCK_IN_CHECKOUT_OPENED` | request | `{checkout_id, expires_at}` - a Pass checkout opened from the lock-in page (§9). Moves no state; adds to `checkouts` on the view, once per checkout. One opened before the deadline holds the plan until it expires |
 | `REQUEST_CONFIRMED` | request | `{confirmed_item_ids[], cover?, checkout_id?}` - the lock-in (§9). `cover` ∈ `PASS`, `FREE_VIEWING` (`COVERS`); absent on confirmations from before the pricing rework. Sets `confirmedCover` on the view |
 | `ITEM_WITHDRAWN` | item | `{}` - the renter took the place out (§9). Final: the item is `WITHDRAWN` whatever its agent says after; what the agent had said is kept as `withdrawnFrom`. Left out of `summarise` and the itinerary's "3 of 5" |
+| `AVAILABILITY_ADDED` | request | `{added, availability}` - times the renter added as a place joined (§1). Moves no state and undoes no answer |
 | `AVAILABILITY_CHANGED` | request | `{availability, previous}` - the renter's new times, before assembly (§9). Every item whose answer was about the old times (`CONTACTED`, `CONFIRMED`, `ALTERNATIVE_OFFERED`, `UNAVAILABLE`, `NO_RESPONSE`) goes back to `PENDING` with no slots or nudges; rented, re-priced and unreachable stand. Each `PENDING` item counts a `round`; one whose agent was holding time carries `staleHold` until they are asked again or answer. Moves `ASSEMBLING` back to `CONTACTING` |
 | `REQUEST_CANCELLED` | request | `{reason, note?}` - `reason` ∈ `CANCEL_REASONS` (`RENTER_DECLINED`, `RENTER_FOUND_PLACE`, `RENTER_UNRESPONSIVE`, `DUPLICATE`, `NOT_LOCKED_IN`, `OTHER`); who cancelled is the event's `actor` - `SYSTEM` for `NOT_LOCKED_IN` (§9) |
 | `REQUEST_FAILED` | request | `{reason, substitute_listing_ids[]}` |

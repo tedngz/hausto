@@ -53,20 +53,27 @@ export function useOfferableDays(): { today: string; earliest: string; days: str
  * Viewings tab's "Change times" both use it, so the two cannot offer different
  * windows; the server checks them again either way (validateAvailability).
  */
-export function AvailabilityPicker({ value, onChange }: {
+export function AvailabilityPicker({ value, onChange, taken = [], max = MAX_WINDOWS }: {
   value: AvailabilityWindow[];
   onChange: (next: AvailabilityWindow[]) => void;
+  /** Times the request already has, shown as chosen and not pickable again. */
+  taken?: AvailabilityWindow[];
+  /** How many may be picked here - fewer when adding to a request's times. */
+  max?: number;
 }) {
   const { days } = useOfferableDays();
   const chosenDates = useMemo(() => [...new Set(value.map(w => w.date))].sort(), [value]);
+  const isTaken = (date: string, part: DayPart) => taken.some(w => w.date === date && w.part === part);
+  const tooMany = () => toast.error(max === MAX_WINDOWS
+    ? `Pick up to ${MAX_WINDOWS} time windows.`
+    : `Your request can take ${max} more time${max === 1 ? '' : 's'}.`);
 
   const toggleDay = (date: string) => {
     if (value.some(w => w.date === date)) return onChange(value.filter(w => w.date !== date));
-    if (value.length >= MAX_WINDOWS) {
-      toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
-      return;
-    }
-    onChange([...value, { date, part: 'MORNING' }]);
+    const part = DAY_PARTS.find(p => !isTaken(date, p));
+    if (!part) return;
+    if (value.length >= max) return tooMany();
+    onChange([...value, { date, part }]);
   };
 
   const toggleWindow = (date: string, part: DayPart) => {
@@ -74,10 +81,8 @@ export function AvailabilityPicker({ value, onChange }: {
     // Removing the last part of a day removes the day: an operator cannot act
     // on "Saturday, no times".
     if (exists) return onChange(value.filter(w => !(w.date === date && w.part === part)));
-    if (value.length >= MAX_WINDOWS) {
-      toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
-      return;
-    }
+    if (isTaken(date, part)) return;
+    if (value.length >= max) return tooMany();
     onChange([...value, { date, part }]);
   };
 
@@ -87,15 +92,18 @@ export function AvailabilityPicker({ value, onChange }: {
         {days.map(date => {
           const p = partsOf(date);
           const on = chosenDates.includes(date);
+          const full = DAY_PARTS.every(part => isTaken(date, part));
+          const some = !on && taken.some(w => w.date === date);
           return (
             <button
               key={date}
               type="button"
               onClick={() => toggleDay(date)}
               aria-pressed={on}
+              disabled={full}
               className={cn(
-                'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors',
-                on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
+                'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                on ? 'border-primary bg-primary text-primary-foreground' : some ? 'border-primary/40 bg-primary/5 hover:bg-primary/10' : 'hover:bg-muted',
               )}
             >
               <span className="text-[10px] uppercase opacity-80">{p.weekday}</span>
@@ -114,20 +122,23 @@ export function AvailabilityPicker({ value, onChange }: {
               <div className="grid grid-cols-3 gap-1.5">
                 {DAY_PARTS.map(part => {
                   const on = value.some(w => w.date === date && w.part === part);
+                  const already = isTaken(date, part);
                   const Icon = PART_ICON[part];
                   return (
                     <button
                       key={part}
                       type="button"
-                      aria-pressed={on}
+                      aria-pressed={on || already}
+                      disabled={already}
                       onClick={() => toggleWindow(date, part)}
                       className={cn(
                         'flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[11px] transition-colors',
-                        on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
+                        on ? 'border-primary bg-primary text-primary-foreground'
+                          : already ? 'cursor-not-allowed border-primary/40 bg-primary/10 text-primary' : 'hover:bg-muted',
                       )}
                     >
                       <Icon className="h-3.5 w-3.5" />
-                      {PART_LABEL[part]}
+                      {already ? 'Already in' : PART_LABEL[part]}
                     </button>
                   );
                 })}

@@ -166,6 +166,44 @@ export function validateAvailability(
   return { ok: true, value: out };
 }
 
+/**
+ * Times a renter adds while a place joins their open request (2026-10-08),
+ * for a viewing at another time than the ones they first gave.
+ *
+ * Added, never replacing: every agent already asked was asked about the
+ * request's times, and their answers stand. The joining place's agent is asked
+ * about all of them, old and new, so the new place can land at a new time.
+ * Replacing the times is the Viewings tab's "Change times", which asks every
+ * agent again (AVAILABILITY_CHANGED).
+ *
+ * The added windows pass the same checks as intake's, and the request may hold
+ * at most six still ahead.
+ */
+export function extendAvailability(
+  current: AvailabilityWindow[],
+  added: unknown,
+  today: string,
+): Validation<{ availability: AvailabilityWindow[]; added: AvailabilityWindow[] }> {
+  const v = validateAvailability(added, today);
+  if (!v.ok || !v.value) return { ok: false, error: v.error };
+  const have = new Set(current.map(w => `${w.date}:${w.part}`));
+  const fresh = v.value.filter(w => !have.has(`${w.date}:${w.part}`));
+  if (fresh.length === 0) return { ok: false, error: 'Those times are already in your request.' };
+  const ahead = current.filter(w => w.date >= today).length;
+  if (ahead + fresh.length > 6) {
+    const room = Math.max(0, 6 - ahead);
+    return {
+      ok: false,
+      error: room === 0
+        ? 'Your request already has 6 times, the most it can hold.'
+        : `Your request can take ${room} more time${room === 1 ? '' : 's'}.`,
+    };
+  }
+  const availability = [...current, ...fresh].sort((a, b) =>
+    a.date === b.date ? DAY_PARTS.indexOf(a.part) - DAY_PARTS.indexOf(b.part) : a.date < b.date ? -1 : 1);
+  return { ok: true, value: { availability, added: fresh } };
+}
+
 /** Date arithmetic on the calendar date string, so no timezone is involved. */
 export function addDays(isoDate: string, days: number): string {
   const d = new Date(`${isoDate}T00:00:00Z`);

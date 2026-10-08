@@ -4,6 +4,7 @@ import {
   isValidRef,
   refFromMessage,
   validateAvailability,
+  extendAvailability,
   validateShortlist,
   DAY_PARTS,
   MIN_LEAD_DAYS,
@@ -349,5 +350,47 @@ describe('requestGate - arranging viewings needs the Pass, with one free taste',
       expect(m).toContain('the Pass ($25 for 30 days)');
       expect(m).not.toMatch(/book/i);
     }
+  });
+});
+
+describe('extendAvailability: times added as a place joins', () => {
+  const today = '2026-10-08';
+  const current = [{ date: '2026-10-10', part: 'MORNING' as const }, { date: '2026-10-10', part: 'AFTERNOON' as const }];
+
+  it('adds new windows to the request, in order, and says which are new', () => {
+    const r = extendAvailability(current, [{ date: '2026-10-11', part: 'EVENING' }, { date: '2026-10-10', part: 'EVENING' }], today);
+    expect(r.ok).toBe(true);
+    expect(r.value!.added).toEqual([{ date: '2026-10-10', part: 'EVENING' }, { date: '2026-10-11', part: 'EVENING' }]);
+    expect(r.value!.availability).toEqual([
+      { date: '2026-10-10', part: 'MORNING' }, { date: '2026-10-10', part: 'AFTERNOON' },
+      { date: '2026-10-10', part: 'EVENING' }, { date: '2026-10-11', part: 'EVENING' },
+    ]);
+  });
+
+  it('never takes a time away', () => {
+    const r = extendAvailability(current, [{ date: '2026-10-12', part: 'MORNING' }], today);
+    for (const w of current) expect(r.value!.availability).toContainEqual(w);
+  });
+
+  it('refuses times the request already has', () => {
+    expect(extendAvailability(current, [{ date: '2026-10-10', part: 'MORNING' }], today))
+      .toMatchObject({ ok: false, error: 'Those times are already in your request.' });
+  });
+
+  it('holds the same lead time and horizon as intake', () => {
+    expect(extendAvailability(current, [{ date: '2026-10-09', part: 'MORNING' }], today).ok).toBe(false);
+    expect(extendAvailability(current, [{ date: '2026-10-30', part: 'MORNING' }], today).ok).toBe(false);
+  });
+
+  it('keeps at most six still ahead', () => {
+    const more = ['2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'].map(date => ({ date, part: 'MORNING' }));
+    expect(extendAvailability(current, more, today)).toMatchObject({ ok: false, error: 'Your request can take 4 more times.' });
+    expect(extendAvailability(current, more.slice(0, 4), today).ok).toBe(true);
+  });
+
+  it('does not count windows already past against the six', () => {
+    const past = [{ date: '2026-10-01', part: 'MORNING' as const }, { date: '2026-10-02', part: 'MORNING' as const }];
+    const more = ['2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14'].map(date => ({ date, part: 'MORNING' }));
+    expect(extendAvailability([...past, ...current], more, today).ok).toBe(true);
   });
 });
