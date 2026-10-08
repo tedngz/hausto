@@ -47,7 +47,9 @@ export class FakeDb {
         sort_order: ri.sort_order ?? null,
         listing_title: listing.title ?? null,
         listing_url: listing.source_url ?? null,
+        listing_location: listing.location ?? null,
         district_code: listing.district_code ?? null,
+        bedrooms: listing.bedrooms ?? null,
         // The broker's number, through realtors - the one contact the ops
         // view does carry, because the operator rings them.
         realtor_phone: (this.tables.realtors ?? []).find(r => r.id === ri.realtor_id)?.phone_e164 ?? null,

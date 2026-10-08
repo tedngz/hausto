@@ -14,7 +14,7 @@ const ev = (type: string, offsetMs: number, payload: Record<string, unknown> = {
 
 const items = (n: number, contact = true): PlanItem[] =>
   Array.from({ length: n }, (_, i) => ({
-    itemId: `i${i + 1}`, listingTitle: `Căn ${i + 1}`, listingUrl: null, districtCode: 'D1',
+    itemId: `i${i + 1}`, listingTitle: `Căn ${i + 1}`, unit: { name: `căn hộ ở Quận 1 (${i + 1})`, url: null }, districtCode: 'D1',
     priceVnd: 15_000_000, hasContact: contact,
   }));
 

@@ -35,6 +35,7 @@ import {
   confirmDraft,
   releaseDraft,
 } from '../../supabase/functions/_shared/realtor/drafts';
+import { agentUnit } from '../../supabase/functions/_shared/realtor/unit';
 import { OutcomeForm } from './OutcomeForm';
 import { Deliver } from './Deliver';
 import { Tasks } from './Tasks';
@@ -55,6 +56,7 @@ interface Item {
   realtor_name: string | null;
   listing_title: string | null;
   listing_url: string | null;
+  listing_location: string | null;
   district_code: string | null;
   bedrooms: number | null;
   area_sqm: number | null;
@@ -280,7 +282,12 @@ function ItemCard({
   const [error, setError] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
 
-  const title = item.listing_title ?? 'the listing';
+  // What the agent is told: where the unit is and the link to their ad, never
+  // our English title, which they would not recognise.
+  const unit = agentUnit({
+    title: item.listing_title, location: item.listing_location, districtCode: item.district_code,
+    bedrooms: item.bedrooms, url: item.listing_url,
+  });
 
   const post = async (body: Record<string, unknown>) => {
     setBusy(true);
@@ -358,8 +365,7 @@ function ItemCard({
           key="ask"
           busy={busy}
           initial={draftForRealtor({
-            listingTitle: title,
-            listingUrl: item.listing_url,
+            unit,
             priceVnd: item.price_vnd_at_request,
             availability,
             rescheduled: reask,
@@ -373,7 +379,7 @@ function ItemCard({
         <SendBox
           key={`nudge-${state.nudges}`}
           busy={busy}
-          initial={nudgeDraft({ listingTitle: title })}
+          initial={nudgeDraft({ unit })}
           label={bridge ? 'Send the chase via the Zalo device' : 'Mark nudge sent'}
           onSend={message => post({ action: 'NUDGE', channel: 'ZALO', message })}
         />
@@ -385,7 +391,7 @@ function ItemCard({
           nudges={state?.nudges ?? 0}
           availability={availability}
           itemId={item.id}
-          listingTitle={title}
+          unit={unit}
           taken={taken}
           onSubmit={body => post({ action: 'OUTCOME', ...body })}
           onSaveReply={body => post({ action: 'REALTOR_REPLY', ...body })}
@@ -456,8 +462,8 @@ function ItemCard({
             key={`notify-${owed}`}
             busy={busy}
             initial={owed === 'CONFIRM'
-              ? confirmDraft({ listingTitle: title, startsAt: firstSlot })
-              : releaseDraft({ listingTitle: title })}
+              ? confirmDraft({ unit, startsAt: firstSlot })
+              : releaseDraft({ unit })}
             label={sendLabel}
             onSend={message => post({ action: 'NOTIFY_REALTOR', decision: owed, channel: 'ZALO', message })}
           />}

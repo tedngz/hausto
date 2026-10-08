@@ -12,6 +12,7 @@
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { planRequest, AGENT_VERSION, type PlanItem, type UnreadReply, type RenterDraft } from './planner.ts';
 import type { BusySlot } from './itinerary.ts';
+import { agentUnit } from '../realtor/unit.ts';
 import type { ParseContext, ParseSuggestion } from './parse-reply.ts';
 import { describeStatus, type DraftContext, type DraftResult, type ListingFacts, type ThreadLine } from './renter-reply.ts';
 import { waitingReplies } from './thread.ts';
@@ -81,7 +82,7 @@ export async function runPlanner(
       db.from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
         .eq('request_id', req.id).order('occurred_at', { ascending: true }),
       db.from('ops_request_items_view')
-        .select('id, listing_id, listing_title, listing_url, district_code, price_vnd_at_request, realtor_phone')
+        .select('id, listing_id, listing_title, listing_url, listing_location, district_code, bedrooms, price_vnd_at_request, realtor_phone')
         .eq('request_id', req.id),
       db.from('realtor_messages').select('id, item_id, body, created_at')
         .eq('request_id', req.id).eq('direction', 'IN').order('created_at', { ascending: true }),
@@ -94,7 +95,13 @@ export async function runPlanner(
     const items: PlanItem[] = ((rows ?? []) as Record<string, unknown>[]).map(r => ({
       itemId: String(r.id),
       listingTitle: String(r.listing_title ?? 'the unit'),
-      listingUrl: (r.listing_url as string) ?? null,
+      unit: agentUnit({
+        title: (r.listing_title as string) ?? null,
+        location: (r.listing_location as string) ?? null,
+        districtCode: (r.district_code as string) ?? null,
+        bedrooms: r.bedrooms == null ? null : Number(r.bedrooms),
+        url: (r.listing_url as string) ?? null,
+      }),
       districtCode: (r.district_code as string) ?? null,
       priceVnd: Number(r.price_vnd_at_request ?? 0),
       hasContact: !!r.realtor_phone,

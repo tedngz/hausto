@@ -31,6 +31,7 @@ import { DAY_PART_HOURS, hcmcDate } from '../../supabase/functions/_shared/viewi
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { clashesWith, type BusySlot } from '../../supabase/functions/_shared/viewing/itinerary';
 import { clashDraft } from '../../supabase/functions/_shared/realtor/drafts';
+import type { AgentUnit } from '../../supabase/functions/_shared/realtor/unit';
 
 const LABEL: Record<Outcome, string> = {
   CONFIRMED: 'Confirmed a slot',
@@ -65,7 +66,7 @@ export function OutcomeForm({
   nudges,
   availability,
   itemId,
-  listingTitle,
+  unit,
   taken,
   onSubmit,
   onSaveReply,
@@ -76,7 +77,8 @@ export function OutcomeForm({
   nudges: number;
   availability: { date: string; part: string }[];
   itemId: string;
-  listingTitle: string;
+  /** How the clash draft names the unit to its agent. */
+  unit: AgentUnit;
   /** The request's other confirmed viewings. */
   taken: BusySlot[];
   onSubmit: (body: Record<string, unknown>) => Promise<boolean>;
@@ -171,7 +173,7 @@ export function OutcomeForm({
   const today = hcmcDate(new Date());
   const askDraft = allClash
     ? clashDraft({
-      listingTitle, offered: clashing[0].startsAt, taken: clashing[0].with,
+      unit, offered: clashing[0].startsAt, taken: clashing[0].with,
       availability: availability.filter(w => w.date >= today),
     })
     : '';

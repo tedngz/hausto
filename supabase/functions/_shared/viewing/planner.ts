@@ -25,6 +25,7 @@ import { waitingReplies } from './thread.ts';
 import { NUDGES_BEFORE_NO_RESPONSE } from './outcomes.ts';
 import { assembleItinerary, busySlots, clashesWith, type BusySlot } from './itinerary.ts';
 import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft, clashDraft } from '../realtor/drafts.ts';
+import type { AgentUnit } from '../realtor/unit.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
 import type { DraftResult } from './renter-reply.ts';
 import { DAY_PART_HOURS, type DayPart } from './intake.ts';
@@ -39,8 +40,10 @@ export type ProposedAction = typeof PROPOSED_ACTIONS[number];
 
 export interface PlanItem {
   itemId: string;
+  /** Our English title - for the operator's rationale, never for an agent. */
   listingTitle: string;
-  listingUrl: string | null;
+  /** How a message to the agent names the unit, with the ad's link (realtor/unit.ts). */
+  unit: AgentUnit;
   districtCode: string | null;
   priceVnd: number;
   /** Whether a dialable agent number is resolved. The number itself is not needed here. */
@@ -192,8 +195,8 @@ export function planRequest(p: PlanInput): Proposal[] {
       input: {
         itemId: owed.itemId, decision: owed.decision, channel: 'ZALO',
         message: owed.decision === 'CONFIRM'
-          ? confirmDraft({ listingTitle: item.listingTitle, startsAt: slot })
-          : releaseDraft({ listingTitle: item.listingTitle }),
+          ? confirmDraft({ unit: item.unit, startsAt: slot })
+          : releaseDraft({ unit: item.unit }),
       },
       rationale: owed.decision === 'CONFIRM'
         ? 'The renter kept this viewing; the agent has not been told to hold the time.'
@@ -255,7 +258,7 @@ export function planRequest(p: PlanInput): Proposal[] {
           input: {
             itemId: item.itemId, channel: 'ZALO',
             message: clashDraft({
-              listingTitle: item.listingTitle, offered: offered.startsAt, taken,
+              unit: item.unit, offered: offered.startsAt, taken,
               availability: p.availability.filter(w => !windowEnded(w, p.now)),
             }),
           },
@@ -314,8 +317,7 @@ export function planRequest(p: PlanInput): Proposal[] {
           input: {
             itemId: item.itemId, channel: 'ZALO',
             message: draftForRealtor({
-              listingTitle: item.listingTitle, listingUrl: item.listingUrl,
-              priceVnd: item.priceVnd, availability: p.availability,
+              unit: item.unit, priceVnd: item.priceVnd, availability: p.availability,
               rescheduled: reask,
             }),
           },
@@ -339,7 +341,7 @@ export function planRequest(p: PlanInput): Proposal[] {
       if (state.nudges < NUDGES_BEFORE_NO_RESPONSE) {
         propose({
           itemId: item.itemId, key: `NUDGE:${item.itemId}${round}:${state.nudges + 1}`, action: 'NUDGE',
-          input: { itemId: item.itemId, channel: 'ZALO', message: nudgeDraft({ listingTitle: item.listingTitle }) },
+          input: { itemId: item.itemId, channel: 'ZALO', message: nudgeDraft({ unit: item.unit }) },
           rationale: `No reply in ${hours(p.now - last)}h. Chase #${state.nudges + 1}.`,
         });
       } else {
