@@ -149,8 +149,8 @@ describe('changing times', () => {
   it('has the AI operator ask again, saying the times changed, under a new key', async () => {
     await edit({ kind: 'CHANGE_TIMES', availability: NEW });
     const items: PlanItem[] = [
-      { itemId: 'i1', listingTitle: 'Căn hộ 2PN Thảo Điền', listingUrl: null, districtCode: null, priceVnd: 15_000_000, hasContact: true },
-      { itemId: 'i2', listingTitle: 'Studio Quận 1', listingUrl: null, districtCode: null, priceVnd: 9_000_000, hasContact: true },
+      { itemId: 'i1', listingTitle: 'Căn hộ 2PN Thảo Điền', unit: { name: 'căn 2PN ở Thảo Điền', url: null }, districtCode: null, priceVnd: 15_000_000, hasContact: true },
+      { itemId: 'i2', listingTitle: 'Studio Quận 1', unit: { name: 'căn studio ở Quận 1', url: null }, districtCode: null, priceVnd: 9_000_000, hasContact: true },
     ];
     const proposals = planRequest({
       requestId: 'req-1', view: view(), events: db.tables.events as unknown as DomainEvent[], items,

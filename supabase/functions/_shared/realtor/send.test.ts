@@ -123,14 +123,14 @@ describe('the renter never reaches a broker (invariant 4)', () => {
     const renter = { phone_e164: '+84912345678', display_name: 'Nguyen Van Binh' };
     const drafts = [
       draftForRealtor({
-        listingTitle: 'Căn hộ 2PN Thảo Điền', listingUrl: 'https://batdongsan.com.vn/pr41234567',
+        unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' },
         priceVnd: 15_000_000, availability: [{ date: '2026-09-28', part: 'MORNING' }],
       }),
-      nudgeDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
-      confirmDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền', startsAt: '2026-09-28T03:30:00.000Z' }),
-      releaseDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
+      nudgeDraft({ unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' } }),
+      confirmDraft({ unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' }, startsAt: '2026-09-28T03:30:00.000Z' }),
+      releaseDraft({ unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' } }),
       clashDraft({
-        listingTitle: 'Căn hộ 2PN Thảo Điền', offered: '2026-09-28T02:30:00.000Z',
+        unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' }, offered: '2026-09-28T02:30:00.000Z',
         taken: [{ startsAt: '2026-09-28T02:00:00.000Z', durationMinutes: 60 }],
         availability: [{ date: '2026-09-28', part: 'MORNING' }],
       }),
@@ -163,14 +163,14 @@ describe('a renter on a foreign number never reaches a broker either', () => {
   it('holds for every draft we ship', () => {
     const drafts = [
       draftForRealtor({
-        listingTitle: 'Căn hộ 2PN Thảo Điền', listingUrl: 'https://batdongsan.com.vn/pr41234567',
+        unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' },
         priceVnd: 15_000_000, availability: [{ date: '2026-09-28', part: 'MORNING' }],
       }),
-      nudgeDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
-      confirmDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền', startsAt: '2026-09-28T03:30:00.000Z' }),
-      releaseDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
+      nudgeDraft({ unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' } }),
+      confirmDraft({ unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' }, startsAt: '2026-09-28T03:30:00.000Z' }),
+      releaseDraft({ unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' } }),
       clashDraft({
-        listingTitle: 'Căn hộ 2PN Thảo Điền', offered: '2026-09-28T02:30:00.000Z',
+        unit: { name: 'căn 2PN ở Thảo Điền', url: 'https://batdongsan.com.vn/pr41234567' }, offered: '2026-09-28T02:30:00.000Z',
         taken: [{ startsAt: '2026-09-28T02:00:00.000Z', durationMinutes: 60 }],
         availability: [{ date: '2026-09-28', part: 'MORNING' }],
       }),
@@ -203,17 +203,17 @@ describe('what the broker said back', () => {
 describe('the drafts', () => {
   it('name the confirmed time in Ho Chi Minh City, not UTC', () => {
     // 03:30Z is 10:30 local. A broker told 03:30 is a broker at the door at dawn.
-    expect(confirmDraft({ listingTitle: 'X', startsAt: '2026-09-28T03:30:00.000Z' })).toContain('10:30 ngày 28/09');
+    expect(confirmDraft({ unit: { name: 'căn hộ', url: null }, startsAt: '2026-09-28T03:30:00.000Z' })).toContain('10:30 ngày 28/09');
   });
 
   it('never say why the renter is not coming', () => {
-    const d = releaseDraft({ listingTitle: 'X' });
+    const d = releaseDraft({ unit: { name: 'căn hộ', url: null } });
     expect(d).toContain('không cần giữ lịch');
   });
 
   it('say which stretch is taken when a time clashes, in local time, and nothing about the other place', () => {
     const d = clashDraft({
-      listingTitle: 'X', offered: '2026-09-28T02:30:00.000Z',
+      unit: { name: 'căn hộ', url: null }, offered: '2026-09-28T02:30:00.000Z',
       taken: [{ startsAt: '2026-09-28T02:00:00.000Z', durationMinutes: 60 }],
       availability: [{ date: '2026-09-28', part: 'MORNING' }, { date: '2026-09-29', part: 'AFTERNOON' }],
     });

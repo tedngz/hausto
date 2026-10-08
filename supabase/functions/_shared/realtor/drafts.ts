@@ -11,9 +11,14 @@
 // once the AI operator writes them, and two copies of what we say to a broker
 // is how the two start saying different things.
 //
+// Each names the unit the way the agent knows it - building, street or ward,
+// never our English title - and carries the link to their ad (unit.ts).
+//
 // None of them mentions the renter. The broker learns a price, a listing and
 // some times; who is asking is not theirs to know (invariant 4). send.ts checks
 // the edited text again on the way out.
+
+import { unitLink, type AgentUnit } from './unit.ts';
 
 const PART_VI: Record<string, string> = {
   MORNING: 'buổi sáng',
@@ -40,8 +45,7 @@ function slotVi(startsAt: string): string {
 
 /** First contact about one unit. */
 export function draftForRealtor(opts: {
-  listingTitle: string;
-  listingUrl: string | null;
+  unit: AgentUnit;
   priceVnd: number;
   availability: { date: string; part: string }[];
   /** Asked before, at times the renter has since changed (AVAILABILITY_CHANGED). */
@@ -55,10 +59,10 @@ export function draftForRealtor(opts: {
     'Chào anh/chị,',
     '',
     // Said first, so the agent does not hold both the old time and the new.
-    (opts.rescheduled
-      ? `Khách bên em xin đổi lịch xem căn: ${opts.listingTitle}`
-      : `Bên em có khách muốn xem căn: ${opts.listingTitle}`) +
-      (opts.listingUrl ? ` (${opts.listingUrl})` : ''),
+    opts.rescheduled
+      ? `Khách bên em xin đổi lịch xem ${opts.unit.name}.`
+      : `Bên em có khách muốn xem ${opts.unit.name}.`,
+    ...unitLink(opts.unit),
     `Giá đang đăng: ${vnd(opts.priceVnd)}/tháng.`,
     '',
     windows
@@ -117,7 +121,7 @@ function rangeVi(startsAt: string, durationMinutes: number): string {
  * the next answer misses it - and nothing about the other place or its agent.
  */
 export function clashDraft(opts: {
-  listingTitle: string;
+  unit: AgentUnit;
   /** The time the agent gave, UTC. */
   offered: string;
   taken: { startsAt: string; durationMinutes: number }[];
@@ -132,7 +136,8 @@ export function clashDraft(opts: {
   return [
     'Chào anh/chị,',
     '',
-    `Em cảm ơn anh/chị đã báo lịch xem căn ${opts.listingTitle}.`,
+    `Em cảm ơn anh/chị đã báo lịch xem ${opts.unit.name}.`,
+    ...unitLink(opts.unit),
     `Giờ ${slotVi(opts.offered)} bị trùng với lịch xem căn khác của khách bên em (${taken}).`,
     windows
       ? `Anh/chị sắp xếp giúp em giờ khác được không ạ? Khách rảnh ${windows}.`
@@ -143,14 +148,16 @@ export function clashDraft(opts: {
 }
 
 /**
- * Chasing a broker who has not answered. Short, and it repeats the listing -
- * a broker with forty chats open has lost the first message by now.
+ * Chasing a broker who has not answered. Short, and it repeats the unit and
+ * its link - a broker with forty chats open has lost the first message by now.
  */
-export function nudgeDraft(opts: { listingTitle: string }): string {
+export function nudgeDraft(opts: { unit: AgentUnit }): string {
   return [
     'Chào anh/chị,',
     '',
-    `Em nhắn lại về căn ${opts.listingTitle}. Khách bên em vẫn đang chờ lịch xem ạ.`,
+    `Em nhắn lại về ${opts.unit.name}.`,
+    ...unitLink(opts.unit),
+    'Khách bên em vẫn đang chờ lịch xem ạ.',
     'Anh/chị báo giúp em căn còn trống không và xem được giờ nào nhé.',
     '',
     'Em cảm ơn anh/chị.',
@@ -165,13 +172,14 @@ export function nudgeDraft(opts: { listingTitle: string }): string {
  * where to meet, and whether their number may go to the renter that morning.
  * Asked, never assumed - the operator records the answer as VIEWING_DETAILS.
  */
-export function confirmDraft(opts: { listingTitle: string; startsAt: string | null }): string {
+export function confirmDraft(opts: { unit: AgentUnit; startsAt: string | null }): string {
   return [
     'Chào anh/chị,',
     '',
     opts.startsAt
-      ? `Khách đã chốt lịch xem căn ${opts.listingTitle} lúc ${slotVi(opts.startsAt)}.`
-      : `Khách đã chốt lịch xem căn ${opts.listingTitle}.`,
+      ? `Khách đã chốt lịch xem ${opts.unit.name} lúc ${slotVi(opts.startsAt)}.`
+      : `Khách đã chốt lịch xem ${opts.unit.name}.`,
+    ...unitLink(opts.unit),
     'Anh/chị giữ lịch giúp em nhé. Nếu có thay đổi em sẽ báo lại ngay.',
     '',
     'Anh/chị cho em xin chỗ hẹn gặp khách (toà nào, sảnh nào) nhé.',
@@ -186,11 +194,12 @@ export function confirmDraft(opts: { listingTitle: string; startsAt: string | nu
  * needs to stop holding the time, not an explanation, and the reason is the
  * renter's business.
  */
-export function releaseDraft(opts: { listingTitle: string }): string {
+export function releaseDraft(opts: { unit: AgentUnit }): string {
   return [
     'Chào anh/chị,',
     '',
-    `Khách bên em không xem căn ${opts.listingTitle} nữa ạ, anh/chị không cần giữ lịch.`,
+    `Khách bên em không xem ${opts.unit.name} nữa ạ, anh/chị không cần giữ lịch.`,
+    ...unitLink(opts.unit),
     'Cảm ơn anh/chị đã hỗ trợ, có khách phù hợp em sẽ liên hệ lại.',
   ].join('\n');
 }

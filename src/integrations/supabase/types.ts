@@ -1811,6 +1811,7 @@ export type Database = {
           district_code: string | null
           id: string | null
           listing_id: string | null
+          listing_location: string | null
           listing_title: string | null
           listing_url: string | null
           price_vnd_at_request: number | null
