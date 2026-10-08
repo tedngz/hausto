@@ -35,8 +35,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // This browser only. The default ends every session on the account - the
+  // ops console's included, which is how signing out here once left an
+  // operator's console reading data but refused every action (2026-10-08).
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   };
 
   const value = {

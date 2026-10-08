@@ -3,12 +3,13 @@
 // inbox) between them and the queue for no gain.
 
 import { useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, SESSION_ENDED, takeSessionEnded } from './supabase';
 
 export function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // Why they are here again, when a session ended under them.
+  const [error, setError] = useState<string | null>(() => (takeSessionEnded() ? SESSION_ENDED : null));
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {

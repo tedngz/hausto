@@ -6,7 +6,7 @@
 // `#/inquiry/<id>`), and the browser's back button leaves it.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, endSession } from './supabase';
 import { SignIn } from './SignIn';
 import { Inbox } from './Inbox';
 import { Queue } from './Queue';
@@ -41,6 +41,8 @@ function go(path: string) {
 export function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isOps, setIsOps] = useState<boolean | null>(null);
+  // Until the stored session has been checked, neither the console nor sign-in.
+  const [checked, setChecked] = useState(false);
   const [route, setRoute] = useState<Route>(() => parseHash(window.location.hash));
 
   useEffect(() => {
@@ -53,7 +55,22 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user.id ?? null));
+    supabase.auth.getSession().then(async ({ data }) => {
+      const id = data.session?.user.id ?? null;
+      // A stored session can have been ended elsewhere and still read the
+      // tables until its token expires, while every action is refused. Ask the
+      // auth server, once, before showing a console that only looks alive.
+      if (id) {
+        const { error } = await supabase.auth.getUser();
+        if (error && (error.status === 401 || error.status === 403 || /session/i.test(error.message))) {
+          endSession();
+          setChecked(true);
+          return;
+        }
+      }
+      setUserId(id);
+      setChecked(true);
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUserId(session?.user.id ?? null);
       setIsOps(null);
@@ -75,8 +92,11 @@ export function App() {
     return () => { cancelled = true; };
   }, [userId]);
 
-  const signOut = useCallback(() => { void supabase.auth.signOut(); }, []);
+  // This browser only: signing out of the console must not end the renter
+  // app's session on the same account, or the other way round.
+  const signOut = useCallback(() => { void supabase.auth.signOut({ scope: 'local' }); }, []);
 
+  if (!checked) return <div className="wrap muted">Loading...</div>;
   if (!userId) return <SignIn />;
   if (isOps === null) return <div className="wrap muted">Checking access...</div>;
   if (!isOps) {
