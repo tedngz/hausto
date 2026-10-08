@@ -42,6 +42,8 @@ export function renderIntakeAlert(opts: {
   createdAt: Date;
   /** The places just asked for that have no agent number. */
   missingContact?: MissingContact[];
+  /** Times the renter added as the places joined (intake.ts extendAvailability). */
+  addedWindows?: { date: string; part: string }[];
 }): IntakeAlert {
   const local = new Date(opts.createdAt.getTime() + 7 * 60 * 60 * 1000).toISOString();
   const at = `${local.slice(11, 16)} on ${local.slice(0, 10)}`;
@@ -63,7 +65,9 @@ export function renderIntakeAlert(opts: {
       subject: `${opts.ref} - ${more} added, ${places} now${flag}`,
       text: [
         `The renter on ${opts.ref} asked for ${more} at ${at} (Ho Chi Minh City). It joins the same plan: ${places} now.`,
-        `Same times as before: ${windows}.`,
+        opts.addedWindows?.length
+          ? `With ${opts.addedWindows.length === 1 ? 'a new time' : 'new times'}: ${opts.addedWindows.map(w => `${w.date} ${w.part.toLowerCase()}`).join(', ')}. All times now: ${windows}. Agents already asked keep the times they were asked about; ask the new one about all of them.`
+          : `Same times as before: ${windows}.`,
         '',
         'The new agent has not been contacted yet. The itinerary waits until they answer.',
         ...findFirst,

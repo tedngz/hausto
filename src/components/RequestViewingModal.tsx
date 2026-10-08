@@ -54,7 +54,7 @@ import { usePass } from '@/hooks/usePass';
 import { useRenterIdentity } from '@/hooks/useRenterIdentity';
 import { useHasAgentNumber } from '@/hooks/useHasAgentNumber';
 import { ViewingChoice } from '@/components/ViewingChoice';
-import { AvailabilityPicker, PART_LABEL, prettyDate } from '@/components/AvailabilityPicker';
+import { AvailabilityPicker, MAX_WINDOWS, PART_LABEL, prettyDate } from '@/components/AvailabilityPicker';
 import {
   MAX_ITEMS,
   MAX_LAPSED_WITHOUT_PASS,
@@ -86,7 +86,7 @@ interface Props {
   seeds?: RequestSeed[];
 }
 
-interface Submitted { ref: string; waLink: string; joined?: boolean; placeCount?: number }
+interface Submitted { ref: string; waLink: string; joined?: boolean; placeCount?: number; addedTimes?: number }
 
 /** What `viewing-request-open` says about the request a new place would join. */
 interface OpenRequest {
@@ -145,6 +145,10 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [picked, setPicked] = useState<AvailabilityWindow[]>([]);
+  // Joining an open request: more times for the place being added, on top
+  // of the request's own (intake.ts extendAvailability).
+  const [addingTimes, setAddingTimes] = useState(false);
+  const [extra, setExtra] = useState<AvailabilityWindow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
@@ -223,6 +227,10 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
     return [...byDate.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
   }, [join, today]);
 
+  /** The request's times still ahead, and how many more it can take. */
+  const joinAhead = useMemo(() => (join ? join.availability.filter(w => w.date >= today) : []), [join, today]);
+  const extraFresh = extra.filter(w => !joinAhead.some(j => j.date === w.date && j.part === w.part));
+
   const submit = async () => {
     if (places.length === 0) return;
     setError(null);
@@ -235,7 +243,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
     const { data, error: err } = await supabase.functions.invoke('viewing-request-create', {
       body: {
         ...(join
-          ? { listingIds, joinRef: join.ref }
+          ? { listingIds, joinRef: join.ref, ...(extraFresh.length ? { addAvailability: extraFresh } : {}) }
           : { phone, displayName: name, listingIds, availability: picked }),
         // An offer link carries the availability request it came from; with
         // several places, the first that has one.
@@ -270,7 +278,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const close = () => {
     onOpenChange(false);
     setError(null);
-    if (submitted) { setSubmitted(null); setPicked([]); }
+    if (submitted) { setSubmitted(null); setPicked([]); setExtra([]); setAddingTimes(false); }
   };
 
   const canSubmit = !busy && places.length > 0 && !alreadyIn && !waitingOn && !passRequired && !openLoading
@@ -296,7 +304,8 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                 </DialogDescription>
               </DialogHeader>
               <p className="text-sm text-muted-foreground">
-                We are contacting the {fresh.length > 1 ? 'agents' : 'agent'} now, at the same times you gave before.
+                We are contacting the {fresh.length > 1 ? 'agents' : 'agent'} now,
+                {submitted.addedTimes ? ' about your times, including the ones you just added.' : ' at the same times you gave before.'}
               </p>
               <p className="text-xs text-muted-foreground">{priceLine}</p>
               <Button className="w-full" onClick={close}>Done</Button>
@@ -395,7 +404,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                   title="When"
                   hint={alreadyIn
                     ? `${places.length > 1 ? 'These places are' : 'This place is'} already in your request ${join.ref}. We will be in touch on WhatsApp.`
-                    : `Adding ${fresh.length > 1 ? 'these' : 'this'} to your request ${join.ref}, at the times you already gave. We fit it into the same plan and send one message with every time.`}
+                    : `Adding ${fresh.length > 1 ? 'these' : 'this'} to your request ${join.ref}. We fit it into the same plan and send one message with every time.`}
                 >
                   <ul className="space-y-1.5">
                     {joinDays.map(([date, parts]) => (
@@ -407,6 +416,28 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                       </li>
                     ))}
                   </ul>
+                  {/* Another time for this place, added rather than replacing:
+                      the agents already asked keep their answers, and this
+                      place's agent can pick any time on the request. */}
+                  {!alreadyIn && (addingTimes ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Add times that also work for you. The agents we have already asked keep the times above;
+                        this place's agent can pick any of them. To change the times for every place, use Change
+                        times in Viewings.
+                      </p>
+                      <AvailabilityPicker value={extra} onChange={setExtra} taken={joinAhead}
+                        max={Math.max(0, MAX_WINDOWS - joinAhead.length)} />
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground"
+                        onClick={() => { setAddingTimes(false); setExtra([]); }}>
+                        Keep only the times above
+                      </Button>
+                    </div>
+                  ) : joinAhead.length < MAX_WINDOWS && (
+                    <Button variant="outline" size="sm" className="mt-3 rounded-full" onClick={() => setAddingTimes(true)}>
+                      Add other times
+                    </Button>
+                  ))}
                 </Step>
               ) : (
                 <Step
@@ -461,7 +492,9 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                   : waitingOn
                     ? `Waiting on ${waitingOn.ref}`
                     : join
-                      ? `Add to request ${join.ref}`
+                      ? extraFresh.length
+                        ? `Add to ${join.ref} with ${extraFresh.length} more time${extraFresh.length === 1 ? '' : 's'}`
+                        : `Add to request ${join.ref}`
                       : picked.length === 0
                         ? 'Pick a time'
                         : places.length > 1 ? `Request ${places.length} viewings` : 'Request viewing'}

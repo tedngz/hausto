@@ -471,3 +471,24 @@ describe('AVAILABILITY_CHANGED: the renter gave new times', () => {
     }
   });
 });
+
+describe('AVAILABILITY_ADDED: times added as a place joins', () => {
+  it('moves no state and undoes no answer, in any order', () => {
+    seq = 0;
+    const log = [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('REALTOR_CONTACTED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-10-10T03:00:00.000Z' }] } }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+      ev('AVAILABILITY_ADDED', { payload: { added: [{ date: '2026-10-11', part: 'EVENING' }] } }),
+    ];
+    const view = reduceRequest(REQ, log);
+    expect(view.items.i1).toMatchObject({ state: 'CONFIRMED', round: 0 });
+    expect(view.items.i1.staleHold).toBeUndefined();
+    expect(view.items.i2.state).toBe('PENDING');
+    expect(view.availabilityChanges).toBe(0);
+    const expected = JSON.stringify(view);
+    for (const order of permutations(log)) expect(JSON.stringify(reduceRequest(REQ, order))).toBe(expected);
+  });
+});

@@ -20,6 +20,7 @@ import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
 import {
   generateRef,
   validateAvailability,
+  extendAvailability,
   validateShortlist,
   screenCandidates,
   intakeEvents,
@@ -112,6 +113,8 @@ async function joinOpenRequest(
   joinRef: string,
   listingIds: string[],
   inquiryId: string | null = null,
+  /** Times the renter added as the place joins (intake.ts extendAvailability). */
+  addAvailability: unknown = null,
 ): Promise<Response> {
   const open = await findJoinableRequest(db, userId, hcmcDate(new Date())).catch((e: unknown) => {
     console.error('[viewing-request-create] open request lookup failed:', e);
@@ -133,6 +136,15 @@ async function joinOpenRequest(
       ref: open.ref,
     }, 409);
   }
+  // Checked before anything is written: a time the request cannot take is a
+  // refusal the renter can act on, not a place added without it.
+  const extended = Array.isArray(addAvailability) && addAvailability.length > 0
+    ? extendAvailability(open.availability, addAvailability, hcmcDate(new Date()))
+    : null;
+  if (extended && (!extended.ok || !extended.value)) {
+    return json({ error: 'invalid_availability', message: extended.error }, 400);
+  }
+
   if (open.listingIds.length + fresh.length > MAX_ITEMS) {
     return json({
       error: 'request_full',
@@ -188,14 +200,33 @@ async function joinOpenRequest(
     return json({ error: 'events_failed' }, 500);
   }
 
+  // The added times: the row every reader asks agents about, then the log.
+  // The place and its times go together or not at all.
+  const added = extended?.value?.added ?? [];
+  const availability = extended?.value?.availability ?? open.availability;
+  if (added.length > 0) {
+    const { error: upErr } = await db.from('viewing_requests').update({ availability }).eq('id', open.requestId);
+    const { error: evErr } = upErr ? { error: upErr } : await db.from('events').insert({
+      request_id: open.requestId, type: 'AVAILABILITY_ADDED',
+      payload: { added, availability }, actor: 'RENTER',
+    });
+    if (upErr || evErr) {
+      console.error('[viewing-request-create] adding times failed:', upErr ?? evErr);
+      if (!upErr) await db.from('viewing_requests').update({ availability: open.availability }).eq('id', open.requestId);
+      await undo();
+      return json({ error: 'times_failed', message: 'Something went wrong on our side. Try again in a moment.' }, 500);
+    }
+  }
+
   const placeCount = open.listingIds.length + items.length;
   if (inquiryId) await linkViewingToInquiry(db, { inquiryId, requestId: open.requestId, now: new Date() });
   alertOps(db, {
     ref: open.ref,
     placeCount,
     added: items.length,
-    availability: open.availability,
+    availability,
     createdAt: new Date(),
+    ...(added.length ? { addedWindows: added } : {}),
   }, items);
 
   return json({
@@ -205,6 +236,7 @@ async function joinOpenRequest(
     requestId: open.requestId,
     waLink: buildDeepLink(BUSINESS_PHONE, open.ref),
     placeCount,
+    addedTimes: added.length,
     accepted: items.map((i: { listing_id: string }) => i.listing_id),
     rejected,
   });
@@ -272,6 +304,7 @@ Deno.serve(async (req) => {
     return await joinOpenRequest(
       joinDb, user.id, body.joinRef.trim(), places.value!,
       typeof body.inquiryId === 'string' ? body.inquiryId : null,
+      body.addAvailability ?? null,
     );
   }
 

@@ -66,6 +66,11 @@ export const EVENT_TYPES = [
   // their round counted, and one who was holding a slot is owed a release if
   // the request closes before they are asked again.
   'AVAILABILITY_CHANGED',
+  // The renter added times while a place joined the request (intake.ts
+  // extendAvailability), payload `{added, availability}`. Moves no state:
+  // nothing anyone was asked is undone, and the joining place's agent is
+  // asked about every time on the request.
+  'AVAILABILITY_ADDED',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
   'REQUEST_FAILED',
@@ -516,6 +521,11 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         // Intake only allows it before assembly; a plan assembled in the
         // meantime no longer covers anything, as with a place joining.
         if (view.state === 'ASSEMBLING') view.state = 'CONTACTING';
+        break;
+
+      case 'AVAILABILITY_ADDED':
+        // More times, none taken away: every answer stands. The windows
+        // themselves live on the request row, which every reader asks.
         break;
 
       case 'REQUEST_CONFIRMED':
