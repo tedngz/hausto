@@ -21,7 +21,6 @@ import { ViewingRequestsPane } from '@/components/hub/ViewingRequestsPane';
 import { HubNewListings } from '@/components/hub/HubNewListings';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
-import { useMatches } from '@/hooks/useMatches';
 import { useComplexes } from '@/hooks/useComplexes';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -42,7 +41,6 @@ import { cn } from '@/lib/utils';
 const Hub = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
-  const { renterMatches } = useMatches();
   const { data: complexes, isLoading: complexesLoading } = useComplexes();
   const {
     preferences,
@@ -277,7 +275,7 @@ const Hub = () => {
               className="h-12 shrink-0 xl:h-14"
               mode={mode}
               onChange={setMode}
-              counts={{ ai: resultsCount, matches: renterMatches.length }}
+              counts={{ ai: resultsCount }}
               panelId="hub-panel"
             />
 

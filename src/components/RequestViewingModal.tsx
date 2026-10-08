@@ -319,6 +319,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
     }
     setSubmitted(payload);
     queryClient.invalidateQueries({ queryKey: ['my-viewing-requests'] });
+    queryClient.invalidateQueries({ queryKey: ['free-viewing'] });
   };
 
   const close = () => {

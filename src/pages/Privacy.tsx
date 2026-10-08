@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { ScrollToTop } from '@/components/ScrollToTop';
 
 // Written against the schema rather than from a boilerplate generator: every
 // category below names a column or table that actually exists. A privacy
@@ -32,6 +33,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const Privacy = () => (
   <>
+    <ScrollToTop />
     <Helmet>
       <title>Privacy Policy - Hausto</title>
       <meta

@@ -46,13 +46,13 @@ export function ViewingChoice({ listingId, title, hasPass, sourceName, onArrange
             <h3 className="text-sm font-semibold">We arrange it</h3>
           </div>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            We ask the agent in Vietnamese, check the place is still free at the listed price, and send
-            you a plan on WhatsApp. The agent never gets your number.
+            We check with the agent in the local language and send you a plan on WhatsApp. They never
+            get your number.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             {hasPass
               ? 'Your Pass covers every viewing we arrange.'
-              : `Your first viewing is on us - one place, once. After that, it takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
+              : `Your first viewing is free. After that, it takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
           </p>
           <Button className="mt-3 w-full rounded-full" onClick={onArrange}>
             Request a viewing
@@ -80,7 +80,7 @@ export function ViewingChoice({ listingId, title, hasPass, sourceName, onArrange
             <>
               <p className="mt-1.5 text-sm text-muted-foreground">
                 {refusalText
-                  ?? 'This ad lists the agent\'s number. They get yours when you call, and many agents speak only Vietnamese.'}
+                  ?? 'They get your number when you call, and many speak only the local language.'}
               </p>
               {canAsk && (
                 <Button

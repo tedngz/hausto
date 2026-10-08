@@ -135,7 +135,7 @@ export const LandingPage = () => {
                 <MessageSquare className="h-8 w-8 text-primary" />
               </div>
               <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">No agent chasing</h3>
-              <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">Request viewings for the places you like. We line up times with each agent and come back with one plan.</p>
+              <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">We set up every viewing and send you one plan.</p>
             </CardContent>
           </Card>
 
