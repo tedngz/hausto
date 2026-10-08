@@ -218,6 +218,53 @@ export function warningsFor(stops: ItineraryStop[]): Warning[] {
   return warnings;
 }
 
+// ── Clashes, as each answer comes in ────────────────────────────────────────
+
+/** A viewing already fixed on the request, which a later agent's time must miss. */
+export interface BusySlot {
+  itemId: string;
+  listingTitle: string;
+  startsAt: string;
+  durationMinutes: number;
+}
+
+/**
+ * The request's confirmed viewings: each CONFIRMED item's first slot, the one
+ * the itinerary would use.
+ */
+export function busySlots(view: RequestView, titleOf: (itemId: string) => string): BusySlot[] {
+  const out: BusySlot[] = [];
+  for (const item of Object.values(view.items)) {
+    if (item.state !== 'CONFIRMED') continue;
+    const slot = firstSlot(item.slots);
+    if (!slot) continue;
+    out.push({
+      itemId: item.itemId, listingTitle: titleOf(item.itemId),
+      startsAt: slot.starts_at, durationMinutes: slot.duration_minutes,
+    });
+  }
+  return out;
+}
+
+/**
+ * The viewings a time for `itemId` would overlap - the clash `warningsFor`
+ * reports at assembly, found while the agent can still be asked for another
+ * time. Back to back is not a clash, the same as there.
+ */
+export function clashesWith(
+  slot: { startsAt: string; durationMinutes: number },
+  busy: BusySlot[],
+  itemId: string,
+): BusySlot[] {
+  const start = Date.parse(slot.startsAt);
+  const end = start + slot.durationMinutes * 60_000;
+  return busy.filter(b => {
+    if (b.itemId === itemId) return false;
+    const bStart = Date.parse(b.startsAt);
+    return start < bStart + b.durationMinutes * 60_000 && bStart < end;
+  });
+}
+
 // ── The message ─────────────────────────────────────────────────────────────
 
 /**

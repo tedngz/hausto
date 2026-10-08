@@ -102,6 +102,46 @@ export function availabilityDraft(opts: {
   ].join('\n');
 }
 
+/** `09:30-10:30 ngày 14/10`, a stretch of the renter's day that is taken. */
+function rangeVi(startsAt: string, durationMinutes: number): string {
+  const local = (ms: number) => new Date(ms + 7 * 60 * 60 * 1000).toISOString();
+  const from = local(Date.parse(startsAt));
+  const to = local(Date.parse(startsAt) + durationMinutes * 60_000);
+  return `${from.slice(11, 16)}-${to.slice(11, 16)} ngày ${from.slice(8, 10)}/${from.slice(5, 7)}`;
+}
+
+/**
+ * The agent's time clashes with another viewing already fixed for the same
+ * renter. Asked again straight away, rather than found once every agent has
+ * answered and the plan will not go out. It says which stretch is taken, so
+ * the next answer misses it - and nothing about the other place or its agent.
+ */
+export function clashDraft(opts: {
+  listingTitle: string;
+  /** The time the agent gave, UTC. */
+  offered: string;
+  taken: { startsAt: string; durationMinutes: number }[];
+  /** The renter's windows still ahead. */
+  availability: { date: string; part: string }[];
+}): string {
+  const windows = opts.availability
+    .map(w => `${dayMonth(w.date)} ${PART_VI[w.part] ?? w.part.toLowerCase()}`)
+    .join(', ');
+  const taken = opts.taken.map(t => rangeVi(t.startsAt, t.durationMinutes)).join(', ');
+
+  return [
+    'Chào anh/chị,',
+    '',
+    `Em cảm ơn anh/chị đã báo lịch xem căn ${opts.listingTitle}.`,
+    `Giờ ${slotVi(opts.offered)} bị trùng với lịch xem căn khác của khách bên em (${taken}).`,
+    windows
+      ? `Anh/chị sắp xếp giúp em giờ khác được không ạ? Khách rảnh ${windows}.`
+      : 'Anh/chị sắp xếp giúp em giờ khác được không ạ?',
+    '',
+    'Em cảm ơn anh/chị.',
+  ].join('\n');
+}
+
 /**
  * Chasing a broker who has not answered. Short, and it repeats the listing -
  * a broker with forty chats open has lost the first message by now.

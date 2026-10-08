@@ -10,6 +10,9 @@
 //   lapsedPlans, freeViewingAvailable - with hasPass, what requestGate needs
 //               that the modal cannot know; it adds the places it was opened
 //               for and whether it is joining (SPEC §9).
+//   unrequestable - of the `listingIds` the modal was opened for, the ones
+//               intake would refuse (`screenCandidates`), each with the reason.
+//               Said before the renter picks times, not after.
 //
 // `viewing-request-create` decides all of it again at submit - this is a
 // preview, not a promise.
@@ -21,7 +24,14 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
-import { hcmcDate, MAX_LAPSED_WITHOUT_PASS } from '../_shared/viewing/intake.ts';
+import {
+  hcmcDate,
+  MAX_LAPSED_WITHOUT_PASS,
+  screenCandidates,
+  validateShortlist,
+  type RejectedListing,
+  type ShortlistCandidate,
+} from '../_shared/viewing/intake.ts';
 import { countLapsedPlans, findOpenRequests } from '../_shared/viewing/open-request.ts';
 import { freeViewingAvailable, hasPassCover } from '../_shared/viewing/lock-in-run.ts';
 
@@ -38,6 +48,19 @@ async function accountFreeViewing(db: Db, userId: string): Promise<boolean | nul
   if (numbers.length === 0) return null;
   const unspent = await Promise.all(numbers.map((n: string) => freeViewingAvailable(db, n)));
   return unspent.some(Boolean);
+}
+
+/** The places asked about that intake would refuse, and why. */
+async function unrequestable(db: Db, raw: unknown): Promise<RejectedListing[]> {
+  const ids = validateShortlist(raw);
+  if (!ids.ok) return [];
+  const { data, error } = await db
+    .from('external_properties')
+    .select('id, is_active, price_vnd, price_confidence, bedrooms, area_sqm, district_code, realtor_id, title')
+    .in('id', ids.value!);
+  // Not knowing is not a refusal: submit screens again.
+  if (error) return [];
+  return screenCandidates(ids.value!, (data ?? []) as ShortlistCandidate[]).rejected;
 }
 
 const corsHeaders = {
@@ -73,13 +96,16 @@ Deno.serve(async (req) => {
   const user = authData?.user;
   if (!user) return json({ error: 'sign_in_required' }, 401);
 
+  const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+
   try {
     const db = createClient(SUPABASE_URL, SERVICE_ROLE);
-    const [{ joinable, blocking }, lapsed, hasPass, freeViewing] = await Promise.all([
+    const [{ joinable, blocking }, lapsed, hasPass, freeViewing, refused] = await Promise.all([
       findOpenRequests(db, user.id, hcmcDate(new Date())),
       countLapsedPlans(db, user.id),
       hasPassCover(db, user.id),
       accountFreeViewing(db, user.id),
+      body?.listingIds ? unrequestable(db, body.listingIds) : Promise.resolve([]),
     ]);
     return json({
       open: joinable
@@ -96,6 +122,7 @@ Deno.serve(async (req) => {
       // same rule with the places it was opened for.
       lapsedPlans: lapsed,
       freeViewingAvailable: freeViewing,
+      unrequestable: refused,
     });
   } catch (e) {
     console.error('[viewing-request-open]', e);

@@ -40,7 +40,7 @@ import { Deliver } from './Deliver';
 import { Tasks } from './Tasks';
 import { RenterThread, type Thread } from './RenterThread';
 import { Proposals, type ProposalRow } from './Proposals';
-import type { StopListing } from '../../supabase/functions/_shared/viewing/itinerary';
+import { busySlots, type BusySlot, type StopListing } from '../../supabase/functions/_shared/viewing/itinerary';
 import type { ParseSuggestion } from '../../supabase/functions/_shared/viewing/parse-reply';
 
 interface Item {
@@ -211,6 +211,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           transcript={transcript.filter(m => m.item_id === item.id)}
           owed={owed.get(item.id) ?? null}
           bridge={bridge}
+          busy={busySlots(view, id => items.find(i => i.id === id)?.listing_title ?? 'another place')}
           onChanged={load}
         />
       ))}
@@ -247,6 +248,7 @@ function ItemCard({
   transcript,
   owed,
   bridge,
+  busy: taken,
   onChanged,
 }: {
   item: Item;
@@ -255,6 +257,8 @@ function ItemCard({
   transcript: RealtorMessage[];
   owed: RealtorDecision | null;
   bridge: boolean;
+  /** The request's confirmed viewings, which a time recorded here must miss. */
+  busy: BusySlot[];
   onChanged: () => void;
 }) {
   const state = view.items[item.id];
@@ -380,8 +384,12 @@ function ItemCard({
           busy={busy}
           nudges={state?.nudges ?? 0}
           availability={availability}
+          itemId={item.id}
+          listingTitle={title}
+          taken={taken}
           onSubmit={body => post({ action: 'OUTCOME', ...body })}
           onSaveReply={body => post({ action: 'REALTOR_REPLY', ...body })}
+          onAskAgain={message => post({ action: 'CONTACTED', channel: 'ZALO', message })}
           onSuggest={async reply => {
             const { data, error: err } = await supabase.functions.invoke('ops-parse-reply', {
               body: { itemId: item.id, reply },

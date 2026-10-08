@@ -54,7 +54,8 @@ describe('never suggesting something they cannot request', () => {
     expect(isOfferable(listing({ price_confidence: 'LOW' }))).toBe(false);
     expect(isOfferable(listing({ price_vnd: null }))).toBe(false);
     expect(isOfferable(listing({ bedrooms: null }))).toBe(false);
-    expect(isOfferable(listing({ area_sqm: null }))).toBe(false);
+    // The same rule as intake: no floor area is still requestable.
+    expect(isOfferable(listing({ area_sqm: null }))).toBe(true);
     expect(isOfferable(listing({ district_code: null }))).toBe(false);
   });
 

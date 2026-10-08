@@ -15,6 +15,8 @@ interface ViewingChoiceProps {
   sourceName?: string;
   /** "We arrange it": on to the request's own steps. */
   onArrange: () => void;
+  /** Why intake would refuse this place, when it would - said here, before any times are picked. */
+  cannotArrange?: string | null;
 }
 
 /**
@@ -28,9 +30,12 @@ interface ViewingChoiceProps {
  * Still one button on the card (invariant 8): the choice is behind it, not
  * beside it. "We arrange it" comes first and carries the primary button,
  * because it is what Hausto is for; calling says what it costs the renter -
- * the agent gets their number.
+ * the agent gets their number. A place intake would refuse (no confirmed
+ * price, say) says why on the first option, and calling is what is left.
  */
-export function ViewingChoice({ listingId, title, hasPass, hasNumber, sourceName, onArrange }: ViewingChoiceProps) {
+export function ViewingChoice({
+  listingId, title, hasPass, hasNumber, sourceName, onArrange, cannotArrange,
+}: ViewingChoiceProps) {
   const { signedIn, loading, result, reveal, refusal, refusalText } = useAgentReveal(listingId);
   const revealed = result?.ok ? result : null;
   const canAsk = hasNumber && !revealed && refusal !== 'daily_limit' && refusal !== 'no_number' && refusal !== 'unknown_listing';
@@ -43,23 +48,31 @@ export function ViewingChoice({ listingId, title, hasPass, hasNumber, sourceName
       </DialogHeader>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
-        <section className="rounded-xl border border-primary bg-primary/5 p-4">
+        <section className={`rounded-xl border p-4 ${cannotArrange ? '' : 'border-primary bg-primary/5'}`}>
           <div className="flex items-center gap-2">
-            <CalendarCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+            <CalendarCheck className={`h-4 w-4 ${cannotArrange ? 'text-muted-foreground' : 'text-primary'}`} aria-hidden="true" />
             <h3 className="text-sm font-semibold">We arrange it</h3>
           </div>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            We check with the agent in the local language and send you a plan on WhatsApp. They never
-            get your number.
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {hasPass
-              ? 'Your Pass covers every viewing we arrange.'
-              : `Your first viewing is free. After that, it takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
-          </p>
-          <Button className="mt-3 w-full rounded-full" onClick={onArrange}>
-            Request a viewing
-          </Button>
+          {cannotArrange ? (
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              We cannot arrange this one. {cannotArrange}
+            </p>
+          ) : (
+            <>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                We check with the agent in the local language and send you a plan on WhatsApp. They never
+                get your number.
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {hasPass
+                  ? 'Your Pass covers every viewing we arrange.'
+                  : `Your first viewing is free. After that, it takes the Pass (${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
+              </p>
+              <Button className="mt-3 w-full rounded-full" onClick={onArrange}>
+                Request a viewing
+              </Button>
+            </>
+          )}
         </section>
 
         <section className="rounded-xl border p-4">
@@ -73,15 +86,16 @@ export function ViewingChoice({ listingId, title, hasPass, hasNumber, sourceName
 
           {!hasNumber ? (
             <p className="mt-1.5 text-sm text-muted-foreground">
-              This ad does not list the agent's number, so there is none to show. We can still arrange it
-              for you above.
+              This ad does not list the agent's number, so there is none to show.
+              {!cannotArrange && ' We can still arrange it for you above.'}
             </p>
           ) : revealed ? (
             <div className="mt-2 space-y-2">
               <p className="text-xs text-muted-foreground">The agent's number, from the ad</p>
               <AgentNumber phoneE164={revealed.phoneE164} sourceUrl={revealed.sourceUrl} sourceName={sourceName} />
               <p className="text-xs text-muted-foreground">
-                When you call or message, the agent gets your number. Rather not? Request a viewing above.
+                When you call or message, the agent gets your number.
+                {!cannotArrange && ' Rather not? Request a viewing above.'}
               </p>
             </div>
           ) : (

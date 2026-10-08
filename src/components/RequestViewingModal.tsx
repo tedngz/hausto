@@ -29,6 +29,11 @@
 // here**: a renter who met a price only after requesting may report the
 // message, and reports lower the WhatsApp number's quality rating.
 //
+// **A place intake would refuse says so first** - no confirmed price, say
+// (`screenCandidates`, SPEC §1). `viewing-request-open` screens the places
+// the modal was opened for, so the renter hears it on the choice screen, not
+// in red under the button after picking times.
+//
 // **For one place, it opens on a choice** (ViewingChoice, SPEC §6): we
 // arrange it, or call the agent yourself - the same two for every renter, Pass
 // or not. An ad with no number says so on the second. The card still carries
@@ -105,6 +110,8 @@ interface OpenState {
   /** requestGate's inputs the modal cannot know. Absent from an older function. */
   lapsedPlans?: number;
   freeViewingAvailable?: boolean | null;
+  /** Of the places asked about, the ones intake would refuse, and why. */
+  unrequestable?: { listingId: string; reason: string }[];
 }
 
 /** What it costs, said on every request screen (SPEC §9). */
@@ -178,14 +185,17 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   // Asked every time the modal opens, never cached across opens: the request
   // it names may have moved on to its itinerary in the meantime. The server
   // decides again at submit either way - this is what the renter is shown.
+  const placeIds = places.map(p => p.listingId);
   const { data: openState, isLoading: openLoading } = useQuery<OpenState | null>({
-    queryKey: ['viewing-open-request', user?.id],
+    queryKey: ['viewing-open-request', user?.id, placeIds.join(',')],
     enabled: open && !!user,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     queryFn: async () => {
-      const { data, error: err } = await supabase.functions.invoke('viewing-request-open', { body: {} });
+      const { data, error: err } = await supabase.functions.invoke('viewing-request-open', {
+        body: { listingIds: placeIds },
+      });
       // A failed lookup falls back to asking for times; submit decides.
       if (err) return null;
       return (data as OpenState) ?? null;
@@ -196,15 +206,20 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   // Past joining - its plan assembled or sent - so a new request waits.
   const waitingOn = !join ? openState?.blocking ?? null : null;
   const hasPass = !!openState?.hasPass || !!pass?.active;
-  const fresh = places.filter(p => !join?.listingIds.includes(p.listingId));
-  const alreadyIn = !!join && places.length > 0 && fresh.length === 0;
+  // Places intake would refuse are left out of everything below, and said.
+  const refused = (openState?.unrequestable ?? []).filter(r => placeIds.includes(r.listingId));
+  const refusedFor = (id: string) => refused.find(r => r.listingId === id)?.reason ?? null;
+  const usable = places.filter(p => !refusedFor(p.listingId));
+  const noneUsable = places.length > 0 && usable.length === 0;
+  const fresh = usable.filter(p => !join?.listingIds.includes(p.listingId));
+  const alreadyIn = !!join && usable.length > 0 && fresh.length === 0;
   // The server's own rule (requestGate), with the places this was opened for:
   // past the one free place, arranging viewings is the Pass's. Not asked while
   // a request blocks, or for places already in the open one.
-  const gate = openState && !waitingOn && !alreadyIn
+  const gate = openState && !waitingOn && !alreadyIn && !noneUsable
     ? requestGate({
       hasPass,
-      placeCount: join ? fresh.length : places.length,
+      placeCount: join ? fresh.length : usable.length,
       joining: !!join,
       freeViewingAvailable: openState.freeViewingAvailable ?? null,
       lapsedPlans: openState.lapsedPlans ?? (openState.passRequired ? MAX_LAPSED_WITHOUT_PASS : 0),
@@ -232,14 +247,14 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const extraFresh = extra.filter(w => !joinAhead.some(j => j.date === w.date && j.part === w.part));
 
   const submit = async () => {
-    if (places.length === 0) return;
+    if (usable.length === 0) return;
     setError(null);
     if (!join && !toRenterE164(phone)) {
       setError(RENTER_PHONE_HINT);
       return;
     }
     setBusy(true);
-    const listingIds = (join ? fresh : places).map(p => p.listingId);
+    const listingIds = (join ? fresh : usable).map(p => p.listingId);
     const { data, error: err } = await supabase.functions.invoke('viewing-request-create', {
       body: {
         ...(join
@@ -281,10 +296,24 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
     if (submitted) { setSubmitted(null); setPicked([]); setExtra([]); setAddingTimes(false); }
   };
 
-  const canSubmit = !busy && places.length > 0 && !alreadyIn && !waitingOn && !passRequired && !openLoading
+  const canSubmit = !busy && usable.length > 0 && !alreadyIn && !waitingOn && !passRequired && !openLoading
     && (join ? true : picked.length > 0);
 
   const priceLine = lockInPriceLine(hasPass);
+
+  const submitLabel = noneUsable
+    ? 'Cannot be requested'
+    : alreadyIn
+      ? 'Already requested'
+      : waitingOn
+        ? `Waiting on ${waitingOn.ref}`
+        : join
+          ? extraFresh.length
+            ? `Add to ${join.ref} with ${extraFresh.length} more time${extraFresh.length === 1 ? '' : 's'}`
+            : `Add to request ${join.ref}`
+          : picked.length === 0
+            ? 'Pick a time'
+            : usable.length > 1 ? `Request ${usable.length} viewings` : 'Request viewing';
 
   return (
     <Dialog open={open} onOpenChange={o => (o ? onOpenChange(true) : close())}>
@@ -349,6 +378,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
             hasPass={hasPass}
             hasNumber={agentInfo?.hasNumber === true}
             sourceName={agentInfo?.sourceName}
+            cannotArrange={refusedFor(single.listingId)}
             onArrange={() => setArranging(true)}
           />
         ) : !user ? (
@@ -364,9 +394,9 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
         ) : (
           <>
             <DialogHeader className="shrink-0 space-y-1 border-b p-4 text-left sm:p-6 sm:pb-4">
-              <DialogTitle>{places.length > 1 ? `Request ${places.length} viewings` : 'Request a viewing'}</DialogTitle>
+              <DialogTitle>{usable.length > 1 ? `Request ${usable.length} viewings` : 'Request a viewing'}</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                We contact the {places.length > 1 ? 'agents' : 'agent'} for you and come back with the times
+                We contact the {usable.length > 1 ? 'agents' : 'agent'} for you and come back with the times
                 that are free. They never get your number.
               </DialogDescription>
             </DialogHeader>
@@ -374,10 +404,39 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
               {/* No "which place" step: the modal opens from the listing, so
                   the renter is already looking at it. */}
+              {!openLoading && refused.length > 0 && !noneUsable && (
+                <ul className="space-y-1 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  {refused.map(r => (
+                    <li key={r.listingId}>
+                      <span className="font-medium text-foreground">
+                        {places.find(p => p.listingId === r.listingId)?.title ?? 'One place'}
+                      </span>{' '}
+                      is left out: {r.reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {openLoading ? (
                 <Step n={1} title="When are you free?">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </Step>
+              ) : noneUsable ? (
+                <div className="space-y-2 rounded-md border bg-muted/40 p-4 text-sm">
+                  <p className="font-medium">
+                    We cannot arrange {places.length > 1 ? 'these' : 'this one'}
+                  </p>
+                  {refused.map(r => (
+                    <p key={r.listingId} className="text-muted-foreground">
+                      {places.length > 1 && `${places.find(p => p.listingId === r.listingId)?.title ?? 'One place'}: `}
+                      {r.reason}
+                    </p>
+                  ))}
+                  {single && (
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => setArranging(false)}>
+                      Back
+                    </Button>
+                  )}
+                </div>
               ) : waitingOn ? (
                 <div className="space-y-2 rounded-md border bg-muted/40 p-4 text-sm">
                   <p className="font-medium">We are still working on {waitingOn.ref}</p>
@@ -452,7 +511,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
               {/* ── 2. You ───────────────────────────────────────────── */}
               {/* Not asked when joining: the answer goes to the WhatsApp thread
                   the open request already has. */}
-              {!join && !waitingOn && !passRequired && !openLoading && (
+              {!join && !waitingOn && !passRequired && !openLoading && !noneUsable && (
                 <>
                   <Separator />
                   <Step n={2} title="Where do we reach you?">
@@ -487,17 +546,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button className="w-full" disabled={!canSubmit} onClick={submit}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {alreadyIn
-                  ? 'Already requested'
-                  : waitingOn
-                    ? `Waiting on ${waitingOn.ref}`
-                    : join
-                      ? extraFresh.length
-                        ? `Add to ${join.ref} with ${extraFresh.length} more time${extraFresh.length === 1 ? '' : 's'}`
-                        : `Add to request ${join.ref}`
-                      : picked.length === 0
-                        ? 'Pick a time'
-                        : places.length > 1 ? `Request ${places.length} viewings` : 'Request viewing'}
+                {submitLabel}
               </Button>
             </div>
           </>

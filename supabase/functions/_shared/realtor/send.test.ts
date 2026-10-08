@@ -8,7 +8,7 @@ import {
   type StoredRealtorMessage,
 } from './send.ts';
 import { ManualChannel, realtorChannelFromEnv, type RealtorChannel } from './channel.ts';
-import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft } from './drafts.ts';
+import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft, clashDraft } from './drafts.ts';
 
 /** An array with the one constraint that matters: idempotency_key is unique. */
 class MemoryStore implements RealtorMessageStore {
@@ -129,6 +129,11 @@ describe('the renter never reaches a broker (invariant 4)', () => {
       nudgeDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
       confirmDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền', startsAt: '2026-09-28T03:30:00.000Z' }),
       releaseDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
+      clashDraft({
+        listingTitle: 'Căn hộ 2PN Thảo Điền', offered: '2026-09-28T02:30:00.000Z',
+        taken: [{ startsAt: '2026-09-28T02:00:00.000Z', durationMinutes: 60 }],
+        availability: [{ date: '2026-09-28', part: 'MORNING' }],
+      }),
     ];
     for (const d of drafts) expect(() => assertNoRenterIdentity(d, renter)).not.toThrow();
   });
@@ -164,6 +169,11 @@ describe('a renter on a foreign number never reaches a broker either', () => {
       nudgeDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
       confirmDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền', startsAt: '2026-09-28T03:30:00.000Z' }),
       releaseDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
+      clashDraft({
+        listingTitle: 'Căn hộ 2PN Thảo Điền', offered: '2026-09-28T02:30:00.000Z',
+        taken: [{ startsAt: '2026-09-28T02:00:00.000Z', durationMinutes: 60 }],
+        availability: [{ date: '2026-09-28', part: 'MORNING' }],
+      }),
     ];
     for (const d of drafts) expect(() => assertNoRenterIdentity(d, uk)).not.toThrow();
   });
@@ -199,6 +209,17 @@ describe('the drafts', () => {
   it('never say why the renter is not coming', () => {
     const d = releaseDraft({ listingTitle: 'X' });
     expect(d).toContain('không cần giữ lịch');
+  });
+
+  it('say which stretch is taken when a time clashes, in local time, and nothing about the other place', () => {
+    const d = clashDraft({
+      listingTitle: 'X', offered: '2026-09-28T02:30:00.000Z',
+      taken: [{ startsAt: '2026-09-28T02:00:00.000Z', durationMinutes: 60 }],
+      availability: [{ date: '2026-09-28', part: 'MORNING' }, { date: '2026-09-29', part: 'AFTERNOON' }],
+    });
+    expect(d).toContain('09:30 ngày 28/09');
+    expect(d).toContain('09:00-10:00 ngày 28/09');
+    expect(d).toContain('28/09 buổi sáng, 29/09 buổi chiều');
   });
 });
 

@@ -23,8 +23,8 @@ import { summarise, type DomainEvent, type RequestView } from '../viewing-domain
 import { realtorDecisionsOwed, NUDGE_AFTER_MS } from './reminders.ts';
 import { waitingReplies } from './thread.ts';
 import { NUDGES_BEFORE_NO_RESPONSE } from './outcomes.ts';
-import { assembleItinerary } from './itinerary.ts';
-import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft } from '../realtor/drafts.ts';
+import { assembleItinerary, busySlots, clashesWith, type BusySlot } from './itinerary.ts';
+import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft, clashDraft } from '../realtor/drafts.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
 import type { DraftResult } from './renter-reply.ts';
 import { DAY_PART_HOURS, type DayPart } from './intake.ts';
@@ -64,6 +64,11 @@ export interface PlanInput {
   unreadReplies: UnreadReply[];
   /** A drafted answer to the renter's newest waiting reply, if one was attempted. */
   renterDraft?: RenterDraft;
+  /**
+   * Confirmations proposed on an earlier run and not yet recorded. A later
+   * agent's time is checked against them as well as the recorded ones.
+   */
+  proposedSlots?: BusySlot[];
   now: number;
 }
 
@@ -109,11 +114,19 @@ const hours = (ms: number) => Math.floor(ms / 3_600_000);
  */
 export function windowsAllPassed(availability: { date: string; part: string }[], now: number): boolean {
   if (availability.length === 0) return false;
-  return availability.every(w => {
-    const to = DAY_PART_HOURS[w.part as DayPart]?.to ?? 23;
-    const end = Date.parse(`${w.date}T${String(to).padStart(2, '0')}:00:00+07:00`);
-    return Number.isFinite(end) && end <= now;
-  });
+  return availability.every(w => windowEnded(w, now));
+}
+
+function windowEnded(w: { date: string; part: string }, now: number): boolean {
+  const to = DAY_PART_HOURS[w.part as DayPart]?.to ?? 23;
+  const end = Date.parse(`${w.date}T${String(to).padStart(2, '0')}:00:00+07:00`);
+  return Number.isFinite(end) && end <= now;
+}
+
+/** `09:30 Tue 14/10` in Ho Chi Minh City, for a rationale a person reads. */
+function hcmcShort(iso: string): string {
+  const local = new Date(Date.parse(iso) + 7 * 3_600_000).toISOString();
+  return `${local.slice(11, 16)} on ${local.slice(8, 10)}/${local.slice(5, 7)}`;
 }
 
 export function planRequest(p: PlanInput): Proposal[] {
@@ -206,6 +219,16 @@ export function planRequest(p: PlanInput): Proposal[] {
   }
 
   // ── Each broker ────────────────────────────────────────────────────────────
+  // The viewings already fixed, and the ones this run is about to fix. A time
+  // that overlaps one of them is caught as the agent gives it, while they can
+  // still be asked for another - not once every agent has answered and the
+  // plan cannot go out.
+  const titleOf = (id: string) => p.items.find(i => i.itemId === id)?.listingTitle ?? 'another place';
+  const busy: BusySlot[] = [
+    ...busySlots(view, titleOf),
+    ...(p.proposedSlots ?? []).filter(s => view.items[s.itemId]?.state !== 'CONFIRMED'),
+  ];
+
   for (const item of p.items) {
     const state = view.items[item.itemId];
     if (!state) continue;
@@ -217,20 +240,55 @@ export function planRequest(p: PlanInput): Proposal[] {
     const unread = p.unreadReplies.filter(r => r.itemId === item.itemId).pop();
     if (unread) {
       const s = unread.suggestion;
-      if (s?.outcome && s.problems.length === 0) {
+      const key = `OUTCOME:${item.itemId}:${unread.messageId}`;
+      // A confirmed time is kept only where it misses the viewings already
+      // fixed. When every time they gave clashes, they are asked for another.
+      const free = s?.outcome === 'CONFIRMED'
+        ? s.slots.filter(x => clashesWith(x, busy, item.itemId).length === 0)
+        : s?.slots ?? [];
+      if (s?.outcome === 'CONFIRMED' && s.problems.length === 0 && s.slots.length > 0 && free.length === 0) {
+        const offered = s.slots[0];
+        const taken = clashesWith(offered, busy, item.itemId);
+        const several = s.slots.length > 1;
         propose({
-          itemId: item.itemId, key: `OUTCOME:${item.itemId}:${unread.messageId}`, action: 'OUTCOME',
+          itemId: item.itemId, key, action: 'CONTACTED',
           input: {
-            itemId: item.itemId, outcome: s.outcome, slots: s.slots,
+            itemId: item.itemId, channel: 'ZALO',
+            message: clashDraft({
+              listingTitle: item.listingTitle, offered: offered.startsAt, taken,
+              availability: p.availability.filter(w => !windowEnded(w, p.now)),
+            }),
+          },
+          rationale: `The agent can do ${s.slots.map(x => hcmcShort(x.startsAt)).join(' or ')}, `
+            + `${several ? 'all of which clash' : 'which clashes'} with `
+            + `${[...new Set(taken.map(t => t.listingTitle))].join(' and ')}. Ask them for another time now.`,
+          confidence: s.confidence,
+        });
+        continue;
+      }
+      if (s?.outcome && s.problems.length === 0) {
+        const slots = free;
+        const dropped = s.slots.filter(x => !slots.includes(x));
+        if (s.outcome === 'CONFIRMED' && slots[0]) {
+          busy.push({ itemId: item.itemId, listingTitle: item.listingTitle, ...slots[0] });
+        }
+        propose({
+          itemId: item.itemId, key, action: 'OUTCOME',
+          input: {
+            itemId: item.itemId, outcome: s.outcome, slots,
             ...(s.actualPriceVnd != null ? { actualPriceVnd: s.actualPriceVnd } : {}),
             note: s.note, suggested: s,
           },
-          rationale: `The agent replied: ${s.note || 'see the conversation'}.`,
+          rationale: `The agent replied: ${s.note || 'see the conversation'}.`
+            + (dropped.length > 0
+              ? ` Left out ${dropped.map(x => hcmcShort(x.startsAt)).join(', ')}: `
+                + `${dropped.length > 1 ? 'they clash' : 'it clashes'} with another viewing.`
+              : ''),
           confidence: s.confidence,
         });
       } else {
         propose({
-          itemId: item.itemId, key: `OUTCOME:${item.itemId}:${unread.messageId}`, action: 'ESCALATE',
+          itemId: item.itemId, key, action: 'ESCALATE',
           input: { itemId: item.itemId, reason: 'UNREAD_REPLY' },
           rationale: s
             ? `The agent replied but it could not be settled: ${[s.note, ...s.problems].filter(Boolean).join(' ')}`
@@ -297,7 +355,8 @@ export function planRequest(p: PlanInput): Proposal[] {
   // ── The itinerary ─────────────────────────────────────────────────────────
   // Once every agent has answered, and only once: the renter hears the plan
   // one time. Ordered by the clock - the rules warn about the orderings that
-  // are wrong, and a clash is a person's to fix.
+  // are wrong. A clash is caught as each agent answers (above); one that gets
+  // this far anyway is a person's to fix.
   const s = summarise(view);
   // A held plan has been sent as far as it can go; the renter's reply
   // releases it (deliver.ts), not another proposal.

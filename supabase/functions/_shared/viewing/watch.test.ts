@@ -119,7 +119,9 @@ describe('matching', () => {
   it('never alerts a place Request viewing would then refuse', () => {
     expect(matchesWatch(watch(), listing({ price_confidence: 'LOW' }))).toBe(false);
     expect(matchesWatch(watch(), listing({ is_active: false }))).toBe(false);
-    expect(matchesWatch(watch(), listing({ area_sqm: null }))).toBe(false);
+    expect(matchesWatch(watch(), listing({ district_code: null }))).toBe(false);
+    // The same gate as a request: no floor area is still requestable, so still news.
+    expect(matchesWatch(watch(), listing({ area_sqm: null }))).toBe(true);
   });
 });
 
