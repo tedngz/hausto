@@ -108,10 +108,15 @@ async function act(body: Record<string, unknown>): Promise<string | null> {
   return invokeFailure(data, error);
 }
 
-export function Availability() {
+/**
+ * The list, or one request when `openId` is set. The shell owns which one is
+ * open, so a link (`#/inquiry/<id>`, from the Inbox or the digest email) lands
+ * on it and the browser's back button leaves it.
+ */
+export function Availability({ openId, onOpen }: { openId: string | null; onOpen: (id: string | null) => void }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const setOpenId = onOpen;
   const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {

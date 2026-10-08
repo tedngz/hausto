@@ -172,6 +172,12 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         </p>
       )}
 
+      {/* Two columns on a wide screen: the places, and beside them what
+          needs deciding - the AI's proposals, the renter's thread, the to-dos -
+          held in view while the operator works down the cards. One column,
+          decisions first, on a narrow one. */}
+      <div className="split">
+      <aside className="split-side">
       <Proposals
         requestId={requestId}
         proposals={proposals}
@@ -192,6 +198,9 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         requestId={requestId}
         titleFor={id => items.find(i => i.id === id)?.listing_title ?? id}
       />
+      </aside>
+
+      <div className="split-main">
 
       {items.map(item => (
         <ItemCard
@@ -223,8 +232,10 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           onDelivered={load}
         />
       )}
+      </div>
+      </div>
 
-      <button onClick={onBack}>&larr; Back to queue</button>
+      <button onClick={onBack}>&larr; Back</button>
     </>
   );
 }

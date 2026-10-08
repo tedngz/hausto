@@ -4,9 +4,21 @@
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 8080,
       "autoPort": true
+    },
+    {
+      "name": "ops",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:ops"
+      ],
+      "port": 5174
     }
   ]
 }

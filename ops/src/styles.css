@@ -17,7 +17,7 @@
 body { margin: 0; background: var(--bg); color: var(--fg); }
 a { color: var(--accent); }
 
-.wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 16px; }
 .row { display: flex; gap: 8px; align-items: center; }
 .row.wrap-row { flex-wrap: wrap; }
 .spacer { flex: 1; }
@@ -75,4 +75,37 @@ button.link:hover:not(:disabled) { background: none; }
    something that has happened. */
 .card.shadow { border-style: dashed; background: #fcfcfa; }
 .proposal { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.nav { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .nav button.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.nav .count { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.nav button.active .count { background: #fff; color: var(--fg); }
+
+/* The Inbox: counts first, then the list. */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.tile .n { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.tile.bad { border-color: #e0b4b4; background: #fdf3f3; }
+.tile.bad .n { color: var(--bad); }
+.tile.warn { border-color: #f0d9a8; background: #fdf8ee; }
+.tile.warn .n { color: var(--warn); }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 4px 4px 0; }
+.seg button.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.tag.kind-building { background: #e4ecf7; color: #1d4f91; }
+.tag.kind-search { background: #efe6f7; color: #5b2d8a; }
+tbody tr.dim { color: var(--muted); }
+
+/* Two columns where the screen is wide enough to use them. */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 16px; align-items: start; }
+.split .split-side { order: 2; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.split .split-main { order: 1; min-width: 0; }
+.split.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 12px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.grid-3 > .card { margin-bottom: 0; }
+.grid-3 { margin-bottom: 12px; }
+@media (max-width: 1000px) {
+  .split, .split.even { grid-template-columns: minmax(0, 1fr); }
+  .split .split-side { order: 0; position: static; max-height: none; }
+}

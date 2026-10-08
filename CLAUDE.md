@@ -123,8 +123,10 @@ message rather than one each. Past that, a new request waits: one request
 being worked at a time, for everyone (`pickBlocking`).
 
 **9. New-flow requests are visible to operators, never to realtors.**
-`ViewingFlowQueuePanel` is admin scope only and read-only - status is derived
-and outcomes are the seven fixed actions in the ops console.
+`RequestsOverview` on /admin-tools (viewing requests, building availability
+and priority searches, ranked by `_shared/viewing/inbox.ts`) is admin scope
+only and read-only - status is derived and outcomes are the seven fixed
+actions in the ops console, which each row links into.
 `ViewingRequestsManager` resolves renter profiles for its realtor scope, so
 feeding it `viewing_requests` would put a renter's identity in front of an
 agent. That is invariant 4, and it is the whole product.

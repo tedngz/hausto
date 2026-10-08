@@ -77,9 +77,14 @@ export function ShadowStats() {
         <h2 style={{ fontSize: 15, margin: 0 }}>AI operator - last 30 days</h2>
       </div>
 
-      <Autonomy />
-      <BridgeStatus />
-      <NumberStatus />
+      {/* What is running, side by side: whether it may act alone, whether
+          the Zalo device is up, and the WhatsApp number's standing. Then how
+          well it has been doing, and where it went wrong, beside each other. */}
+      <div className="grid-3">
+        <Autonomy />
+        <BridgeStatus />
+        <NumberStatus />
+      </div>
       <div className="card">
         <div className="row wrap-row">
           <strong>Agreement</strong>
@@ -98,6 +103,8 @@ export function ShadowStats() {
         </div>
       </div>
 
+      <div className="split even">
+      <div>
       {stats.length > 0 && (
         <table>
           <thead>
@@ -114,8 +121,11 @@ export function ShadowStats() {
         </table>
       )}
 
+      {stats.length === 0 && <p className="muted">No proposals decided yet.</p>}
+      </div>
+      <div>
       {misses.length > 0 && (
-        <div className="card" style={{ marginTop: 12 }}>
+        <div className="card">
           <strong>Recent misses</strong>
           <ul className="small" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
             {misses.map((m, i) => (
@@ -129,8 +139,8 @@ export function ShadowStats() {
           </ul>
         </div>
       )}
-
-      {stats.length === 0 && <p className="muted">No proposals decided yet.</p>}
+      </div>
+      </div>
     </>
   );
 }
