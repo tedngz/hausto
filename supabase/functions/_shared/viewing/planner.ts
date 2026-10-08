@@ -184,7 +184,9 @@ export function planRequest(p: PlanInput): Proposal[] {
       },
       rationale: owed.decision === 'CONFIRM'
         ? 'The renter kept this viewing; the agent has not been told to hold the time.'
-        : `The request is ${view.state.toLowerCase()}; the agent is still holding time for it.`,
+        : view.items[owed.itemId]?.state === 'WITHDRAWN'
+          ? 'The renter removed this place; the agent is still holding time for it.'
+          : `The request is ${view.state.toLowerCase()}; the agent is still holding time for it.`,
     });
   }
 
@@ -207,6 +209,9 @@ export function planRequest(p: PlanInput): Proposal[] {
   for (const item of p.items) {
     const state = view.items[item.itemId];
     if (!state) continue;
+    // New times send an agent back to be asked again (AVAILABILITY_CHANGED).
+    // Each round's proposals are new ones, not the first round's again.
+    const round = state.round > 0 ? `:r${state.round}` : '';
 
     // A reply nobody has read outranks everything else about this item.
     const unread = p.unreadReplies.filter(r => r.itemId === item.itemId).pop();
@@ -240,21 +245,29 @@ export function planRequest(p: PlanInput): Proposal[] {
     if (stale) continue;
 
     if (state.state === 'PENDING') {
+      // Asked before, about times the renter has since changed: the message
+      // says the times changed. A round counted on an agent nobody had asked
+      // yet is just a first ask.
+      const reask = state.round > 0
+        && p.events.some(e => e.item_id === item.itemId && e.type === 'REALTOR_CONTACTED');
       if (item.hasContact) {
         propose({
-          itemId: item.itemId, key: `CONTACT:${item.itemId}`, action: 'CONTACTED',
+          itemId: item.itemId, key: `CONTACT:${item.itemId}${round}`, action: 'CONTACTED',
           input: {
             itemId: item.itemId, channel: 'ZALO',
             message: draftForRealtor({
               listingTitle: item.listingTitle, listingUrl: item.listingUrl,
               priceVnd: item.priceVnd, availability: p.availability,
+              rescheduled: reask,
             }),
           },
-          rationale: 'Nobody has asked this agent yet. Send the first message.',
+          rationale: reask
+            ? 'The renter changed their times. Ask this agent about the new ones.'
+            : 'Nobody has asked this agent yet. Send the first message.',
         });
       } else {
         propose({
-          itemId: item.itemId, key: `NO_CONTACT:${item.itemId}`, action: 'ESCALATE',
+          itemId: item.itemId, key: `NO_CONTACT:${item.itemId}${round}`, action: 'ESCALATE',
           input: { itemId: item.itemId, reason: 'NO_CONTACT' },
           rationale: 'No working number for this agent. A person has to find one.',
         });
@@ -267,13 +280,13 @@ export function planRequest(p: PlanInput): Proposal[] {
       if (last == null || p.now - last < NUDGE_AFTER_MS) continue;
       if (state.nudges < NUDGES_BEFORE_NO_RESPONSE) {
         propose({
-          itemId: item.itemId, key: `NUDGE:${item.itemId}:${state.nudges + 1}`, action: 'NUDGE',
+          itemId: item.itemId, key: `NUDGE:${item.itemId}${round}:${state.nudges + 1}`, action: 'NUDGE',
           input: { itemId: item.itemId, channel: 'ZALO', message: nudgeDraft({ listingTitle: item.listingTitle }) },
           rationale: `No reply in ${hours(p.now - last)}h. Chase #${state.nudges + 1}.`,
         });
       } else {
         propose({
-          itemId: item.itemId, key: `NO_RESPONSE:${item.itemId}`, action: 'OUTCOME',
+          itemId: item.itemId, key: `NO_RESPONSE:${item.itemId}${round}`, action: 'OUTCOME',
           input: { itemId: item.itemId, outcome: 'NO_RESPONSE', note: `Silent ${hours(p.now - last)}h after ${state.nudges} chases.` },
           rationale: `Chased ${state.nudges} times and silent ${hours(p.now - last)}h since. Close it so the renter can hear about the rest.`,
         });

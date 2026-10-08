@@ -153,6 +153,9 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
       <p className="small muted" style={{ marginTop: 0 }}>
         Requested {hcmc(request.created_at)}. Renter is free:{' '}
         {(request.availability ?? []).map(w => `${w.date} ${w.part.toLowerCase()}`).join(', ') || 'not stated'}
+        {view.availabilityChanges > 0 && (
+          <strong>{' '}- changed by the renter{view.availabilityChanges > 1 ? ` ${view.availabilityChanges} times` : ''}; every agent is asked again</strong>
+        )}
       </p>
 
       {/* The one paid step (SPEC §9): who covered a kept plan, or when an
@@ -211,7 +214,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           requestId={requestId}
           requestRef={request.ref}
           view={view}
-          listings={items.map<StopListing>(i => ({
+          listings={items.filter(i => view.items[i.id]?.state !== 'WITHDRAWN').map<StopListing>(i => ({
             itemId: i.id,
             listingTitle: i.listing_title ?? 'A place',
             districtCode: i.district_code,
@@ -249,7 +252,14 @@ function ItemCard({
   // failed - sending again from the box below retries it.
   const lastOut = [...transcript].reverse().find(m => m.direction === 'OUT');
   const queued = lastOut?.status === 'QUEUED';
-  const failed = lastOut?.status === 'FAILED';
+  // Stopped on purpose when the renter removed the place or changed their
+  // times (renter-edits.ts): not a failure to retry.
+  const superseded = lastOut?.status === 'FAILED' && (lastOut.error ?? '').startsWith('superseded');
+  const failed = lastOut?.status === 'FAILED' && !superseded;
+  const withdrawn = view.items[item.id]?.state === 'WITHDRAWN';
+  // Asked before, about times the renter has since changed.
+  const reask = (view.items[item.id]?.round ?? 0) > 0
+    && transcript.some(m => m.direction === 'OUT' && m.purpose === 'REQUEST_VIEWING' && m.status === 'SENT');
   const sendLabel = bridge ? 'Send via the Zalo device' : 'Mark sent';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -282,6 +292,8 @@ function ItemCard({
         <strong>{item.listing_title ?? item.listing_id}</strong>
         <span className="tag">{state?.state ?? 'PENDING'}</span>
         {state?.notified && <span className="tag good">agent told: {state.notified.toLowerCase()}</span>}
+        {withdrawn && <span className="tag warn">removed by the renter</span>}
+        {reask && state?.state === 'PENDING' && <span className="tag warn">new times - ask again</span>}
         <div className="spacer" />
         <span className="small muted">
           {formatVnd(item.price_vnd_at_request)}
@@ -335,6 +347,7 @@ function ItemCard({
             listingUrl: item.listing_url,
             priceVnd: item.price_vnd_at_request,
             availability,
+            rescheduled: reask,
           })}
           label={sendLabel}
           onSend={message => post({ action: 'CONTACTED', channel: 'ZALO', message })}

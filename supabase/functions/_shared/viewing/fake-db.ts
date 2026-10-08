@@ -147,6 +147,7 @@ export class FakeDb {
             return chain;
           },
           is: (col: string, val: unknown) => { rows = rows.filter(r => (r[col] ?? null) === val); return chain; },
+          in: (col: string, vals: unknown[]) => { rows = rows.filter(r => vals.includes(r[col])); return chain; },
           then: (resolve: (x: { data: null; error: null }) => unknown) => {
             for (const r of rows) Object.assign(r, patch);
             return resolve({ data: null, error: null });

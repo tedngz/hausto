@@ -104,12 +104,16 @@ export async function deliver(
   ]);
 
   const view = reduceRequest(opts.requestId, (events ?? []) as DomainEvent[]);
-  const listings: StopListing[] = (items ?? []).map((i: Record<string, unknown>) => ({
-    itemId: String(i.id),
-    listingTitle: String(i.listing_title ?? 'A place'),
-    districtCode: (i.district_code as string) ?? null,
-    priceVndAtRequest: Number(i.price_vnd_at_request ?? 0),
-  }));
+  // A place the renter removed is not one they asked about any more, so it is
+  // neither a stop nor counted in "3 of the 5 places you asked about".
+  const listings: StopListing[] = (items ?? [])
+    .filter((i: Record<string, unknown>) => view.items[String(i.id)]?.state !== 'WITHDRAWN')
+    .map((i: Record<string, unknown>) => ({
+      itemId: String(i.id),
+      listingTitle: String(i.listing_title ?? 'A place'),
+      districtCode: (i.district_code as string) ?? null,
+      priceVndAtRequest: Number(i.price_vnd_at_request ?? 0),
+    }));
 
   let text: string;
   let stops = 0;

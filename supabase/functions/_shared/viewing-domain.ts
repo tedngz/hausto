@@ -55,6 +55,17 @@ export const EVENT_TYPES = [
   // deadline waits for it to close rather than cancel under a renter who is
   // paying (lock-in.ts `lockInLapsed`).
   'LOCK_IN_CHECKOUT_OPENED',
+  // The renter took one place out of the request, from the Viewings tab
+  // (renter-edits.ts). The item becomes WITHDRAWN for good; its agent is owed
+  // a release at once if they were holding time (reminders.ts
+  // realtorDecisionsOwed), without waiting for the request to close.
+  'ITEM_WITHDRAWN',
+  // The renter gave new times before the plan was put together
+  // (renter-edits.ts), payload `{availability, previous}`. Every agent asked
+  // about the old times is asked again: their items go back to PENDING with
+  // their round counted, and one who was holding a slot is owed a release if
+  // the request closes before they are asked again.
+  'AVAILABILITY_CHANGED',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
   'REQUEST_FAILED',
@@ -85,6 +96,10 @@ export const ITEM_STATES = [
   'PRICE_CHANGED',
   'NO_RESPONSE',
   'UNREACHABLE',
+  // The renter removed the place (ITEM_WITHDRAWN). Final: nothing about its
+  // agent moves it again. What the agent had said underneath is kept as
+  // `withdrawnFrom`, which decides whether they are owed a release.
+  'WITHDRAWN',
 ] as const;
 export type ItemState = typeof ITEM_STATES[number];
 
@@ -178,7 +193,24 @@ const TERMINAL_ITEM_STATES = new Set<ItemState>([
   'PRICE_CHANGED',
   'NO_RESPONSE',
   'UNREACHABLE',
+  'WITHDRAWN',
 ]);
+
+/**
+ * What an agent said about the renter's times, which new times undo
+ * (AVAILABILITY_CHANGED). Rented, a different price and a dead number are
+ * about the place, not the day, and stand.
+ */
+const ANSWERED_ABOUT_TIMES = new Set<ItemState>([
+  'CONTACTED',
+  'CONFIRMED',
+  'ALTERNATIVE_OFFERED',
+  'UNAVAILABLE',
+  'NO_RESPONSE',
+]);
+
+/** States in which an agent is holding a slot, or still looking for one. */
+export const HOLDING_TIME_STATES = new Set<ItemState>(['CONFIRMED', 'ALTERNATIVE_OFFERED', 'CONTACTED']);
 
 export interface DomainEvent {
   id: number;
@@ -202,6 +234,19 @@ export interface ItemView {
   notified?: RealtorDecision;
   /** How the renter finds the viewing on the day (VIEWING_DETAILS_RECORDED). */
   details?: ViewingDetails;
+  /**
+   * How many times the renter's new times sent this item back to be asked
+   * again (AVAILABILITY_CHANGED). Keys the AI operator's proposals, so a
+   * second ask is a new proposal rather than the first one again.
+   */
+  round: number;
+  /**
+   * The agent was holding a slot at the old times and has not been asked
+   * about the new ones yet. Owed a release if the request ends first.
+   */
+  staleHold?: boolean;
+  /** Where the item stood when the renter removed it (state is WITHDRAWN). */
+  withdrawnFrom?: ItemState;
 }
 
 /**
@@ -243,6 +288,8 @@ export interface RequestView {
   cancelledReason?: string;
   /** Ho Chi Minh City dates whose viewing-day message has gone out. */
   viewingDaysSent: string[];
+  /** How many times the renter changed their times (AVAILABILITY_CHANGED). */
+  availabilityChanges: number;
 }
 
 /**
@@ -260,7 +307,7 @@ export function sortEvents(events: DomainEvent[]): DomainEvent[] {
 }
 
 function emptyItem(itemId: string): ItemView {
-  return { itemId, state: 'PENDING', slots: [], nudges: 0 };
+  return { itemId, state: 'PENDING', slots: [], nudges: 0, round: 0 };
 }
 
 /**
@@ -285,12 +332,18 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
     substituteListingIds: [],
     viewingDaysSent: [],
     checkouts: [],
+    availabilityChanges: 0,
   };
 
   const item = (id: string): ItemView => {
     if (!view.items[id]) view.items[id] = emptyItem(id);
     return view.items[id];
   };
+  // Removed places, applied after the loop: until then each item reduces as
+  // if it were still in the request, so `withdrawnFrom` says what its agent
+  // last told us - including an answer that arrived after the renter removed
+  // it, which still leaves that agent holding a slot.
+  const withdrawn = new Set<string>();
 
   for (const e of sortEvents(events)) {
     const p = (e.payload ?? {}) as Record<string, unknown>;
@@ -324,6 +377,8 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         // finished item back to CONTACTED.
         if (TERMINAL_ITEM_STATES.has(it.state)) break;
         it.state = 'CONTACTED';
+        // Asked about the new times: the old slot is superseded by this ask.
+        delete it.staleHold;
         if (view.state === 'SUBMITTED') view.state = 'CONTACTING';
         break;
       }
@@ -341,6 +396,8 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         it.state = OUTCOME_TO_ITEM_STATE[outcome];
         it.slots = Array.isArray(p.slots) ? p.slots : [];
         if (typeof p.actual_price_vnd === 'number') it.actualPriceVnd = p.actual_price_vnd;
+        // An answer after new times is an answer about them.
+        delete it.staleHold;
         if (view.state === 'SUBMITTED' || view.state === 'DRAFT') view.state = 'CONTACTING';
         break;
       }
@@ -433,6 +490,34 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         view.checkouts.push({ checkoutId: p.checkout_id, openedAt: e.occurred_at, expiresAt: p.expires_at });
         break;
 
+      case 'ITEM_WITHDRAWN':
+        if (e.item_id) {
+          item(e.item_id);
+          withdrawn.add(e.item_id);
+        }
+        break;
+
+      case 'AVAILABILITY_CHANGED':
+        // New times. Every agent's answer about the old ones is undone, and
+        // they are asked again (planner.ts, keyed on the round). Those still
+        // to be asked count a round too, so a first ask drafted with the old
+        // times is not the one that goes.
+        view.availabilityChanges += 1;
+        for (const it of Object.values(view.items)) {
+          if (it.state !== 'PENDING' && !ANSWERED_ABOUT_TIMES.has(it.state)) continue;
+          if (HOLDING_TIME_STATES.has(it.state)) it.staleHold = true;
+          it.state = 'PENDING';
+          delete it.outcome;
+          delete it.actualPriceVnd;
+          it.slots = [];
+          it.nudges = 0;
+          it.round += 1;
+        }
+        // Intake only allows it before assembly; a plan assembled in the
+        // meantime no longer covers anything, as with a place joining.
+        if (view.state === 'ASSEMBLING') view.state = 'CONTACTING';
+        break;
+
       case 'REQUEST_CONFIRMED':
         view.confirmedItemIds = Array.isArray(p.confirmed_item_ids) ? p.confirmed_item_ids as string[] : [];
         if ((COVERS as readonly string[]).includes(p.cover as string)) view.confirmedCover = p.cover as Cover;
@@ -459,6 +544,12 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
     }
   }
 
+  for (const id of withdrawn) {
+    const it = item(id);
+    it.withdrawnFrom = it.state;
+    it.state = 'WITHDRAWN';
+  }
+
   return view;
 }
 
@@ -474,7 +565,8 @@ export function summarise(view: RequestView): {
   isPartial: boolean;
   hasNothing: boolean;
 } {
-  const items = Object.values(view.items);
+  // A place the renter removed is not part of what they asked for any more.
+  const items = Object.values(view.items).filter(i => i.state !== 'WITHDRAWN');
   const confirmed = items.filter(i => i.state === 'CONFIRMED').length;
   const unresolved = items.filter(i => i.state === 'PENDING' || i.state === 'CONTACTED').length;
   return {

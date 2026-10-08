@@ -253,3 +253,9 @@ verify_jwt = false
 # An admin's JWT, checked against user_roles in the function. Spends Firecrawl
 # and OpenAI budget per call.
 verify_jwt = false
+
+[functions.viewing-request-manage]
+# The hub's Viewings tab (2026-10-08): lists the renter's requests and makes
+# their changes. Verifies the caller's JWT itself and answers only for the
+# account each request belongs to, like viewing-lock-in.
+verify_jwt = false
