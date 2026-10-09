@@ -66,7 +66,7 @@ const Terms = () => (
         </p>
         <p>
           Once one of your viewings has gone ahead, the Pass is not refundable. Your first viewing is
-          free, so there is nothing to refund on it. The promise is about viewings: a Priority search
+          free, so there is nothing to refund on it. The promise is about viewings: an Extensive search
           that finds nothing that fits is not refunded.
         </p>
         <p>

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FakeDb } from './fake-db.ts';
 import {
   areaLabel, areaLabelVi, districtCodeOf, districtLabel, districtLabelVi, isDistrictCode, placeOf,
-  prioritySearchFromQuery, prioritySearchPath,
+  prioritySearchFromQuery, prioritySearchPath, REPLY_WITHIN_HOURS, replyWithinText,
 } from './place.ts';
 import { CITY_DISTRICTS } from '../../../../src/utils/districts.ts';
 
@@ -93,5 +93,14 @@ describe('the Priority search link', () => {
 
   it('is null without the parameter', () => {
     expect(prioritySearchFromQuery(new URLSearchParams('tab=viewings'))).toBeNull();
+  });
+});
+
+describe('how a promise reads', () => {
+  it('says whole days past a day, and hours up to one', () => {
+    expect(replyWithinText(REPLY_WITHIN_HOURS.AREA)).toBe('3 days');
+    expect(replyWithinText(REPLY_WITHIN_HOURS.BUILDING)).toBe('24 hours');
+    expect(replyWithinText(48)).toBe('2 days');
+    expect(replyWithinText(36)).toBe('36 hours');
   });
 });

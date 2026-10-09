@@ -46,6 +46,7 @@ import {
 import type {
   InquiryStage, RenterFoundPlace, RenterInquiry,
 } from '../../../supabase/functions/_shared/viewing/renter-inquiry-view.ts';
+import { SEARCH_NAME } from '../../../supabase/functions/_shared/viewing/place.ts';
 
 type ManagedRequest = RenterRequest & { waLink: string };
 type ManagedInquiry = RenterInquiry & { waLink: string };
@@ -275,7 +276,7 @@ function InquiryCard({ inquiry: q }: { inquiry: ManagedInquiry }) {
               <span className="text-xs text-muted-foreground">{shortDate(q.createdAt)}</span>
             </div>
             <p className="mt-0.5 text-sm font-medium">
-              {area ? `Priority search in ${q.place}` : `Availability at ${q.place}`}
+              {`${SEARCH_NAME} ${area ? 'in' : 'at'} ${q.place}`}
             </p>
             <p className="mt-0.5 text-sm text-muted-foreground">{q.stageLabel}</p>
           </div>

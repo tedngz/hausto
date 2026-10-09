@@ -14,10 +14,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { CITY_DISTRICTS } from '@/utils/districts';
 import { Loader2, MessageCircle, Search } from 'lucide-react';
 import {
-  MAX_AREA_DISTRICTS, REPLY_WITHIN_HOURS, districtCodeOf,
+  MAX_AREA_DISTRICTS, REPLY_WITHIN_HOURS, SEARCH_NAME, districtCodeOf, replyWithinText,
 } from '../../supabase/functions/_shared/viewing/place.ts';
 
-/** What a thin search already knows, so Priority search opens filled in. */
+/** What a thin search already knows, so an Extensive search opens filled in. */
 export interface SearchPrefill {
   /** District names as the renter app writes them: "District 2", "Binh Thanh". */
   districts?: string[];
@@ -51,12 +51,14 @@ const joinPlaces = (names: string[]) =>
   names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 
 /**
- * "Request availability at Empire City" (SPEC §11), and Priority search - the
- * same ask for an area, which is the Pass's.
+ * Extensive search (SPEC §11): "Request availability at Empire City", or the
+ * same ask for an area. One feature to the renter since 2026-10-10 (owner's
+ * decision), titled the same either way.
  *
  * Both are the Pass's (owner's decision, 2026-10-07). A person on our team
- * asks the agents and replies on WhatsApp: within 24 hours for a building, and
- * within 48 for an area, where they search agents' circles and Facebook groups. One form, then one
+ * asks the agents in our network and replies on WhatsApp: within 24 hours for
+ * a building, and within 3 days for an area. Where we look is never named
+ * (2026-10-10). One form, then one
  * message: the renter sends us the text WhatsApp opens with. That message is
  * the opt-in and proves the number is theirs, so the form never asks for one -
  * any country's works - and the clock starts when it arrives.
@@ -198,15 +200,15 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         ) : gate === 'SIGN_IN' || gate === 'PASS' ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">{isSearch ? 'Priority search' : 'Request availability'}</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">{SEARCH_NAME}</DialogTitle>
               <DialogDescription>
                 {isSearch ? 'When the place you want is not in the table' : complexName}
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm">
               {isSearch
-                ? `A person on our team searches Facebook groups and agents' circles for places that fit, and sends the first ones on WhatsApp within ${REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent.`
-                : `A person on our team checks with the agents who hold units at ${complexName} and tells you on WhatsApp what is free, within ${REPLY_WITHIN_HOURS.BUILDING} hours.`}
+                ? `We ask the agents in our network for places that fit, and send the first ones on WhatsApp within ${replyWithinText(REPLY_WITHIN_HOURS.AREA)} - each one confirmed with its agent.`
+                : `We ask the agents who hold units at ${complexName} and tell you on WhatsApp what is free, within ${replyWithinText(REPLY_WITHIN_HOURS.BUILDING)}.`}
             </p>
             {gate === 'SIGN_IN' ? (
               <>
@@ -251,8 +253,8 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
             </Button>
             <p className="text-sm text-muted-foreground">
               {isSearch
-                ? `A person on our team searches agents' circles and Facebook groups in ${handoff.place}, and sends the first places there within ${hours} hours of your message - each one confirmed with its agent.`
-                : `A person on our team checks with the agents who hold units at ${handoff.place} and replies there within ${hours} hours of your message.`}
+                ? `We ask the agents in our network about ${handoff.place}, and send the first places within ${replyWithinText(hours)} of your message - each one confirmed with its agent.`
+                : `We ask the agents who hold units at ${handoff.place} and reply within ${replyWithinText(hours)} of your message.`}
               {' '}Until {until} we will also tell you when a new listing there fits. Reply STOP any time.
             </p>
             <p className="text-xs text-muted-foreground">
@@ -263,7 +265,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">{isSearch ? 'Priority search' : 'Request availability'}</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">{SEARCH_NAME}</DialogTitle>
               <DialogDescription>
                 {isSearch ? 'Step 1 of 2' : `${complexName} · Step 1 of 2`}
               </DialogDescription>
@@ -376,8 +378,8 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
               </Button>
               <p className="text-center text-xs text-muted-foreground">
                 {isSearch
-                  ? `First places on WhatsApp within ${hours} hours, each confirmed with its agent. One search at a time. Any country's number works.`
-                  : `A person replies on WhatsApp within ${hours} hours. Any country's number works.`}
+                  ? `First places on WhatsApp within ${replyWithinText(hours)}, each confirmed with its agent. One search at a time. Any country's number works.`
+                  : `A person replies on WhatsApp within ${replyWithinText(hours)}. Any country's number works.`}
               </p>
             </div>
           </>

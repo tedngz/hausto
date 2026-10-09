@@ -328,7 +328,7 @@ describe('dress rehearsal', () => {
     // The promise this message makes must be one something can keep.
     expect(body).not.toMatch(/\bbook(ed|ing)\b/i);
     expect(body).not.toMatch(/come back to you/);
-    expect(body).toContain('Priority search');
+    expect(body).toContain('Extensive search');
 
     log('\n\n  ── Nothing could be confirmed, for a Pass holder ────────────');
     seed();
@@ -339,7 +339,7 @@ describe('dress rehearsal', () => {
     await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [], actor: opsActor('ops-user-1') });
     const forHolder = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
     say('us → RENTER  (no supply, Pass holder)', forHolder);
-    expect(forHolder).toContain('Your Pass includes Priority search');
+    expect(forHolder).toContain('Your Pass includes Extensive search');
   });
 
   it('plays the places that were only busy: asked for other days', async () => {

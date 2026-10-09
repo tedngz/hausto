@@ -134,6 +134,34 @@ export function checkoutHonoured(view: RequestView, checkoutId: string): boolean
   return !!deadline && !!c && c.openedAt < deadline;
 }
 
+/** A bought Pass, as cover reads it: one row of `passes` (kind `pass`). */
+export interface PassWindow {
+  purchasedAt: string;
+  expiresAt: string;
+  refundedAt: string | null;
+}
+
+/**
+ * Was a Pass live when the request was made (2026-10-10)?
+ *
+ * A request made under the Pass is covered at lock-in even if the Pass has run
+ * out since. Agents answer days after they are asked and viewings may be two
+ * weeks out, so a request made on day 29 reaches its plan after day 30 - and
+ * reading the Pass only at lock-in charged that renter a second time for it.
+ * The same idea as the requests made before the gate, which run on the rules
+ * they were made under.
+ *
+ * A refunded Pass covers nothing: its money came back, so what it was bought
+ * for does not lock in on it. Its `expires_at` was brought forward to the
+ * refund, which alone would still count a request made before the refund.
+ */
+export function passLiveAt(passes: PassWindow[], at: string): boolean {
+  const t = Date.parse(at);
+  return passes.some(p => !p.refundedAt
+    && Date.parse(p.purchasedAt) <= t
+    && t < Date.parse(p.expiresAt));
+}
+
 export type LockInChoice =
   | { cover: 'PASS' }
   | { cover: 'FREE_VIEWING'; itemId?: string | null };
@@ -154,8 +182,9 @@ export type LockInDecision =
  * on WhatsApp cannot disagree about what a renter is owed.
  *
  * A Pass holder is always covered for every stop, whatever they asked for -
- * they never spend the free viewing. Without one, the free viewing covers the
- * stop they pick (or the only one).
+ * they never spend the free viewing. `hasPass` is the Pass covering this plan:
+ * live now, or live when it was requested (`passLiveAt`). Without one, the
+ * free viewing covers the stop they pick (or the only one).
  */
 export function decideLockIn(input: {
   stopItemIds: string[];

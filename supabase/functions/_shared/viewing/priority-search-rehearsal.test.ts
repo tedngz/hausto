@@ -146,24 +146,24 @@ describe('Priority search rehearsal', () => {
     expect(search()).toMatchObject({
       complex_id: null, area_district_codes: ['D2', 'BINH_THANH'], area_label: 'District 2 and Binh Thanh', user_id: USER,
     });
-    expect(db.tables.inquiry_events[0]).toMatchObject({ type: 'SUBMITTED', payload: { reply_within_hours: 48 } });
+    expect(db.tables.inquiry_events[0]).toMatchObject({ type: 'SUBMITTED', payload: { reply_within_hours: 72 } });
     expect(db.tables.complex_watches[0]).toMatchObject({ complex_id: null, area_label: 'District 2 and Binh Thanh', status: 'PENDING' });
     const id = String(search().id);
     const text = decodeURIComponent(String(created.body.waLink).split('?text=')[1]);
     expect(text).toBe(`Hi Hausto - please search District 2 and Binh Thanh for me (${created.body.code})`);
 
-    // 2. The code. The search is confirmed, and its 48 hours start.
+    // 2. The code. The search is confirmed, and its 3 days start.
     at('2026-10-06T03:05:00Z');
     const first = await renterSends(text);
     expect(first.action.kind).toBe('WATCH_CONFIRMED');
     expect(first.reply).toContain('Thanks Mai - your search in District 2 and Binh Thanh is in');
-    expect(first.reply).toContain('within 48 hours');
+    expect(first.reply).toContain('within 3 days');
     expect(first.reply).not.toMatch(/[—–]/);
     expect(view().state).toBe('NEW');
-    expect(inquiryDeadline(view())).toBe('2026-10-08T03:05:00.000Z');
+    expect(inquiryDeadline(view())).toBe('2026-10-09T03:05:00.000Z');
     // The reminders move out with the promise: 8 and 2 hours before it.
     expect(db.tables.jobs.filter(j => j.kind === INQUIRY_DEADLINE_JOB).map(j => j.run_after))
-      .toEqual(['2026-10-07T19:05:00.000Z', '2026-10-08T01:05:00.000Z']);
+      .toEqual(['2026-10-08T19:05:00.000Z', '2026-10-09T01:05:00.000Z']);
 
     // 3. Agents asked. Linh, on file, on Zalo through the bridge - the area in
     //    the draft, nothing about Mai.

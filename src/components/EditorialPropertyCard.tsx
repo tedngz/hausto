@@ -176,7 +176,7 @@ export const EditorialPropertyCard = ({
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipedRef = useRef(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
-  // Controlled so pressing the Deep Scan CTA can close it: the scan is read
+  // Controlled so pressing the Deep scan CTA can close it: the scan is read
   // in the chat, and a popover left open sits over the card it is about.
   const [scanOpen, setScanOpen] = useState(false);
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -591,12 +591,12 @@ export const EditorialPropertyCard = ({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                aria-label="Open the Deep Scan for this listing"
+                aria-label="Open the Deep scan for this listing"
                 className={`flex items-center gap-[5px] rounded-full bg-primary/10 text-primary whitespace-nowrap transition-colors hover:bg-primary/20 ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}
                 onClick={e => e.stopPropagation()}
               >
                 <Search className={`flex-shrink-0 ${compact ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} aria-hidden="true" />
-                Deep Scan
+                Deep scan
               </button>
             </PopoverTrigger>
             <PopoverContent

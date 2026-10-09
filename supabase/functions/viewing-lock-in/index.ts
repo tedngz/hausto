@@ -21,9 +21,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
 import {
   freeViewingAvailable,
-  hasPassCover,
   loadLockIn,
   lockIn,
+  planPassCover,
 } from '../_shared/viewing/lock-in-run.ts';
 import { LOCK_IN_REFUSAL_COPY, PASS_DAYS, PASS_PRICE_USD } from '../_shared/viewing/lock-in.ts';
 
@@ -96,8 +96,10 @@ Deno.serve(async (req) => {
     return json({ success: true, cover: result.cover, confirmedItemIds: result.confirmedItemIds, already: result.already });
   }
 
+  // `hasPass` is the Pass covering this plan - live now, or live when it was
+  // requested - since that is what the page offers to lock it in with.
   const [hasPass, freeAvailable] = await Promise.all([
-    hasPassCover(db, ctx.userId),
+    planPassCover(db, ctx),
     freeViewingAvailable(db, ctx.phoneE164),
   ]);
   return json({

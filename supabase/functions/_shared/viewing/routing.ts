@@ -12,7 +12,7 @@ import { refFromMessage } from './intake.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { classifyIntent } from './intent.ts';
 import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './selection.ts';
-import { freeViewingAvailable, hasPassCover, loadLockIn, lockIn } from './lock-in-run.ts';
+import { freeViewingAvailable, loadLockIn, lockIn, planPassCover } from './lock-in-run.ts';
 import { linkAccount, linkCodeFromMessage, type LinkOutcome } from './account-link.ts';
 import { codeUsable, watchCodeFromMessage, type WatchProblem } from './watch.ts';
 import { pendingAlert } from './alerts.ts';
@@ -240,7 +240,7 @@ async function confirmIfDelivered(db: any, requestId: string, timestamp: string)
   const ctx = await loadLockIn(db, { requestId }, now);
   if (!ctx || ctx.view.state !== 'DELIVERED' || ctx.stops.length === 0) return { confirmed: false };
 
-  if (ctx.userId && await hasPassCover(db, ctx.userId)) {
+  if (ctx.userId && await planPassCover(db, ctx)) {
     const result = await lockIn(db, ctx, { userId: ctx.userId, choice: { cover: 'PASS' }, actor: 'RENTER', now });
     return { confirmed: result.ok && !result.already };
   }

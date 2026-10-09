@@ -3,7 +3,8 @@
 // The pure rules first - the deadline, who may lock what in, what blocks a
 // new request - then the paths on MockAdapter with seeded data: the free
 // viewing claimed once per number, a plan cancelled by its deadline with its
-// agents released, and a payment started in time that keeps its plan.
+// agents released, a payment started in time that keeps its plan, and a plan
+// still covered by the Pass it was requested under after that Pass ran out.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
@@ -13,6 +14,7 @@ import {
   lockableStops,
   lockInDeadline,
   lockInStatus,
+  passLiveAt,
   renderLockInLine,
 } from './lock-in.ts';
 import { blocksNewRequest, pickBlocking, type JoinCandidate } from './intake.ts';
@@ -233,6 +235,29 @@ describe('decideLockIn', () => {
   });
 });
 
+describe('passLiveAt', () => {
+  const pass = { purchasedAt: '2026-09-01T00:00:00.000Z', expiresAt: '2026-10-01T00:00:00.000Z', refundedAt: null };
+
+  it('covers a request made while a Pass ran, however long ago it ran out', () => {
+    expect(passLiveAt([pass], '2026-09-30T23:00:00.000Z')).toBe(true);
+    expect(passLiveAt([pass], '2026-09-01T00:00:00.000Z')).toBe(true);
+  });
+
+  it('does not cover a request made before the Pass was bought, or once it ended', () => {
+    expect(passLiveAt([pass], '2026-08-31T23:59:59.000Z')).toBe(false);
+    expect(passLiveAt([pass], '2026-10-01T00:00:00.000Z')).toBe(false);
+    expect(passLiveAt([], '2026-09-15T00:00:00.000Z')).toBe(false);
+  });
+
+  it('does not count a refunded Pass, even for a request made before the refund', () => {
+    const refunded = { ...pass, expiresAt: '2026-09-20T00:00:00.000Z', refundedAt: '2026-09-20T00:00:00.000Z' };
+    expect(passLiveAt([refunded], '2026-09-10T00:00:00.000Z')).toBe(false);
+    // A Pass chained onto it was paid for and kept, so it still counts.
+    const chained = { purchasedAt: '2026-09-05T00:00:00.000Z', expiresAt: '2026-10-20T00:00:00.000Z', refundedAt: null };
+    expect(passLiveAt([refunded, chained], '2026-09-10T00:00:00.000Z')).toBe(true);
+  });
+});
+
 describe('one request at a time', () => {
   const candidate = (over: Partial<JoinCandidate>): JoinCandidate => ({
     requestId: 'r', ref: 'HV-AAAA', createdAt: '2026-09-15T00:00:00Z',
@@ -271,14 +296,14 @@ let adapter: MockAdapter;
 let deps: OpsDeps;
 
 /** A delivered two-stop plan, as the renter's WhatsApp thread has it. */
-async function seedDelivered(requestId = 'req-1', ref = 'HV-4KX2', userId = 'user-1') {
+async function seedDelivered(requestId = 'req-1', ref = 'HV-4KX2', userId = 'user-1', requestedAt = new Date().toISOString()) {
   if (!db.tables.renters.some(r => r.id === 'renter-1')) {
     db.tables.renters.push({
       id: 'renter-1', phone_e164: PHONE, user_id: userId, opted_out_at: null,
       service_window_expires_at: new Date(Date.now() + 6 * HOUR).toISOString(),
     });
   }
-  db.tables.viewing_requests.push({ id: requestId, ref, renter_id: 'renter-1', created_at: new Date().toISOString() });
+  db.tables.viewing_requests.push({ id: requestId, ref, renter_id: 'renter-1', created_at: requestedAt });
   const titles = ['Sunny 2BR in Thao Dien', 'Studio near Ben Thanh'];
   titles.forEach((title, i) => {
     db.tables.external_properties.push({ id: `${requestId}-l${i}`, title, district_code: 'D2', price_vnd: 15_000_000, is_active: true });
@@ -360,6 +385,51 @@ describe('the free viewing, on MockAdapter', () => {
     expect(await lockIn(db as any, ctx, {
       userId: 'someone-else', choice: { cover: 'FREE_VIEWING', itemId: 'req-1-i0' }, actor: 'RENTER', now: Date.now(),
     })).toEqual({ ok: false, reason: 'NOT_YOURS' });
+  });
+});
+
+describe('a Pass that ran out after the request, on MockAdapter', () => {
+  const DAY = 24 * HOUR;
+  /** Bought 32 days ago, so it ran out two days ago. */
+  const ranOut = (refundedAt: string | null = null) => ({
+    id: 'pass-1', renter_id: 'user-1', kind: 'pass',
+    purchased_at: new Date(Date.now() - 32 * DAY).toISOString(),
+    expires_at: new Date(Date.now() - 2 * DAY).toISOString(),
+    refunded_at: refundedAt,
+  });
+
+  it('still covers the plan it was requested under: a yes locks in every stop', async () => {
+    db.tables.passes = [ranOut()];
+    await seedDelivered('req-1', 'HV-4KX2', 'user-1', new Date(Date.now() - 3 * DAY).toISOString());
+    const plan = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
+    expect(plan).toContain('Reply YES to lock these in');
+    expect(plan).not.toContain('/lock-in/');
+
+    // deno-lint-ignore no-explicit-any
+    const ctx = (await loadLockIn(db as any, { ref: 'HV-4KX2' }, Date.now()))!;
+    // deno-lint-ignore no-explicit-any
+    expect(await lockIn(db as any, ctx, {
+      userId: 'user-1', choice: { cover: 'PASS' }, actor: 'RENTER', now: Date.now(),
+    })).toMatchObject({ ok: true, cover: 'PASS', confirmedItemIds: ['req-1-i0', 'req-1-i1'] });
+    expect(viewOf().state).toBe('CONFIRMED');
+    // The free viewing was never touched.
+    expect(db.tables.free_viewings ?? []).toHaveLength(0);
+  });
+
+  it('but not a request made after it ran out, or under a Pass that was refunded', async () => {
+    db.tables.passes = [ranOut()];
+    await seedDelivered('req-1', 'HV-4KX2', 'user-1', new Date(Date.now() - DAY).toISOString());
+    expect(String(db.tables.messages.find(m => m.direction === 'OUT')!.body)).toContain('/lock-in/HV-4KX2');
+
+    db.tables.passes = [ranOut(new Date(Date.now() - 2 * DAY).toISOString())];
+    await seedDelivered('req-2', 'HV-7WRT', 'user-1', new Date(Date.now() - 3 * DAY).toISOString());
+    expect(String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body)).toContain('/lock-in/HV-7WRT');
+    // deno-lint-ignore no-explicit-any
+    const ctx = (await loadLockIn(db as any, { ref: 'HV-7WRT' }, Date.now()))!;
+    // deno-lint-ignore no-explicit-any
+    expect(await lockIn(db as any, ctx, {
+      userId: 'user-1', choice: { cover: 'PASS' }, actor: 'RENTER', now: Date.now(),
+    })).toEqual({ ok: false, reason: 'NEEDS_PASS' });
   });
 });
 

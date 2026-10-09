@@ -85,7 +85,7 @@ const App = () => (
                 the only chat there is now. Renders nothing. */}
             <AssistantHandoff />
             {/* Answers "get the Pass" from surfaces that have no modal of their
-                own - a card's Deep Scan chip, wherever that card is rendered. */}
+                own - a card's Deep scan chip, wherever that card is rendered. */}
             <PassGate />
           </BrowserRouter>
         </ShortlistProvider>

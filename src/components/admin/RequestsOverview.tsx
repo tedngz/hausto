@@ -141,7 +141,7 @@ export const RequestsOverview = () => {
               <Inbox className="h-5 w-5" /> Requests
             </CardTitle>
             <CardDescription className="mt-1">
-              Viewing requests, building availability and priority searches - what needs a person first.
+              Viewing requests, building availability and area searches - what needs a person first.
               Worked in the ops console; a digest email goes to everyone with the ops role.
             </CardDescription>
           </div>
@@ -159,7 +159,7 @@ export const RequestsOverview = () => {
             { n: soon, label: 'due soon', tone: soon ? 'border-amber-300 bg-amber-50 text-amber-800' : '' },
             { n: count('VIEWING'), label: 'viewing requests', tone: '' },
             { n: count('BUILDING'), label: 'building requests', tone: '' },
-            { n: count('SEARCH'), label: 'priority searches', tone: '' },
+            { n: count('SEARCH'), label: 'area searches', tone: '' },
           ].map(t => (
             <div key={t.label} className={cn('rounded-lg border px-3 py-2', t.tone)}>
               <div className="text-xl font-semibold leading-tight">{t.n}</div>

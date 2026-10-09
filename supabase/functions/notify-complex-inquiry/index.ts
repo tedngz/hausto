@@ -15,7 +15,7 @@ import {
 } from "../_shared/concierge-email.ts";
 import { formatVnd } from "../_shared/viewing/format.ts";
 import { windowClosesAt } from "../_shared/viewing/inquiry.ts";
-import { REPLY_WITHIN_HOURS, placeOf } from "../_shared/viewing/place.ts";
+import { REPLY_WITHIN_HOURS, placeOf, replyWithinText } from "../_shared/viewing/place.ts";
 
 // Tells the concierge about an availability request on WhatsApp (SPEC §11).
 //
@@ -149,7 +149,7 @@ const handler = async (req: Request): Promise<Response> => {
       headers: conversationHeaders(inqToken(inquiry.id)),
       html: `
         <h1>New concierge availability request</h1>
-        <p>A renter asked the concierge to ${place?.kind === "AREA" ? "run a priority search (48 hours) in" : "check live availability at"}
+        <p>A renter asked the concierge to ${place?.kind === "AREA" ? `run an area search (${replyWithinText(REPLY_WITHIN_HOURS.AREA)}) in` : "check live availability at"}
         <strong>${esc(complexName)}</strong>${complex?.district ? ` (${esc(complex.district)})` : ""}.</p>
 
         <h2>Renter</h2>
@@ -175,7 +175,7 @@ const handler = async (req: Request): Promise<Response> => {
         <p style="margin-top: 20px; padding: 15px; background-color: #f0f9ff; border-left: 4px solid #3b82f6;">
           <strong>Just hit Reply</strong> to answer ${esc(inquiry.full_name)} - your words go to their WhatsApp
           from the Hausto number, and the reply shows up on this request in Admin Tools. We told them a person
-          would reply within ${REPLY_WITHIN_HOURS[place?.kind ?? "BUILDING"]} hours. ${windowNote(inquiry)}
+          would reply within ${replyWithinText(REPLY_WITHIN_HOURS[place?.kind ?? "BUILDING"])}. ${windowNote(inquiry)}
         </p>
       `,
     });

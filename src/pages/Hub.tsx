@@ -98,7 +98,7 @@ const Hub = () => {
   // rail breakpoint remounts the chat, and the pins should survive that.
   const [seedSubjects] = useState(handoff?.subjects);
   const [seedCompareIds] = useState(handoff?.compareIds);
-  // A Deep Scan asked for from a card elsewhere, read here on arrival.
+  // A Deep scan asked for from a card elsewhere, read here on arrival.
   const [seedDeepScan] = useState(handoff?.deepScan);
   // Set while either pane has a compare panel up. Both live inside a pane that
   // is only mounted while its tab is active, so switching tabs closes them.
@@ -146,7 +146,7 @@ const Hub = () => {
     const open = () => setIsChatOpen(true);
     window.addEventListener(ASSISTANT_OPEN_EVENT, open);
     window.addEventListener(ASSISTANT_COMPARE_EVENT, open);
-    // A Deep Scan is read in the chat, so asking for one has to open it too -
+    // A Deep scan is read in the chat, so asking for one has to open it too -
     // otherwise the scan is generated into a collapsed sheet and the press
     // looks like it did nothing.
     window.addEventListener(DEEP_SCAN_EVENT, open);

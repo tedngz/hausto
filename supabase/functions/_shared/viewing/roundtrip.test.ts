@@ -264,11 +264,11 @@ describe('the round trip, end to end on MockAdapter', () => {
     const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
     expect(result.ok).toBe(true);
     const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
-    // Not a promise to come back: Priority search, filled in from the
+    // Not a promise to come back: Extensive search, filled in from the
     // shortlist, next to the free viewing this number still has.
     expect(text).not.toContain('come back to you');
     expect(text).toContain('Your free viewing is still unused');
-    expect(text).toMatch(/Priority search, part of the Pass \(\$25 for 30 days\): https:\/\/hausto\.com\/hub\?priority=\S+/);
+    expect(text).toMatch(/Extensive search, part of the Pass \(\$25 for 30 days\): https:\/\/hausto\.com\/hub\?priority=\S+/);
     expect(view().state).toBe('DELIVERED');
   });
 
@@ -284,7 +284,7 @@ describe('the round trip, end to end on MockAdapter', () => {
     const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
     expect(text).toContain('can be seen on the days you gave, but this one has not been rented:');
     expect(text).toContain('https://hausto.com/hub?tab=viewings');
-    expect(text).not.toMatch(/close matches|Priority search|no longer free/);
+    expect(text).not.toMatch(/close matches|Extensive search|no longer free/);
 
     // A question, not a plan: nothing assembled or delivered, so the renter
     // can still change their times, and no close matches were offered.

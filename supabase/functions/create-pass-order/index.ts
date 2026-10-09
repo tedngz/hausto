@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { hasPassCover, loadLockIn } from "../_shared/viewing/lock-in-run.ts";
+import { loadLockIn, planPassCover } from "../_shared/viewing/lock-in-run.ts";
 import { recordDigestOptIn } from "../_shared/viewing/account-link.ts";
 
 // Opens the Polar checkout session for a Hausto Pass ($25, 30 days).
@@ -93,9 +93,9 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
         );
       }
-      if (await hasPassCover(supabaseClient, user.id)) {
+      if (await planPassCover(supabaseClient, lockInFor)) {
         return new Response(
-          JSON.stringify({ error: "You already hold the Pass - lock the plan in on its page." }),
+          JSON.stringify({ error: "Your Pass already covers this plan - lock it in on its page." }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
         );
       }

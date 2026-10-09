@@ -20,7 +20,7 @@
 
 import { formatVnd, hcmcDate } from './format.ts';
 import { MAX_BEDROOMS, MAX_BUDGET_VND, MAX_MOVE_IN_DAYS, MIN_BUDGET_VND } from './watch.ts';
-import { MAX_AREA_DISTRICTS, REPLY_WITHIN_HOURS, isDistrictCode } from './place.ts';
+import { MAX_AREA_DISTRICTS, REPLY_WITHIN_HOURS, isDistrictCode, replyWithinText } from './place.ts';
 
 export const LEASE_MONTHS = [6, 12, 24] as const;
 export const MAX_NOTES = 1000;
@@ -152,12 +152,13 @@ export function describeInquiry(s: InquirySummary): string {
  */
 export function renderInquiryConfirmed(s: InquirySummary & { watchExpiresAt: string }): string {
   if (s.kind === 'AREA') {
-    // Priority search: a person searches agents' circles and groups, which is
-    // slower than asking a building's agents - so the promise is 48 hours, and
-    // every place offered is one an agent has confirmed.
+    // An area: asking round an area's agents is slower than asking a
+    // building's - so the promise is 3 days, and every place offered is one an
+    // agent has confirmed. Where we look is ours to know, not the renter's
+    // (owner's decision, 2026-10-10): "our network", never a named source.
     return [
       `Thanks ${firstName(s.fullName)} - your search in ${s.complexName} is in: ${describeInquiry(s)}.`,
-      `Someone on our team is searching Facebook groups and agents' circles for it now, and will send the first places here within ${REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent.`,
+      `Someone on our team is asking the agents in our network now, and will send the first places here within ${replyWithinText(REPLY_WITHIN_HOURS.AREA)} - each one confirmed with its agent.`,
       `Until ${dayMonth(s.watchExpiresAt)} we will also message you when a new listing there fits. Reply STOP any time.`,
     ].join('\n\n');
   }

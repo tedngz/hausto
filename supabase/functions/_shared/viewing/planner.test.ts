@@ -368,13 +368,13 @@ describe('nothing at the renter\'s times', () => {
     expect(byKey(plan(busy()))['DELIVER:r']).toBeUndefined();
   });
 
-  it('proposes telling them, with close matches or Priority search, when everything was rented', () => {
+  it('proposes telling them, with close matches or an Extensive search, when everything was rented', () => {
     const events = [
       ...submitted(2),
       ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'ALREADY_RENTED', slots: [] }, 'i1'),
       ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'NO_RESPONSE', slots: [] }, 'i2'),
     ];
-    expect(byKey(plan(events))['DELIVER:r'].rationale).toContain('Priority search');
+    expect(byKey(plan(events))['DELIVER:r'].rationale).toContain('Extensive search');
   });
 
   it('waits on the renter once asked, and asks again after new times come back the same', () => {

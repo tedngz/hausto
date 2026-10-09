@@ -9,6 +9,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
 import { FREE_TIER_LIMITS } from '@/hooks/useUsageTracking';
 import { toast } from 'sonner';
+import { MAX_ITEMS } from '../../supabase/functions/_shared/viewing/intake.ts';
+import { REPLY_WITHIN_HOURS, SEARCH_NAME, replyWithinText } from '../../supabase/functions/_shared/viewing/place.ts';
 
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -31,7 +33,7 @@ interface SubscriptionModalProps {
  * The Pass lists only what it adds over Free. A row-for-row comparison made
  * every line say "Same" or "No" on one side, which was most of the reading
  * and none of the information. Each line leads with the amount, in bold -
- * "1 free viewing", "Unlimited AI credits" - so the bold words
+ * "1 free viewing", "Every viewing arranged" - so the bold words
  * alone compare the plans, and any detail follows in muted text.
  */
 type Feature = { lead: string; rest?: string };
@@ -45,12 +47,17 @@ const FREE: Feature[] = [
   { lead: `${AI_CREDITS} AI credits`, rest: ' a day' },
 ];
 
+// Short, and about what the renter gets - never where we look (owner's
+// decision, 2026-10-10). No cap on viewings over the 30 days, but not
+// "unlimited" either: a request is one day of viewings (MAX_ITEMS) and one is
+// worked at a time (pickBlocking), said here so the first time a renter meets
+// either rule is not a refusal. A building and an area are one Extensive
+// search; the slower promise, an area's, is the one stated.
 const PASS: Feature[] = [
-  { lead: 'Unlimited viewings arranged', rest: ' - every agent dealt with, one plan on WhatsApp' },
-  { lead: 'Availability at any building', rest: ' - we ask the agents who hold units there' },
-  { lead: 'Priority search', rest: ' - our team puts your search first and sends you places that fit' },
-  { lead: 'Match alerts', rest: ' - new places that fit you, up to 2 a week on WhatsApp' },
-  { lead: 'Deep Scans', rest: ' - an honest read of any place, with its price history and time on the market' },
+  { lead: 'Every viewing arranged', rest: ` - up to ${MAX_ITEMS} places a day, one plan at a time` },
+  { lead: SEARCH_NAME, rest: ` - nothing fits? We ask our agent network and reply within ${replyWithinText(REPLY_WITHIN_HOURS.AREA)}` },
+  { lead: 'Match alerts', rest: ' - new places that fit you, up to 2 a week' },
+  { lead: 'Deep scan', rest: ' - an honest read of any place, with its price changes' },
   { lead: 'Unlimited AI credits' },
 ];
 
@@ -111,7 +118,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
             {reason
               ? reasonMessages[reason]
               : pass?.active
-                ? 'Your Pass covers every viewing we confirm while it runs.'
+                ? 'Your Pass covers every viewing we arrange while it runs.'
                 : 'We deal with the agents for you, in the local language, and your number never reaches them. Your first viewing is on us - the Pass has us arrange every one after that.'}
           </DialogDescription>
         </DialogHeader>

@@ -510,8 +510,11 @@ the Pass past one free place - and **cover at lock-in** - `decideLockIn` in
 `_shared/viewing/lock-in.ts` - for the lock-in page, the payment and a
 WhatsApp "yes" alike:
 
-- The Pass covers every stop. `has_active_pass` or `has_complimentary_pass`,
-  read at lock-in, not at request.
+- The Pass covers every stop: one live at lock-in (`has_active_pass` or
+  `has_complimentary_pass`), or one that was live, and not refunded, when the
+  request was made (`planPassCover` in `lock-in-run.ts`, 2026-10-10). A
+  request made on day 29 reaches its plan after day 30, and must not be sold
+  the Pass twice.
 - The free viewing covers one stop, once per WhatsApp number, claimed in
   `free_viewings` (primary key on the number) at lock-in.
 - A Pass bought from the lock-in page carries the request in its checkout's log
@@ -524,4 +527,6 @@ Priority search - an availability request for an area rather than a building
 request is made, one open search per account. So is a building request since
 2026-10-07 (owner's decision; it was free for everyone and filled the agent
 roster), signed in, in `_shared/viewing/inquiry-create.ts`. A viewing request
-reads it through `requestGate`, with the one free place.
+reads it through `requestGate`, with the one free place. Renters see the two
+as one feature, **Extensive search** (`SEARCH_NAME` in `place.ts`, 2026-10-10),
+and renter copy never names where we look - "our network", not Facebook.

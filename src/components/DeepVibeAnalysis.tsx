@@ -108,7 +108,7 @@ export const DeepVibeAnalysis = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-                <span className="font-medium text-sm">Deep Scan</span>
+                <span className="font-medium text-sm">Deep scan</span>
               </div>
               {title && (
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">{title}</p>
@@ -213,7 +213,7 @@ export const DeepVibeAnalysis = ({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 font-medium text-sm">
           <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-          Deep Scan
+          Deep scan
           {locked && (
             <Badge variant="secondary" className="text-[10px]">Pass</Badge>
           )}
@@ -225,7 +225,7 @@ export const DeepVibeAnalysis = ({
           {ctaOnly && analysis
             ? 'Already read for you - open it in the chat, beside the listing it read.'
             : crawled
-              ? 'The layout and light, who it suits, the honest downsides, how the area fits you, and its price history and time on the market.'
+              ? 'The layout and light, who it suits, the honest downsides, how the area fits you, any price changes we have seen and how long it has been listed.'
               : 'The layout and light, who it suits, the honest downsides, and how the area fits you.'}
         </p>
       </div>
@@ -236,9 +236,9 @@ export const DeepVibeAnalysis = ({
             Reading the photos...
           </>
         ) : ctaOnly && analysis ? (
-          'Open the Deep Scan'
+          'Open the Deep scan'
         ) : (
-          'Get the Deep Scan'
+          'Get the Deep scan'
         )}
       </Button>
     </div>

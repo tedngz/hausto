@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 // no claim about the wider market — so it needs no sample-size threshold, unlike
 // the building-level bands.
 //
-// Part of the Deep Scan since 2026-10-08 (owner's decision): price moves, days
+// Part of the Deep scan since 2026-10-08 (owner's decision): price moves, days
 // on the market and a relist are intel the Pass sells, so this renders inside
 // the scan's read - which titles it - rather than under every listing.
 

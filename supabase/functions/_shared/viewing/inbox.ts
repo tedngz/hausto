@@ -44,7 +44,7 @@ export interface InboxRow {
 export const KIND_LABEL: Record<InboxKind, string> = {
   VIEWING: 'Viewing',
   BUILDING: 'Building',
-  SEARCH: 'Priority search',
+  SEARCH: 'Area search',
 };
 
 /** The console, opened on this request. */

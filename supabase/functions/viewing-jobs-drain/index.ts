@@ -73,7 +73,7 @@ async function digestUpdates(db: Supa, from: string, until: string): Promise<Upd
     for (const q of (inquiries ?? []) as { id: string; complex_id: string | null; area_label: string | null; area_district_codes: string[] | null }[]) {
       const place = await placeOf(db, q).catch(() => null);
       const kind = q.complex_id ? 'BUILDING' : 'SEARCH';
-      const name = place?.name ?? (kind === 'SEARCH' ? 'a priority search' : 'a building');
+      const name = place?.name ?? (kind === 'SEARCH' ? 'an area search' : 'a building');
       updates.push(...inquiryUpdates(kind, name, ((inqEvents ?? []) as InquiryEvent[]).filter(e => e.inquiry_id === q.id), q.id));
       // One line per thread per pass, however many messages the renter sent.
       const last = ((inbound ?? []) as { inquiry_id: string; created_at: string }[])

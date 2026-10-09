@@ -1,4 +1,4 @@
-// The contract for asking for a listing's Deep Scan from anywhere.
+// The contract for asking for a listing's Deep scan from anywhere.
 //
 // The scan is long - layout, fit, downsides, neighbourhood, commute - and it is
 // written against the renter's preferences, so it is something to sit and read

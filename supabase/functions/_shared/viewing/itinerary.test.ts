@@ -295,7 +295,7 @@ describe('nothing confirmed', () => {
   const offer = (o: Partial<PrioritySearchOffer> = {}): PrioritySearchOffer => ({
     url: 'https://hausto.com/hub?priority=D7&beds=2&max=17000000',
     hasPass: false, freeViewing: true, browseUrl: 'https://hausto.com/hub',
-    passPriceUsd: 25, passDays: 30, replyWithinHours: 48, ...o,
+    passPriceUsd: 25, passDays: 30, replyWithinHours: 72, ...o,
   });
 
   it('ends on something to do, never on a promise to come back', () => {
@@ -304,16 +304,16 @@ describe('nothing confirmed', () => {
     for (const o of [offer({ hasPass: true }), offer(), offer({ freeViewing: false })]) {
       const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 4, substitutes: [], prioritySearch: o });
       expect(text).not.toMatch(/come back to you/);
-      expect(text).toContain('Priority search');
+      expect(text).toContain('Extensive search');
       expect(text).toContain('/hub?priority=D7');
       expect(text).not.toMatch(/Search for me/i);
     }
   });
 
-  it('offers Priority search as theirs to a Pass holder, without a price', () => {
+  it('offers Extensive search as theirs to a Pass holder, without a price', () => {
     const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 2, substitutes: [], prioritySearch: offer({ hasPass: true }) });
-    expect(text).toContain('Your Pass includes Priority search');
-    expect(text).toContain('within 48 hours');
+    expect(text).toContain('Your Pass includes Extensive search');
+    expect(text).toContain('within 3 days');
     expect(text).not.toContain('$25');
     expect(text).not.toContain('free viewing');
   });
@@ -322,7 +322,7 @@ describe('nothing confirmed', () => {
     const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 2, substitutes: [], prioritySearch: offer() });
     const lines = text.split('\n');
     const free = lines.findIndex(l => l.includes('free viewing is still unused'));
-    const pass = lines.findIndex(l => l.includes('Priority search, part of the Pass ($25 for 30 days)'));
+    const pass = lines.findIndex(l => l.includes('Extensive search, part of the Pass ($25 for 30 days)'));
     expect(free).toBeGreaterThan(0);
     expect(pass).toBe(free + 1);
     expect(lines[free]).toContain('https://hausto.com/hub');
@@ -331,17 +331,17 @@ describe('nothing confirmed', () => {
   it('does not mention a free viewing the number has already had', () => {
     const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 2, substitutes: [], prioritySearch: offer({ freeViewing: false }) });
     expect(text).not.toContain('free viewing');
-    expect(text).toContain('To find more, have our team look for you');
+    expect(text).toContain('To find more, let us ask the agents in our network for you');
   });
 
-  it('leaves Priority search out when there are close matches to reply to', () => {
+  it('leaves Extensive search out when there are close matches to reply to', () => {
     const text = renderNoSupply({
       ref: 'HV-4KX7', requestedCount: 2,
       substitutes: [{ title: 'Flat A', priceVnd: 14_000_000, districtCode: 'D3' }],
       prioritySearch: offer(),
     });
     expect(text).toContain('Reply with a number');
-    expect(text).not.toContain('Priority search');
+    expect(text).not.toContain('Extensive search');
   });
 
   it('says "the place" for one, not "none of the 1 places"', () => {
