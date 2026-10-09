@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FakeDb } from './fake-db.ts';
 import {
   areaLabel, areaLabelVi, districtCodeOf, districtLabel, districtLabelVi, isDistrictCode, placeOf,
+  prioritySearchFromQuery, prioritySearchPath,
 } from './place.ts';
 import { CITY_DISTRICTS } from '../../../../src/utils/districts.ts';
 
@@ -70,5 +71,27 @@ describe('placeOf', () => {
     expect(await placeOf(db as any, { complex_id: 'cx-gone' })).toBeNull();
     // deno-lint-ignore no-explicit-any
     expect(await placeOf(db as any, { complex_id: null, area_district_codes: [], area_label: 'x' })).toBeNull();
+  });
+});
+
+describe('the Priority search link', () => {
+  it('reads back what it carries, as the form takes it', () => {
+    const path = prioritySearchPath({ districtCodes: ['D7', 'TAN_PHU', 'D7'], bedrooms: 2, budgetMaxVnd: 17_000_000 });
+    expect(path).toBe('/hub?priority=D7,TAN_PHU&beds=2&max=17000000');
+    const back = prioritySearchFromQuery(new URL(`https://hausto.com${path}`).searchParams);
+    expect(back).toEqual({ districts: ['District 7', 'Tan Phu'], bedrooms: 2, budgetMaxVnd: 17_000_000 });
+    // The names the form keeps are the ones it can turn back into codes.
+    expect(back!.districts.map(districtCodeOf)).toEqual(['D7', 'TAN_PHU']);
+  });
+
+  it('caps the districts at what a search may name, and drops what is not a code', () => {
+    const path = prioritySearchPath({ districtCodes: ['D1', 'D2', 'D3', 'D4', 'D5', 'nope'], bedrooms: 0, budgetMaxVnd: null });
+    expect(path).toBe('/hub?priority=D1,D2,D3,D4');
+    expect(prioritySearchFromQuery(new URLSearchParams('priority=D1,<script>&beds=abc&max=-5')))
+      .toEqual({ districts: ['District 1'], bedrooms: null, budgetMaxVnd: null });
+  });
+
+  it('is null without the parameter', () => {
+    expect(prioritySearchFromQuery(new URLSearchParams('tab=viewings'))).toBeNull();
   });
 });

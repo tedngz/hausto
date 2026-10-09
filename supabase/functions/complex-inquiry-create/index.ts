@@ -1,5 +1,5 @@
 // Create a concierge availability request (SPEC §11). The complex page's
-// "Request availability" form posts here, and so does Search for me.
+// "Request availability" form posts here, and so does Priority search.
 //
 // The rules - both kinds for a signed-in Pass holder (a building since
 // 2026-10-07), an area with no other search open, and the 48 hours an area is

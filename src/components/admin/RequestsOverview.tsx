@@ -1,7 +1,7 @@
 // Every request, all three kinds, for admins - read-only.
 //
 // Viewing requests, availability requests for a building, and priority
-// searches (Search for me, an area), ranked by what needs a person first
+// searches (an area), ranked by what needs a person first
 // (`_shared/viewing/inbox.ts`, the same order as the ops console's Inbox and
 // the digest email). Each row opens the request in the console, which is where
 // it is worked.

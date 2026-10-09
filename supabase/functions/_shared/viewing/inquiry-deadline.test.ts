@@ -77,7 +77,7 @@ describe('no request passes 24 hours unanswered without a reminder (property)', 
       expect(s.beforeMs).toBeGreaterThan(0);
       expect(s.beforeMs).toBeLessThan(INQUIRY_REPLY_WITHIN_MS);
     }
-    // At 16h and 22h after the code, as before Search for me.
+    // At 16h and 22h after the code, as before Priority search.
     expect(deadlineJobs('i', iso(T0)).map(j => Date.parse(j.run_after) - T0)).toEqual([16 * H, 22 * H]);
   });
 

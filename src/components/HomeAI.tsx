@@ -60,7 +60,7 @@ interface PropertyMatch {
 }
 /**
  * Blocks that read after a reply's listings rather than before them: the
- * follow-up chips, and Search for me under a search that found little.
+ * follow-up chips, and Priority search under a search that found little.
  */
 const BELOW_RESULTS = new Set(['followups', 'search_for_me']);
 

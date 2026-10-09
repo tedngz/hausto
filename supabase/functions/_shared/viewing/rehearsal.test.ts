@@ -327,6 +327,37 @@ describe('dress rehearsal', () => {
 
     // The promise this message makes must be one something can keep.
     expect(body).not.toMatch(/\bbook(ed|ing)\b/i);
+    expect(body).not.toMatch(/come back to you/);
+    expect(body).toContain('Priority search');
+
+    log('\n\n  ── Nothing could be confirmed, for a Pass holder ────────────');
+    seed();
+    db.rpcResults.has_active_pass = () => true;
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    for (const id of itemIds) record(id, { outcome: 'ALREADY_RENTED' });
+    // deno-lint-ignore no-explicit-any
+    await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [], actor: opsActor('ops-user-1') });
+    const forHolder = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    say('us → RENTER  (no supply, Pass holder)', forHolder);
+    expect(forHolder).toContain('Your Pass includes Priority search');
+  });
+
+  it('plays the places that were only busy: asked for other days', async () => {
+    log('\n\n  ── Not on those days ────────────────────────────────────────');
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    record(itemIds[0], { outcome: 'UNAVAILABLE_DATE' });
+    record(itemIds[1], { outcome: 'UNAVAILABLE_DATE' });
+    for (const id of itemIds.slice(2)) record(id, { outcome: 'ALREADY_RENTED' });
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, {
+      requestId, purpose: 'ITINERARY', order: [], actor: opsActor('ops-user-1'),
+    });
+    expect(result).toMatchObject({ ok: true, otherDays: true });
+    const body = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    say('us → RENTER  (other days)', body);
+    expect(body).not.toMatch(/\bbook(ed|ing)\b/i);
+    expect(view().state).toBe('CONTACTING');
   });
 
   it('plays the two alternative paths: offered times beside a plan, and instead of one', async () => {

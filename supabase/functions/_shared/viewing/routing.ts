@@ -307,7 +307,7 @@ async function confirmWatch(
     }
   }
 
-  // A building's name, or an area's label (Search for me).
+  // A building's name, or an area's label (Priority search).
   const { data: complex } = w.complex_id
     ? await db.from('complexes').select('name').eq('id', w.complex_id).maybeSingle()
     : { data: null };

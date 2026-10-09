@@ -19,6 +19,7 @@ import { validateOutcome, outcomePayload, opsActor } from './outcomes.ts';
 import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
 import { dueActions, SILENCE_ACTION_MS } from './reminders.ts';
 import { decideAction } from './agent.ts';
+import { canChangeTimes } from './renter-view.ts';
 import { performAction } from './agent-act.ts';
 
 const PHONE = '+84901234567';
@@ -263,7 +264,57 @@ describe('the round trip, end to end on MockAdapter', () => {
     const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
     expect(result.ok).toBe(true);
     const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
-    expect(text).toContain('come back to you today');
+    // Not a promise to come back: Priority search, filled in from the
+    // shortlist, next to the free viewing this number still has.
+    expect(text).not.toContain('come back to you');
+    expect(text).toContain('Your free viewing is still unused');
+    expect(text).toMatch(/Priority search, part of the Pass \(\$25 for 30 days\): https:\/\/hausto\.com\/hub\?priority=\S+/);
+    expect(view().state).toBe('DELIVERED');
+  });
+
+  it('asks for other days when the places are only busy, and leaves the times open to change', async () => {
+    record(itemIds[0], { outcome: 'UNAVAILABLE_DATE' });
+    for (let i = 1; i < itemIds.length; i++) record(itemIds[i], { outcome: 'ALREADY_RENTED' });
+    await inbound('hi');
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    expect(result).toMatchObject({ ok: true, otherDays: true, held: false, stops: 0 });
+
+    const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
+    expect(text).toContain('can be seen on the days you gave, but this one has not been rented:');
+    expect(text).toContain('https://hausto.com/hub?tab=viewings');
+    expect(text).not.toMatch(/close matches|Priority search|no longer free/);
+
+    // A question, not a plan: nothing assembled or delivered, so the renter
+    // can still change their times, and no close matches were offered.
+    const types = db.tables.events.map(e => e.type);
+    expect(types).toContain('OTHER_DAYS_ASKED');
+    expect(types).not.toContain('ITINERARY_ASSEMBLED');
+    expect(types).not.toContain('ITINERARY_DELIVERED');
+    expect(types).not.toContain('SUGGESTIONS_OFFERED');
+    expect(view().state).toBe('CONTACTING');
+    expect(canChangeTimes(view())).toBe(true);
+    expect(view().otherDaysAsked).toMatchObject({ held: false });
+  });
+
+  it('holds the other-days question behind a template with the window shut, and asks it when they write', async () => {
+    record(itemIds[0], { outcome: 'UNAVAILABLE_DATE' });
+    for (let i = 1; i < itemIds.length; i++) record(itemIds[i], { outcome: 'ALREADY_RENTED' });
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    expect(result).toMatchObject({ ok: true, otherDays: true, held: true });
+    expect(adapter.delivered[0]).toMatchObject({ templateName: 'request_update' });
+    expect(view().otherDaysAsked).toMatchObject({ held: true });
+    expect(canChangeTimes(view())).toBe(true);
+
+    await inbound('hi');
+    // deno-lint-ignore no-explicit-any
+    const released = await releaseHeldItinerary(db as any, adapter, 'renter-1');
+    expect(released?.result).toMatchObject({ ok: true, otherDays: true, held: false });
+    expect(String(adapter.delivered[adapter.delivered.length - 1].body ?? '')).toContain('Pick other days');
+    expect(view().otherDaysAsked).toMatchObject({ held: false });
   });
 
   it('holds the plan behind a template with the window shut, and sends it when they write', async () => {

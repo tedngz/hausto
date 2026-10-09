@@ -492,3 +492,64 @@ describe('AVAILABILITY_ADDED: times added as a place joins', () => {
     for (const order of permutations(log)) expect(JSON.stringify(reduceRequest(REQ, order))).toBe(expected);
   });
 });
+
+describe('OTHER_DAYS_ASKED: the renter asked for other days', () => {
+  const base = () => [
+    ev('REQUEST_SUBMITTED', { at: '2026-10-08T00:00:01.000Z' }),
+    ev('ITEM_ADDED', { item: 'i1', at: '2026-10-08T00:00:01.000Z' }),
+    ev('ITEM_ADDED', { item: 'i2', at: '2026-10-08T00:00:01.000Z' }),
+    ev('REALTOR_CONTACTED', { item: 'i1', at: '2026-10-08T00:00:02.000Z' }),
+    ev('REALTOR_CONTACTED', { item: 'i2', at: '2026-10-08T00:00:02.000Z' }),
+    ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'UNAVAILABLE_DATE' }, at: '2026-10-08T00:00:03.000Z' }),
+    ev('OUTCOME_RECORDED', { item: 'i2', payload: { outcome: 'ALREADY_RENTED' }, at: '2026-10-08T00:00:03.000Z' }),
+  ];
+  const asked = (at = '2026-10-08T00:00:04.000Z', held = false) =>
+    ev('OTHER_DAYS_ASKED', { payload: { message_id: held ? 't1' : 'm1', ...(held ? { held: true } : {}) }, at });
+  const changed = (at = '2026-10-08T00:00:06.000Z') =>
+    ev('AVAILABILITY_CHANGED', { payload: { availability: [{ date: '2026-10-12', part: 'MORNING' }] }, at });
+
+  it('records the question and moves no state: the request stays open for new times', () => {
+    const view = reduceRequest(REQ, [...base(), asked()]);
+    expect(view.otherDaysAsked).toEqual({ at: '2026-10-08T00:00:04.000Z', messageId: 'm1', held: false });
+    expect(view.state).toBe('CONTACTING');
+    expect(view.deliveredMessageId).toBeUndefined();
+    expect(view.itineraryOrder).toEqual([]);
+    expect(view.items.i1.state).toBe('UNAVAILABLE');
+  });
+
+  it('is answered by new times, in any arrival order', () => {
+    // The busy agent is asked again; the rented place stays rented.
+    for (const order of permutations([...base(), asked(), changed()])) {
+      const view = reduceRequest(REQ, order);
+      expect(view.otherDaysAsked).toBeUndefined();
+      expect(view.items.i1).toMatchObject({ state: 'PENDING', round: 1 });
+      expect(view.items.i2.state).toBe('ALREADY_RENTED');
+    }
+  });
+
+  it('stands when it is asked again after new times came back the same way', () => {
+    for (const order of permutations([...base(), asked(), changed(), asked('2026-10-08T00:00:09.000Z')])) {
+      expect(reduceRequest(REQ, order).otherDaysAsked?.at).toBe('2026-10-08T00:00:09.000Z');
+    }
+  });
+
+  it('lets the question sent on their reply replace the one held behind a template', () => {
+    for (const order of permutations([...base(), asked('2026-10-08T00:00:04.000Z', true), asked('2026-10-08T00:00:07.000Z')])) {
+      expect(reduceRequest(REQ, order).otherDaysAsked).toMatchObject({ held: false, messageId: 'm1' });
+    }
+    expect(reduceRequest(REQ, [...base(), asked(undefined, true)]).otherDaysAsked).toMatchObject({ held: true });
+  });
+
+  it('is cleared by a plan going out, as when a place that joined was confirmed', () => {
+    const view = reduceRequest(REQ, [
+      ...base(), asked(),
+      ev('ITINERARY_DELIVERED', { payload: { message_id: 'm2' }, at: '2026-10-08T00:00:08.000Z' }),
+    ]);
+    expect(view.otherDaysAsked).toBeUndefined();
+    expect(view.state).toBe('DELIVERED');
+  });
+
+  it('ignores a question with no message id', () => {
+    expect(reduceRequest(REQ, [...base(), ev('OTHER_DAYS_ASKED', { payload: {} })]).otherDaysAsked).toBeUndefined();
+  });
+});

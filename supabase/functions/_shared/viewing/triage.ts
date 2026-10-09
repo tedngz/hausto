@@ -123,6 +123,20 @@ export function triage(
     return { urgency: 'OK', rank: 50, waitingOn: 'Plan held - goes when the renter replies', actionable: false };
   }
 
+  // Asked for other days: theirs to answer, in the Viewings tab, and new times
+  // put the agents back above. A day or two of silence is a to-do of its own
+  // (CHASE_RENTER), not this row turning red.
+  if (view.otherDaysAsked && s.confirmed === 0) {
+    return {
+      urgency: 'OK',
+      rank: 50,
+      waitingOn: view.otherDaysAsked.held
+        ? 'Asking for other days - goes when the renter replies'
+        : 'Asked the renter for other days',
+      actionable: false,
+    };
+  }
+
   // Every item has landed. Whether that is an itinerary or a dead end, it is
   // the operator's move either way - and a zero-confirmed request ships with
   // substitutes rather than on its own (invariant 5).
@@ -131,7 +145,7 @@ export function triage(
     rank: urgencyRank * 10 + 2,
     waitingOn: s.confirmed > 0
       ? `Ready to assemble - ${s.confirmed} of ${s.total} confirmed`
-      : 'Nothing confirmed - needs substitutes',
+      : 'Nothing confirmed - tell the renter',
     actionable: true,
   };
 }

@@ -97,7 +97,7 @@ interface InquiryRow {
   id: string;
   channel: string;
   whatsapp_confirmed_at: string | null;
-  /** Null for an area (Search for me): its districts are below. */
+  /** Null for an area (Priority search): its districts are below. */
   complex_id: string | null;
   area_district_codes: string[] | null;
   area_label: string | null;
@@ -586,7 +586,7 @@ async function offerableUnits(
     return refuse(422, 'not_requestable', `${rejected.length} of those cannot be requested: ${rejected[0].reason}`);
   }
 
-  // Search for me promises every place is confirmed with its agent: an ad is
+  // Priority search promises every place is confirmed with its agent: an ad is
   // not availability. So an area's offer carries only its captured units - an
   // advertised listing in its districts is a lead, asked about and then added.
   if (place?.kind === 'AREA') {

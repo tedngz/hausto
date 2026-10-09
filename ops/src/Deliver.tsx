@@ -13,11 +13,15 @@ import { useMemo, useState } from 'react';
 import { supabase, invokeFailure } from './supabase';
 import {
   assembleItinerary,
+  freeOnOtherDays,
   renderItinerary,
   renderNoSupply,
+  renderOtherDays,
   renderAlternativesOnly,
   type StopListing,
 } from '../../supabase/functions/_shared/viewing/itinerary';
+import { VIEWINGS_PATH } from '../../supabase/functions/_shared/viewing/renter-view';
+import { SITE_URL } from '../../supabase/functions/_shared/viewing/watch';
 import type { RequestView } from '../../supabase/functions/_shared/viewing-domain';
 
 export function Deliver({
@@ -38,7 +42,7 @@ export function Deliver({
     [view],
   );
   const [order, setOrder] = useState<string[]>(confirmedIds);
-  const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Keep the order honest if an outcome changed underneath it.
@@ -50,17 +54,26 @@ export function Deliver({
 
   // The no-supply preview cannot show the real substitutes: they are chosen
   // server-side at send time, against the index as it stands then rather than
-  // as it stood when this screen loaded. Saying so beats showing an empty list
-  // an operator would read as "there are none".
-  // Same three branches as deliver.ts, so the preview is the message.
+  // as it stood when this screen loaded. Nor its Priority search line, which
+  // depends on the renter's Pass. Saying so beats showing an empty list an
+  // operator would read as "there are none".
+  // Same four branches as deliver.ts, so the preview is the message.
   const noStops = assembled.stops.length === 0;
+  const busy = noStops && assembled.alternatives.length === 0 ? freeOnOtherDays(view, listings) : [];
+  const otherDays = busy.length > 0;
   const preview = noStops && assembled.alternatives.length > 0
     ? renderAlternativesOnly({ ref: requestRef, requestedCount: listings.length, alternatives: assembled.alternatives })
+    : otherDays
+      ? renderOtherDays({
+          ref: requestRef, requestedCount: listings.length, places: busy, changeTimesUrl: `${SITE_URL}${VIEWINGS_PATH}`,
+        })
     : noStops
       ? renderNoSupply({ ref: requestRef, requestedCount: listings.length, substitutes: [] })
       : renderItinerary({
           ref: requestRef, stops: assembled.stops, requestedCount: listings.length, alternatives: assembled.alternatives,
         });
+  // Asked already, and nothing has changed since: the renter's move.
+  const askedForDays = otherDays && !!view.otherDaysAsked;
 
   const move = (i: number, delta: number) => {
     const next = [...effective];
@@ -71,12 +84,12 @@ export function Deliver({
   };
 
   const deliver = async () => {
-    setBusy(true);
+    setSending(true);
     setError(null);
     const { data, error: err } = await supabase.functions.invoke('viewing-deliver', {
       body: { requestId, purpose: 'ITINERARY', order: effective },
     });
-    setBusy(false);
+    setSending(false);
     const failure = await invokeFailure(data, err, 'Failed to send');
     if (failure) {
       setError(failure);
@@ -115,11 +128,23 @@ export function Deliver({
         </p>
       )}
 
-      {noStops && assembled.alternatives.length === 0 && (
+      {otherDays && (
         <p className="small" style={{ marginBottom: 4 }}>
-          Nothing confirmed. Sending this tells the renter so, and carries up to
-          three close matches chosen at send time - same districts, same bedroom
-          count, within their price band. The preview below shows the wording,
+          {askedForDays
+            ? <>Asked the renter for other days {view.otherDaysAsked!.held ? '(waiting behind a template for their reply)' : ''}.
+                New times from their Viewings tab send every agent back to be asked. Sending again repeats the question.</>
+            : <>Nothing confirmed, but {busy.length === 1 ? 'one place was' : `${busy.length} places were`} only busy
+                on those days, not rented. Sending this asks the renter for other days - it is not a plan, so their
+                times stay open to change, and new ones send every agent back to be asked.</>}
+        </p>
+      )}
+
+      {noStops && assembled.alternatives.length === 0 && !otherDays && (
+        <p className="small" style={{ marginBottom: 4 }}>
+          Nothing confirmed and nothing left. Sending this tells the renter so, and carries up to
+          three close matches chosen at send time - same districts, same bedroom count, within
+          their price band. With none, it offers Priority search instead, filled in from this
+          request, worded for whether they hold the Pass. The preview below shows the wording,
           not the actual picks.
         </p>
       )}
@@ -148,7 +173,7 @@ export function Deliver({
       <div className="row" style={{ marginTop: 6 }}>
         <button
           className="primary"
-          disabled={busy || assembled.warnings.some(w => w.kind === 'OVERLAP')}
+          disabled={sending || assembled.warnings.some(w => w.kind === 'OVERLAP')}
           onClick={() => void deliver()}
           title={
             assembled.warnings.some(w => w.kind === 'OVERLAP')
@@ -156,7 +181,7 @@ export function Deliver({
               : undefined
           }
         >
-          {busy ? 'Sending...' : alreadySent ? 'Send again' : 'Send itinerary'}
+          {sending ? 'Sending...' : alreadySent || askedForDays ? 'Send again' : otherDays ? 'Ask for other days' : 'Send itinerary'}
         </button>
         {alreadySent && <span className="small muted">Re-sending is deduplicated unless the attempt changes.</span>}
       </div>

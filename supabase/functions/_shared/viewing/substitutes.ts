@@ -1,10 +1,13 @@
 // Picking substitutes when a shortlist comes back empty.
 //
-// `renderNoSupply` has always taken substitutes, and nothing has ever produced
-// any - the ops console passes an empty array. So a zero-confirmed request
-// currently tells the renter "we are looking for close matches and will come
-// back to you today", and then nobody does. That is a promise the system
-// cannot keep, which is worse than the dead end it was meant to avoid.
+// `renderNoSupply` has always taken substitutes, and for a long time nothing
+// produced any - the ops console passed an empty array. So a zero-confirmed
+// request told the renter "we are looking for close matches and will come
+// back to you today", and then nobody did. That is a promise the system
+// cannot keep, which is worse than the dead end it was meant to avoid. With
+// none found now, the message offers Priority search instead (deliver.ts).
+// Only for places that are gone: a place whose agent could not do the days
+// is asked about again, not replaced (itinerary.ts freeOnOtherDays).
 //
 // **Deterministic, not a model.** PLAN-v3 puts substitutes in the agent's
 // scope, but the agent's value is parsing natural language, and this is not

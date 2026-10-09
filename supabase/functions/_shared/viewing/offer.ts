@@ -40,7 +40,7 @@ export interface UnitInput {
   /** For the operator and the log; never shown to the renter. */
   note: string | null;
   /**
-   * Search for me: where an area's unit is - the building or street, and one
+   * Priority search: where an area's unit is - the building or street, and one
    * of the area's district codes. A building's unit is at the building.
    */
   building?: string | null;
@@ -204,7 +204,7 @@ export interface OfferSection {
   complexName: string;
   inquiryId: string;
   units: OfferUnit[];
-  /** A search (Search for me) found these in an area, not at a building. */
+  /** A Priority search found these in an area, not at a building. */
   kind?: 'BUILDING' | 'AREA';
 }
 

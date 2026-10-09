@@ -71,6 +71,15 @@ export const EVENT_TYPES = [
   // nothing anyone was asked is undone, and the joining place's agent is
   // asked about every time on the request.
   'AVAILABILITY_ADDED',
+  // Every agent answered, none can do the renter's times, and at least one
+  // place was not rented - only busy then (UNAVAILABLE_DATE). So the renter is
+  // asked for other days rather than told nothing is free (deliver.ts),
+  // payload `{message_id, held?}`. Moves no state: the request stays open for
+  // new times (renter-view.ts canChangeTimes), and the times they give send
+  // every agent back to be asked (AVAILABILITY_CHANGED), which clears it.
+  // `held` is the ask waiting behind a template while their window was shut;
+  // their reply releases it, like a held plan.
+  'OTHER_DAYS_ASKED',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
   'REQUEST_FAILED',
@@ -295,6 +304,12 @@ export interface RequestView {
   viewingDaysSent: string[];
   /** How many times the renter changed their times (AVAILABILITY_CHANGED). */
   availabilityChanges: number;
+  /**
+   * We asked the renter for other days (OTHER_DAYS_ASKED) and they have not
+   * given them yet. `held` while the ask waits behind a template for their
+   * reply. Cleared by new times, and by a plan going out.
+   */
+  otherDaysAsked?: { at: string; messageId: string; held: boolean };
 }
 
 /**
@@ -429,6 +444,8 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
       case 'ITINERARY_DELIVERED':
         if (typeof p.message_id === 'string') view.deliveredMessageId = p.message_id;
         delete view.heldItinerary;
+        // A place that joined and was confirmed made a plan after all.
+        delete view.otherDaysAsked;
         view.planArrivedAt ??= e.occurred_at;
         view.lastDeliveredAt = e.occurred_at;
         if (view.state !== 'CONFIRMED' && view.state !== 'CANCELLED' && view.state !== 'FAILED_NO_SUPPLY') {
@@ -508,6 +525,7 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         // to be asked count a round too, so a first ask drafted with the old
         // times is not the one that goes.
         view.availabilityChanges += 1;
+        delete view.otherDaysAsked;
         for (const it of Object.values(view.items)) {
           if (it.state !== 'PENDING' && !ANSWERED_ABOUT_TIMES.has(it.state)) continue;
           if (HOLDING_TIME_STATES.has(it.state)) it.staleHold = true;
@@ -526,6 +544,14 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
       case 'AVAILABILITY_ADDED':
         // More times, none taken away: every answer stands. The windows
         // themselves live on the request row, which every reader asks.
+        break;
+
+      case 'OTHER_DAYS_ASKED':
+        // The newest stands, so the ask sent on their reply replaces the one
+        // held behind the template. New times that sort after it have answered
+        // it (AVAILABILITY_CHANGED clears it), whatever order the log arrived.
+        if (typeof p.message_id !== 'string') break;
+        view.otherDaysAsked = { at: e.occurred_at, messageId: p.message_id, held: p.held === true };
         break;
 
       case 'REQUEST_CONFIRMED':
@@ -674,7 +700,7 @@ export interface InquiryView {
   closedAt: string | null;
   /**
    * How long the renter was promised a reply in, from the code: 24 hours for
-   * a building, 48 for an area (Search for me), as SUBMITTED recorded it.
+   * a building, 48 for an area (Priority search), as SUBMITTED recorded it.
    */
   replyWithinMs: number;
 }

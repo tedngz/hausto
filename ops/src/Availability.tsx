@@ -1,5 +1,5 @@
 // Availability requests: "check what is free at Empire City" (SPEC §11,
-// PLAN-v3 S7.1) - and Search for me, the same job for an area.
+// PLAN-v3 S7.1) - and Priority search, the same job for an area.
 //
 // A sourcing job with a 24-hour clock from the renter's WhatsApp code (48 for
 // an area). The brief shows what fits on file (advertised - an agent still has
@@ -10,7 +10,7 @@
 //
 // An area request has no building: its agents are the ones listing in its
 // districts, each unit is entered with where it is, and only units an agent
-// has confirmed can be offered - Search for me promises that.
+// has confirmed can be offered - Priority search promises that.
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, invokeFailure } from './supabase';
@@ -30,7 +30,7 @@ import {
 
 interface Row {
   id: string;
-  /** Null for an area (Search for me); `complex_name` is then its label. */
+  /** Null for an area (Priority search); `complex_name` is then its label. */
   complex_id: string | null;
   complex_name: string;
   district: string | null;
@@ -51,7 +51,7 @@ interface Detail {
   id: string;
   /** For an area, the area in this shape: its label, and no id. */
   complex: { id: string | null; name: string; slug: string | null; district: string | null; management_company: string | null };
-  /** Search for me: the districts searched. Null for a building. */
+  /** Priority search: the districts searched. Null for a building. */
   area_district_codes: string[] | null;
   bedrooms: number;
   budget_max_vnd: number | null;
@@ -168,7 +168,7 @@ export function Availability({ openId, onOpen }: { openId: string | null; onOpen
                 <tr key={r.id} onClick={() => setOpenId(r.id)}>
                   <td>
                     <strong>{r.complex_name}</strong>{' '}
-                    {r.area_district_codes ? <span className="tag">Search for me</span> : <span className="small muted">{r.district ?? ''}</span>}
+                    {r.area_district_codes ? <span className="tag">Priority search</span> : <span className="small muted">{r.district ?? ''}</span>}
                   </td>
                   <td className="small">{summary(r)}</td>
                   <td className="small">{v.state}{v.closedReason ? ` · ${v.closedReason}` : ''}</td>
@@ -291,7 +291,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
         <button onClick={onBack}>Back</button>
         <h2 style={{ fontSize: 15, margin: 0 }}>{d.complex.name}</h2>
         {area
-          ? <span className="tag">Search for me</span>
+          ? <span className="tag">Priority search</span>
           : <span className="small muted">{d.complex.district ?? ''}{d.complex.management_company ? ` · ${d.complex.management_company}` : ''}</span>}
         <div className="spacer" />
         <span className="tag">{v.state}{v.closedReason ? ` · ${v.closedReason}` : ''}</span>

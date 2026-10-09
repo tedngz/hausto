@@ -17,7 +17,7 @@ export const INQUIRY_DEADLINE_JOB = 'INQUIRY_DEADLINE';
 
 /**
  * When the reminders fire: 8 and 2 hours before the promise - 16h and 22h
- * for a building's 24, 40h and 46h for an area's 48 (Search for me).
+ * for a building's 24, 40h and 46h for an area's 48 (Priority search).
  */
 export const DEADLINE_STAGES = [
   { stage: '16H', beforeMs: 8 * 3_600_000 },

@@ -82,9 +82,17 @@ describe('what the operator works next', () => {
     expect(t.actionable).toBe(true);
   });
 
-  it('flags a zero-confirmed request as needing substitutes, never as done', () => {
+  it('flags a zero-confirmed request as one to tell the renter about, never as done', () => {
     const v = view(3, [outcome('ALREADY_RENTED', 'i1'), outcome('ALREADY_RENTED', 'i2'), outcome('UNREACHABLE', 'i3')]);
-    expect(triage(v, 3600, null, NOW).waitingOn).toBe('Nothing confirmed - needs substitutes');
+    expect(triage(v, 3600, null, NOW).waitingOn).toBe('Nothing confirmed - tell the renter');
+  });
+
+  it('waits on the renter once they are asked for other days, held or not', () => {
+    const answered = [outcome('UNAVAILABLE_DATE', 'i1'), outcome('UNAVAILABLE_DATE', 'i2')];
+    const held = triage(view(2, [...answered, ev('OTHER_DAYS_ASKED', { message_id: 'm1', held: true })]), 3600, null, NOW);
+    expect(held).toMatchObject({ waitingOn: 'Asking for other days - goes when the renter replies', actionable: false });
+    const asked = triage(view(2, [...answered, ev('OTHER_DAYS_ASKED', { message_id: 'm2' })]), 3600, null, NOW);
+    expect(asked).toMatchObject({ waitingOn: 'Asked the renter for other days', actionable: false, urgency: 'OK' });
   });
 
   it('counts a contacted item as open, and an outcome as closed', () => {

@@ -2,7 +2,7 @@
 // ranking (2026-10-08, the admin revamp).
 //
 // A viewing request, an availability request for a building and a priority
-// search (Search for me, an area) are worked in different screens of the
+// search (an area) are worked in different screens of the
 // console, but an operator starting their day needs one list: what is late,
 // what is waiting on us, and what can wait. The console's Inbox, the admin
 // page's overview and the digest's links all read it from here, so the three
@@ -96,7 +96,7 @@ function inquiryUrgency(view: InquiryView, now: number): Urgency {
 export function inquiryInboxRow(opts: {
   id: string;
   name: string;
-  /** An area, not a building: Search for me. */
+  /** An area, not a building: Priority search. */
   isSearch: boolean;
   createdAt: string;
   events: InquiryEvent[];

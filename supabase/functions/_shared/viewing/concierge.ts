@@ -50,7 +50,7 @@ export async function confirmInquiryForWatch(
     .eq('watch_id', opts.watchId)
     .maybeSingle();
   if (!inq) return null;
-  // An area (Search for me) is promised 48 hours, a building 24.
+  // An area (Priority search) is promised 48 hours, a building 24.
   const kind = inq.complex_id ? 'BUILDING' : 'AREA';
 
   const firstConfirm = !inq.whatsapp_confirmed_at;

@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     const { data: inq } = await db.from('complex_inquiries')
       .select('id, complex_id, area_district_codes, area_label, bedrooms_needed, budget_max_vnd').eq('id', inquiryId).maybeSingle();
     if (!inq) return json({ error: 'Unknown request' }, 404);
-    // A building, or an area (Search for me).
+    // A building, or an area (Priority search).
     const [place, { data: events }] = await Promise.all([
       placeOf(db, inq),
       db.from('inquiry_events').select('id, inquiry_id, type, payload, actor, occurred_at').eq('inquiry_id', inquiryId),

@@ -25,9 +25,12 @@ import { TEMPLATES } from '../whatsapp/templates.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import {
   assembleItinerary,
+  freeOnOtherDays,
   renderItinerary,
   renderNoSupply,
+  renderOtherDays,
   renderAlternativesOnly,
+  type PrioritySearchOffer,
   type StopListing,
   type Warning,
 } from './itinerary.ts';
@@ -35,8 +38,10 @@ import { lastHeardFromUs, renderHoldingUpdate } from './reminders.ts';
 import { hcmcLong } from './format.ts';
 import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
-import { lockInDeadline, renderLockInLine } from './lock-in.ts';
+import { lockInDeadline, renderLockInLine, PASS_DAYS, PASS_PRICE_USD } from './lock-in.ts';
 import { freeViewingAvailable, hasPassCover } from './lock-in-run.ts';
+import { prioritySearchPath, REPLY_WITHIN_HOURS } from './place.ts';
+import { VIEWINGS_PATH } from './renter-view.ts';
 import { SITE_URL } from './watch.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -72,7 +77,9 @@ export type DeliverResult =
        * ready and the plan itself waits for their reply (ITINERARY_HELD).
        * `preview` is the plan that will go, not the template that went.
        */
-      held: boolean }
+      held: boolean;
+      /** It asked the renter for other days rather than sending a plan (OTHER_DAYS_ASKED). */
+      otherDays: boolean }
   | { ok: false;
       code: 'unknown_request' | 'service_window_closed' | 'too_many_consecutive' | 'opted_out' | 'template_unavailable' | 'send_failed';
       message: string; preview?: string };
@@ -119,6 +126,9 @@ export async function deliver(
   let stops = 0;
   let firstStartsAt: string | null = null;
   let alternativesOnly = false;
+  // Nothing at their times, but a place is still there on other days: a
+  // question for the renter, not a plan (OTHER_DAYS_ASKED).
+  let otherDays = false;
   let warnings: Warning[] = [];
   let orderedItemIds: string[] | null = null;
   let substitutes: { title: string; priceVnd: number; districtCode: string | null; listingId?: string }[] = [];
@@ -142,17 +152,29 @@ export async function deliver(
       text = renderAlternativesOnly({
         ref: request.ref, requestedCount: listings.length, alternatives: assembled.alternatives,
       });
+    } else if (stops === 0 && freeOnOtherDays(view, listings).length > 0) {
+      // Their agents could not do those days and did not say the places were
+      // rented. Asking for other days is the answer that keeps the places
+      // the renter chose; "none are still free" would be untrue about them.
+      // No ITINERARY_ASSEMBLED and no ITINERARY_DELIVERED, so their times can
+      // still be changed (renter-view.ts canChangeTimes).
+      otherDays = true;
+      orderedItemIds = null;
+      text = renderOtherDays({
+        ref: request.ref, requestedCount: listings.length,
+        places: freeOnOtherDays(view, listings), changeTimesUrl: `${SITE_URL}${VIEWINGS_PATH}`,
+      });
     } else if (stops === 0) {
-      // Zero confirmed. FAILED_NO_SUPPLY ships with substitutes or it is a
-      // dead end, and a dead end is not something we make a renter read.
-      //
-      // Until now nothing produced any - the ops console passed an empty array
-      // - so the message promised a follow-up nobody was going to make. Now it
-      // finds its own when the caller has not supplied better.
+      // Zero confirmed and nothing to be had on other days. FAILED_NO_SUPPLY
+      // ships with close matches, or with Priority search when there are
+      // none - never with a promise to come back that nothing keeps.
       const found = opts.substitutes ?? await findSubstitutes(db, opts.requestId);
       substitutes = found;
       offeredListingIds = found.map(s => s.listingId).filter((id): id is string => !!id);
-      text = renderNoSupply({ ref: request.ref, requestedCount: listings.length, substitutes: found });
+      text = renderNoSupply({
+        ref: request.ref, requestedCount: listings.length, substitutes: found,
+        prioritySearch: found.length === 0 ? await prioritySearchFor(db, request) : undefined,
+      });
     } else {
       text = renderItinerary({
         ref: request.ref, stops: assembled.stops, requestedCount: listings.length,
@@ -197,9 +219,14 @@ export async function deliver(
 
   // Keyed as above. A held plan's template has a key of its own, so the plan
   // its release sends is a new message rather than a duplicate of it.
+  // The other-days ask names the round of times it is about: new times that
+  // come back the same way ask the same words again, and that is a new
+  // question, not a duplicate of the last.
   const purpose = opts.purpose === 'HOLDING_UPDATE'
     ? `HOLDING_UPDATE:${new Date(lastHeardFromUs((events ?? []) as DomainEvent[], request.created_at)).toISOString()}`
-    : `${held ? 'ITINERARY_HELD' : 'ITINERARY'}:${fingerprint(text)}`;
+    : otherDays
+      ? `${held ? 'OTHER_DAYS_HELD' : 'OTHER_DAYS'}:t${view.availabilityChanges}:${fingerprint(text)}`
+      : `${held ? 'ITINERARY_HELD' : 'ITINERARY'}:${fingerprint(text)}`;
 
   try {
     const result = template
@@ -250,7 +277,7 @@ export async function deliver(
   // have written were written then; writing them again would put two
   // ITINERARY_DELIVERED rows in an append-only log for one delivery.
   if (deduplicated) {
-    return { ok: true, messageId, deduplicated, stops, warnings, preview: text, held };
+    return { ok: true, messageId, deduplicated, stops, warnings, preview: text, held, otherDays };
   }
 
   const actor = opts.actor ?? 'SYSTEM';
@@ -263,19 +290,30 @@ export async function deliver(
       actor,
     });
   }
-  toWrite.push({
-    request_id: opts.requestId,
-    // A holding update is something the renter heard: it moves the silence
-    // clock and nothing else. Only the itinerary is ITINERARY_DELIVERED,
-    // because only that means the plan has gone out.
-    // A held itinerary is neither: the renter knows a plan exists and has not
-    // seen it, so nothing they say yet can confirm it.
-    type: held ? 'ITINERARY_HELD' : opts.purpose === 'ITINERARY' ? 'ITINERARY_DELIVERED' : 'HOLDING_UPDATE_SENT',
-    payload: held
-      ? { message_id: messageId, ordered_item_ids: orderedItemIds ?? [], template: template!.name }
-      : { message_id: messageId, ...(viaTemplate ? { via: 'TEMPLATE' } : {}) },
-    actor,
-  });
+  if (otherDays) {
+    // A question, not a plan: nothing assembled, nothing delivered. Held, it
+    // waits on their reply like a held plan (releaseHeldItinerary).
+    toWrite.push({
+      request_id: opts.requestId,
+      type: 'OTHER_DAYS_ASKED',
+      payload: { message_id: messageId, ...(held ? { held: true, template: template!.name } : {}) },
+      actor,
+    });
+  } else {
+    toWrite.push({
+      request_id: opts.requestId,
+      // A holding update is something the renter heard: it moves the silence
+      // clock and nothing else. Only the itinerary is ITINERARY_DELIVERED,
+      // because only that means the plan has gone out.
+      // A held itinerary is neither: the renter knows a plan exists and has not
+      // seen it, so nothing they say yet can confirm it.
+      type: held ? 'ITINERARY_HELD' : opts.purpose === 'ITINERARY' ? 'ITINERARY_DELIVERED' : 'HOLDING_UPDATE_SENT',
+      payload: held
+        ? { message_id: messageId, ordered_item_ids: orderedItemIds ?? [], template: template!.name }
+        : { message_id: messageId, ...(viaTemplate ? { via: 'TEMPLATE' } : {}) },
+      actor,
+    });
+  }
 
   // What was put in front of the renter, in the order shown. Without this a
   // reply of "2" resolves against nothing and the "reply with a number" line in
@@ -293,7 +331,7 @@ export async function deliver(
   const { error: evErr } = await db.from('events').insert(toWrite);
   if (evErr) console.error('[deliver] event insert failed after a successful send:', evErr);
 
-  return { ok: true, messageId, deduplicated, stops, warnings, preview: text, held };
+  return { ok: true, messageId, deduplicated, stops, warnings, preview: text, held, otherDays };
 }
 
 const CLOSED_STATES = new Set(['CONFIRMED', 'CANCELLED', 'FAILED_NO_SUPPLY']);
@@ -319,8 +357,10 @@ export async function releaseHeldItinerary(
   const ids = (requests ?? []).map((r: { id: string }) => r.id);
   if (ids.length === 0) return null;
 
+  // A question about other days waits the same way, and is released the same
+  // way: deliver() reaches it again from the log as it stands now.
   const { data: heldEvents } = await db
-    .from('events').select('request_id').in('request_id', ids).eq('type', 'ITINERARY_HELD');
+    .from('events').select('request_id').in('request_id', ids).in('type', ['ITINERARY_HELD', 'OTHER_DAYS_ASKED']);
   const candidates = new Set((heldEvents ?? []).map((e: { request_id: string }) => e.request_id));
 
   for (const requestId of ids) {
@@ -329,9 +369,10 @@ export async function releaseHeldItinerary(
       .from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
       .eq('request_id', requestId).order('occurred_at', { ascending: true });
     const view = reduceRequest(requestId, (events ?? []) as DomainEvent[]);
-    if (!view.heldItinerary || CLOSED_STATES.has(view.state)) continue;
+    if (CLOSED_STATES.has(view.state)) continue;
+    if (!view.heldItinerary && !view.otherDaysAsked?.held) continue;
     const result = await deliver(db, adapter, {
-      requestId, purpose: 'ITINERARY', order: view.heldItinerary.orderedItemIds, actor: 'SYSTEM',
+      requestId, purpose: 'ITINERARY', order: view.heldItinerary?.orderedItemIds, actor: 'SYSTEM',
     });
     return { requestId, result };
   }
@@ -377,6 +418,44 @@ async function findSubstitutes(db: Supa, requestId: string) {
     console.error('[deliver] substitute search failed, sending without:', (e as Error).message);
     return [];
   }
+}
+
+/**
+ * Priority search, for a request with nothing left and no close match: a
+ * link that opens it filled in from what the renter shortlisted - its
+ * districts, the most bedrooms, the dearest price - and worded for whether
+ * they hold the Pass and still have their free viewing.
+ */
+async function prioritySearchFor(
+  db: Supa,
+  request: { id: string; renter_id: string },
+): Promise<PrioritySearchOffer> {
+  const { data: renter } = await db
+    .from('renters').select('user_id, phone_e164').eq('id', request.renter_id).maybeSingle();
+  const { data: items } = await db.from('request_items').select('listing_id').eq('request_id', request.id);
+  const listingIds = (items ?? []).map((i: { listing_id: string }) => i.listing_id);
+  const { data: shortlisted } = listingIds.length > 0
+    ? await db.from('external_properties').select('price_vnd, bedrooms, district_code').in('id', listingIds)
+    : { data: [] };
+  const rows = (shortlisted ?? []) as { price_vnd: number | null; bedrooms: number | null; district_code: string | null }[];
+  const most = (xs: (number | null)[]) => {
+    const ns = xs.filter((x): x is number => typeof x === 'number' && x > 0);
+    return ns.length > 0 ? Math.max(...ns) : null;
+  };
+  const hasPass = await hasPassCover(db, renter?.user_id ?? null);
+  return {
+    url: `${SITE_URL}${prioritySearchPath({
+      districtCodes: rows.map(r => r.district_code).filter((d): d is string => !!d),
+      bedrooms: most(rows.map(r => r.bedrooms)),
+      budgetMaxVnd: most(rows.map(r => r.price_vnd)),
+    })}`,
+    hasPass,
+    freeViewing: !hasPass && (renter?.phone_e164 ? await freeViewingAvailable(db, renter.phone_e164) : true),
+    browseUrl: `${SITE_URL}/hub`,
+    passPriceUsd: PASS_PRICE_USD,
+    passDays: PASS_DAYS,
+    replyWithinHours: REPLY_WITHIN_HOURS.AREA,
+  };
 }
 
 /**

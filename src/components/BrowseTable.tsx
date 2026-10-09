@@ -17,7 +17,7 @@ import { useMatches } from '@/hooks/useMatches';
 import { useBrowseListings, type BrowseRow } from '@/hooks/useBrowseListings';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { RequestViewingModal } from '@/components/RequestViewingModal';
-import { SearchForMePrompt } from '@/components/SearchForMePrompt';
+import { PrioritySearchPrompt } from '@/components/PrioritySearchPrompt';
 import { MAX_ITEMS } from '../../supabase/functions/_shared/viewing/intake.ts';
 import { THIN_SEARCH } from '../../supabase/functions/_shared/viewing/place.ts';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
@@ -620,11 +620,11 @@ export const BrowseTable = ({
               <p className="text-center py-12 text-sm text-muted-foreground">No listings match these filters.</p>
             )}
           </div>
-          {/* Search for me, under a thin search in Ho Chi Minh City - the one
+          {/* Priority search, under a thin search in Ho Chi Minh City - the one
               city viewings are arranged in - with these filters as its brief.
               Budgets here are dollars; the brief is dong. */}
           {(city === 'all' || city === 'hcmc') && filtered.length < THIN_SEARCH && (
-            <SearchForMePrompt
+            <PrioritySearchPrompt
               className="mt-4"
               found={filtered.length}
               prefill={{

@@ -1,7 +1,7 @@
 // Where an availability request is for: one building, or an area (Search for
 // me, the pricing rework's step 5; SPEC §11).
 //
-// Until Search for me every request named a complex, and code across the
+// Until Priority search every request named a complex, and code across the
 // concierge flow read its name, district and city straight from `complexes`.
 // An area request has no complex: it has district codes and a label. This is
 // the one place that knows the difference, so the rest asks it rather than
@@ -32,7 +32,7 @@ export const REPLY_WITHIN_HOURS: Record<PlaceKind, number> = { BUILDING: 24, ARE
 
 /**
  * A search showing fewer places than this is thin, and Browse and the chat
- * offer Search for me under it - prefilled from that search.
+ * offer Priority search under it - prefilled from that search.
  */
 export const THIN_SEARCH = 3;
 
@@ -86,6 +86,47 @@ export function areaLabel(codes: string[]): string {
   const labels = [...new Set(codes)].map(districtLabel);
   if (labels.length <= 2) return labels.join(' and ');
   return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
+/**
+ * What a Priority search opens filled in with, from a link: the renter app's
+ * district names, as `SearchPrefill` takes them.
+ */
+export interface PrioritySearchBrief {
+  districtCodes: string[];
+  bedrooms: number | null;
+  budgetMaxVnd: number | null;
+}
+
+/**
+ * The hub, with Priority search open and filled in - for a WhatsApp message
+ * whose places all fell through (deliver.ts). `/hub?priority=D7,BINH_THANH&beds=2&max=17000000`.
+ * Read back by `prioritySearchFromQuery`, so the two cannot disagree.
+ */
+export function prioritySearchPath(b: PrioritySearchBrief): string {
+  const q = new URLSearchParams();
+  q.set('priority', [...new Set(b.districtCodes.filter(isDistrictCode))].slice(0, MAX_AREA_DISTRICTS).join(','));
+  if (b.bedrooms && b.bedrooms > 0) q.set('beds', String(Math.round(b.bedrooms)));
+  if (b.budgetMaxVnd && b.budgetMaxVnd > 0) q.set('max', String(Math.round(b.budgetMaxVnd)));
+  // URLSearchParams writes the comma as %2C; a link a renter can read is
+  // worth keeping it plain, and a comma is legal in a query.
+  return `/hub?${q.toString().replace(/%2C/g, ',')}`;
+}
+
+/** The brief a `prioritySearchPath` link carries, or null when it carries none. */
+export function prioritySearchFromQuery(params: URLSearchParams): {
+  districts: string[]; bedrooms: number | null; budgetMaxVnd: number | null;
+} | null {
+  const raw = params.get('priority');
+  if (raw == null) return null;
+  const codes = raw.split(',').map(s => s.trim()).filter(isDistrictCode).slice(0, MAX_AREA_DISTRICTS);
+  const beds = Number(params.get('beds'));
+  const max = Number(params.get('max'));
+  return {
+    districts: codes.map(districtLabel),
+    bedrooms: Number.isInteger(beds) && beds > 0 ? beds : null,
+    budgetMaxVnd: Number.isFinite(max) && max > 0 ? Math.round(max) : null,
+  };
 }
 
 /** The city an area is in, from its codes. The viewing flow is Ho Chi Minh City's. */

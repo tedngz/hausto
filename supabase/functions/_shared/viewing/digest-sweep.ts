@@ -191,7 +191,7 @@ export async function runDigestSweep(
 
     // Their watches: explicit criteria, at one complex each.
     for (const w of watches.filter(w => w.renter_id === r.id)) {
-      // A building's new listings, or an area's (Search for me): in its districts.
+      // A building's new listings, or an area's (Priority search): in its districts.
       const pool = w.complex_id
         ? atComplex.get(w.complex_id) ?? []
         : newListings.filter(l => !!l.district_code && (w.area_district_codes ?? []).includes(l.district_code));

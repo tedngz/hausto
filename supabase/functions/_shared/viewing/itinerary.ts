@@ -401,17 +401,99 @@ export function renderAlternativesOnly(opts: {
 }
 
 /**
- * Nothing could be confirmed. Never sent on its own (invariant 5) - it carries
- * substitutes, because FAILED_NO_SUPPLY with no alternative is a dead end and
- * a dead end is not an outcome we make a renter read.
+ * With nothing confirmed and no other times offered, the places that can still
+ * be seen on other days: their agents could not do the renter's times
+ * (UNAVAILABLE_DATE) and did not say they were rented.
+ *
+ * Any one of them makes the reply a question about days, not the no-supply
+ * message. "None of the places are still free" would be untrue about each of
+ * them, and close matches would be offered while the places the renter
+ * actually chose are still there.
+ */
+export function freeOnOtherDays(view: RequestView, listings: StopListing[]): StopListing[] {
+  return listings.filter(l => view.items[l.itemId]?.state === 'UNAVAILABLE');
+}
+
+/**
+ * Nothing at the renter's times, and at least one place not rented: pick
+ * other days. The link is the Viewings tab, where "Change times" sends every
+ * agent back to be asked (renter-edits.ts) - which the request allows,
+ * because this message neither assembles nor delivers a plan.
+ */
+export function renderOtherDays(opts: {
+  ref: string;
+  requestedCount: number;
+  places: StopListing[];
+  changeTimesUrl: string;
+}): string {
+  const k = opts.places.length;
+  const lead = opts.requestedCount === 1
+    ? 'The agent cannot show this place on the days you gave, but it has not been rented:'
+    : k === opts.requestedCount
+      ? `The agents cannot show these ${k} places on the days you gave, but ${k === 2 ? 'neither has' : 'none of them has'} been rented:`
+      : `None of the ${opts.requestedCount} places you asked about can be seen on the days you gave, `
+        + `but ${k === 1 ? 'this one has' : `these ${k} have`} not been rented:`;
+  return [
+    lead,
+    '',
+    ...opts.places.map(p => `- ${p.listingTitle} - ${formatVnd(p.priceVndAtRequest)}/month${inDistrict(p.districtCode)}`),
+    '',
+    `Pick other days and we will ask ${k === 1 ? 'the agent' : 'the agents'} again: ${opts.changeTimesUrl}`,
+    `Ref ${opts.ref}`,
+  ].join('\n');
+}
+
+/**
+ * Where a renter goes when nothing they asked about is left and no close
+ * match was found. Priority search is the Pass's (SPEC §11): offered as
+ * theirs to a holder, and in one line, with the price, to anyone else - next
+ * to the free viewing they still have, which is the thing they can use today.
+ */
+export interface PrioritySearchOffer {
+  url: string;
+  hasPass: boolean;
+  /** The free viewing is still unclaimed on their number (lock-in-run.ts). */
+  freeViewing: boolean;
+  /** Where to pick another place: the hub. */
+  browseUrl: string;
+  passPriceUsd: number;
+  passDays: number;
+  replyWithinHours: number;
+}
+
+function prioritySearchLines(o: PrioritySearchOffer): string[] {
+  if (o.hasPass) {
+    return [
+      `Your Pass includes Priority search: our team looks for places that fit and sends them here within ${o.replyWithinHours} hours. `
+        + `Start one, filled in from this request: ${o.url}`,
+    ];
+  }
+  const pitch = `have our team look for you with Priority search, part of the Pass ($${o.passPriceUsd} for ${o.passDays} days): ${o.url}`;
+  return o.freeViewing
+    ? [
+      `Your free viewing is still unused - pick another place and we will arrange it: ${o.browseUrl}`,
+      `Or ${pitch}`,
+    ]
+    : [`To find more, ${pitch}`];
+}
+
+/**
+ * Nothing could be confirmed and nothing can be seen on other days. Never a
+ * dead end (invariant 5): it carries close matches when there are any, and
+ * otherwise Priority search - something the renter can do now, not a promise
+ * that we will come back that nothing in the system keeps.
  */
 export function renderNoSupply(opts: {
   ref: string;
   requestedCount: number;
   substitutes: { title: string; priceVnd: number; districtCode: string | null }[];
+  /** Used when there are no substitutes. */
+  prioritySearch?: PrioritySearchOffer;
 }): string {
   const lines: string[] = [
-    `None of the ${opts.requestedCount} places you asked about are still free - the market here moves in days, not weeks.`,
+    opts.requestedCount === 1
+      ? 'The place you asked about is no longer free - the market here moves in days, not weeks.'
+      : `None of the ${opts.requestedCount} places you asked about are still free - the market here moves in days, not weeks.`,
   ];
   if (opts.substitutes.length > 0) {
     lines.push('');
@@ -421,9 +503,9 @@ export function renderNoSupply(opts: {
     }
     lines.push('');
     lines.push('Reply with a number and we will arrange those viewings.');
-  } else {
+  } else if (opts.prioritySearch) {
     lines.push('');
-    lines.push('We are looking for close matches and will come back to you today.');
+    lines.push(...prioritySearchLines(opts.prioritySearch));
   }
   lines.push(`Ref ${opts.ref}`);
   return lines.join('\n');

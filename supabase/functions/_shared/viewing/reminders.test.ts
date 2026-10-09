@@ -370,3 +370,35 @@ describe('a holding update only the renter can unblock', () => {
     expect(holdingUpdateOnHold({ refusedAt: null, windowExpiresAt: null })).toBe(false);
   });
 });
+
+describe('asked for other days', () => {
+  const asked = (held = false) => logOf(
+    ...submitted(2),
+    ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'UNAVAILABLE_DATE', slots: [] }, 'i1'),
+    ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'UNAVAILABLE_DATE', slots: [] }, 'i2'),
+    ev('OTHER_DAYS_ASKED', 2 * HOUR_MS, { message_id: 'm1', ...(held ? { held: true } : {}) }),
+  );
+  const due = (events: DomainEvent[], nowMs: number) => dueActions({
+    view: reduceRequest('r', events), events, createdAt: at(0), now: T0 + nowMs,
+  }).map(a => a.kind);
+
+  it('counts as the renter hearing from us', () => {
+    expect(lastHeardFromUs(asked(), at(0))).toBe(T0 + 2 * HOUR_MS);
+  });
+
+  it('sends no holding update: the next move is theirs, and "we are waiting on the agents" is false', () => {
+    expect(due(asked(), 60 * HOUR_MS)).not.toContain('HOLDING_UPDATE');
+    expect(due(asked(true), 60 * HOUR_MS)).not.toContain('HOLDING_UPDATE');
+  });
+
+  it('puts an unanswered question on a person\'s list after two days, never a held one', () => {
+    expect(due(asked(), 2 * HOUR_MS + 47 * HOUR_MS)).not.toContain('CHASE_RENTER');
+    expect(due(asked(), 2 * HOUR_MS + 48 * HOUR_MS)).toContain('CHASE_RENTER');
+    expect(due(asked(true), 60 * HOUR_MS)).not.toContain('CHASE_RENTER');
+  });
+
+  it('is off the list once they give new times', () => {
+    const events = [...asked(), ev('AVAILABILITY_CHANGED', 10 * HOUR_MS, { availability: [] })];
+    expect(due(events, 60 * HOUR_MS)).not.toContain('CHASE_RENTER');
+  });
+});

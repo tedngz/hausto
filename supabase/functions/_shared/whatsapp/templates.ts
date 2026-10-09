@@ -84,7 +84,7 @@ export const TEMPLATES = {
       'is then the listing, or "3 places"). Carries no news itself - the renter replies, the window opens, ' +
       'and the detail goes free-form. Utility: it answers a request the renter made. Also the itinerary\'s ' +
       'with the window shut when it is neither ready nor a no-supply with matches - other times on offer, ' +
-      'or nothing found yet (deliver.ts). Approved by Meta on 2026-09-30.',
+      'nothing found yet, or a question about other days (deliver.ts). Approved by Meta on 2026-09-30.',
     approved: true,
   },
 } as const;

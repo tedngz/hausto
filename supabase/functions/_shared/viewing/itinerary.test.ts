@@ -4,11 +4,14 @@ import {
   warningsFor,
   renderItinerary,
   renderNoSupply,
+  renderOtherDays,
   renderAlternativesOnly,
+  freeOnOtherDays,
   DISTRICT_HOP_MINUTES,
   busySlots,
   clashesWith,
   type ItineraryStop,
+  type PrioritySearchOffer,
   type StopListing,
 } from './itinerary.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
@@ -289,11 +292,116 @@ describe('nothing confirmed', () => {
     expect(text).not.toContain('BINH_THANH');
   });
 
-  it('promises a follow-up rather than ending on a dead end', () => {
-    // FAILED_NO_SUPPLY with no alternative is a dead end, and a dead end is
-    // not something we make a renter read.
-    const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 4, substitutes: [] });
-    expect(text).toContain('come back to you today');
+  const offer = (o: Partial<PrioritySearchOffer> = {}): PrioritySearchOffer => ({
+    url: 'https://hausto.com/hub?priority=D7&beds=2&max=17000000',
+    hasPass: false, freeViewing: true, browseUrl: 'https://hausto.com/hub',
+    passPriceUsd: 25, passDays: 30, replyWithinHours: 48, ...o,
+  });
+
+  it('ends on something to do, never on a promise to come back', () => {
+    // "We will come back to you today" was a follow-up nothing in the system
+    // made. Every version ends on a link the renter can use now.
+    for (const o of [offer({ hasPass: true }), offer(), offer({ freeViewing: false })]) {
+      const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 4, substitutes: [], prioritySearch: o });
+      expect(text).not.toMatch(/come back to you/);
+      expect(text).toContain('Priority search');
+      expect(text).toContain('/hub?priority=D7');
+      expect(text).not.toMatch(/Search for me/i);
+    }
+  });
+
+  it('offers Priority search as theirs to a Pass holder, without a price', () => {
+    const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 2, substitutes: [], prioritySearch: offer({ hasPass: true }) });
+    expect(text).toContain('Your Pass includes Priority search');
+    expect(text).toContain('within 48 hours');
+    expect(text).not.toContain('$25');
+    expect(text).not.toContain('free viewing');
+  });
+
+  it('puts the unused free viewing first for a renter without the Pass, and the Pass in one line', () => {
+    const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 2, substitutes: [], prioritySearch: offer() });
+    const lines = text.split('\n');
+    const free = lines.findIndex(l => l.includes('free viewing is still unused'));
+    const pass = lines.findIndex(l => l.includes('Priority search, part of the Pass ($25 for 30 days)'));
+    expect(free).toBeGreaterThan(0);
+    expect(pass).toBe(free + 1);
+    expect(lines[free]).toContain('https://hausto.com/hub');
+  });
+
+  it('does not mention a free viewing the number has already had', () => {
+    const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 2, substitutes: [], prioritySearch: offer({ freeViewing: false }) });
+    expect(text).not.toContain('free viewing');
+    expect(text).toContain('To find more, have our team look for you');
+  });
+
+  it('leaves Priority search out when there are close matches to reply to', () => {
+    const text = renderNoSupply({
+      ref: 'HV-4KX7', requestedCount: 2,
+      substitutes: [{ title: 'Flat A', priceVnd: 14_000_000, districtCode: 'D3' }],
+      prioritySearch: offer(),
+    });
+    expect(text).toContain('Reply with a number');
+    expect(text).not.toContain('Priority search');
+  });
+
+  it('says "the place" for one, not "none of the 1 places"', () => {
+    const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 1, substitutes: [], prioritySearch: offer() });
+    expect(text.split('\n')[0]).toBe('The place you asked about is no longer free - the market here moves in days, not weeks.');
+  });
+});
+
+describe('not on those days (UNAVAILABLE_DATE)', () => {
+  it('is any place whose agent could not do the times, and nothing rented or silent', () => {
+    const { view, listings } = build(4, {
+      1: { outcome: 'UNAVAILABLE_DATE', slots: [] },
+      2: { outcome: 'ALREADY_RENTED', slots: [] },
+      3: { outcome: 'NO_RESPONSE', slots: [] },
+      4: { outcome: 'UNAVAILABLE_DATE', slots: [] },
+    });
+    expect(freeOnOtherDays(view, listings).map(l => l.itemId)).toEqual(['i1', 'i4']);
+  });
+
+  it('is none when every place is rented', () => {
+    const { view, listings } = build(2, {
+      1: { outcome: 'ALREADY_RENTED', slots: [] },
+      2: { outcome: 'ALREADY_RENTED', slots: [] },
+    });
+    expect(freeOnOtherDays(view, listings)).toEqual([]);
+  });
+
+  const url = 'https://hausto.com/hub?tab=viewings';
+
+  it('asks for other days, lists the places, and never says they are gone', () => {
+    const { view, listings } = build(2, {
+      1: { outcome: 'UNAVAILABLE_DATE', slots: [] },
+      2: { outcome: 'UNAVAILABLE_DATE', slots: [] },
+    });
+    const text = renderOtherDays({ ref: 'HV-P6XT', requestedCount: 2, places: freeOnOtherDays(view, listings), changeTimesUrl: url });
+    expect(text.split('\n')[0]).toBe('The agents cannot show these 2 places on the days you gave, but neither has been rented:');
+    for (const l of listings) expect(text).toContain(l.listingTitle);
+    expect(text).toContain(`Pick other days and we will ask the agents again: ${url}`);
+    expect(text).not.toMatch(/no longer free|still free|close matches/);
+    expect(text).not.toMatch(/book/i);
+    expect(text.trim().endsWith('Ref HV-P6XT')).toBe(true);
+  });
+
+  it('names only the places still to be had when some were rented', () => {
+    const { view, listings } = build(3, {
+      1: { outcome: 'ALREADY_RENTED', slots: [] },
+      2: { outcome: 'UNAVAILABLE_DATE', slots: [] },
+      3: { outcome: 'NO_RESPONSE', slots: [] },
+    });
+    const text = renderOtherDays({ ref: 'HV-P6XT', requestedCount: 3, places: freeOnOtherDays(view, listings), changeTimesUrl: url });
+    expect(text).toContain('None of the 3 places you asked about can be seen on the days you gave, but this one has not been rented:');
+    expect(text).toContain(listings[1].listingTitle);
+    expect(text).not.toContain(listings[0].listingTitle);
+    expect(text).toContain('we will ask the agent again');
+  });
+
+  it('speaks of one place as one', () => {
+    const { view, listings } = build(1, { 1: { outcome: 'UNAVAILABLE_DATE', slots: [] } });
+    const text = renderOtherDays({ ref: 'HV-P6XT', requestedCount: 1, places: freeOnOtherDays(view, listings), changeTimesUrl: url });
+    expect(text.split('\n')[0]).toBe('The agent cannot show this place on the days you gave, but it has not been rented:');
   });
 });
 

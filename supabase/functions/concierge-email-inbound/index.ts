@@ -526,7 +526,7 @@ serve(async (req) => {
       return await handleStandaloneMail(supabase, mail, senderInquiries.length);
     }
 
-    // A building, or an area (Search for me).
+    // A building, or an area (Priority search).
     const place = await placeOf(supabase, inquiry);
     const complex = place ? { name: place.name } : null;
 
