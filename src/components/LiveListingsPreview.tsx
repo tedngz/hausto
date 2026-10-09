@@ -43,7 +43,7 @@ export const LiveListingsPreview = () => {
   // same table there, minus the parts that need an account.
   const browsePath = '/hub';
   const [rows, setRows] = useState<PreviewRow[]>([]);
-  const [verifiedThisWeek, setVerifiedThisWeek] = useState(0);
+  const [liveTotal, setLiveTotal] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,8 +58,10 @@ export const LiveListingsPreview = () => {
           (b.last_verified_at || '').localeCompare(a.last_verified_at || ''));
         if (!cancelled) {
           setRows(sorted.slice(0, PREVIEW_ROWS));
-          // Real inventory-wide count from the API, not a count of this sample
-          setVerifiedThisWeek(data.stats?.verified_last_7_days ?? 0);
+          // Real inventory-wide count from the API, not a count of this sample.
+          // The same total the hub's browse table shows (duplicates collapsed),
+          // so the number a visitor reads here is the number they find there.
+          setLiveTotal(data.stats?.total_active_listings ?? 0);
         }
       } catch {
         // Preview is decorative — fail silently, section just doesn't render.
@@ -81,7 +83,7 @@ export const LiveListingsPreview = () => {
             <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-500 opacity-70 animate-ping" />
             <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
           </span>
-          {verifiedThisWeek > 0 ? `${verifiedThisWeek} live listings` : 'Live listings'} aggregated from Vietnam's top rental platforms
+          {liveTotal > 0 ? `${liveTotal} live listings` : 'Live listings'} aggregated from Vietnam's top rental platforms
         </p>
       </div>
 

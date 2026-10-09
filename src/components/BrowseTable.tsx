@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Info, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -76,6 +76,47 @@ const verifiedLabel = (iso?: string | null): string => {
   if (d === null) return '-';
   if (d === 0) return 'today';
   return `${d}d ago`;
+};
+
+// What the Verified column means. The cadence follows verify-external-listings:
+// every 2-5 days, batdongsan weekly, and a listing whose ad has gone is hidden.
+const VERIFIED_INFO = (
+  <>
+    <p className="font-medium text-foreground mb-1">When we last checked it was still listed</p>
+    <p>
+      We re-check every listing against the site it came from every few days to
+      a week, and take it off Hausto once the ad comes down. A green dot means
+      it was checked in the past 7 days.
+    </p>
+  </>
+);
+
+/**
+ * An info icon beside a column header. Opens on hover, and on tap for phones,
+ * where there is no hover - so a popover rather than a tooltip.
+ */
+const HeaderInfo = ({ label, children }: { label: string; children: ReactNode }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`What ${label} means`}
+          className="text-muted-foreground/70 hover:text-foreground"
+          // Mouse only: a tap also fires enter before its click, which would
+          // open the popover and then toggle it shut. Taps go through the click.
+          onPointerEnter={(e) => { if (e.pointerType === 'mouse') setOpen(true); }}
+          onPointerLeave={(e) => { if (e.pointerType === 'mouse') setOpen(false); }}
+        >
+          <Info className="w-3 h-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-64 p-3 text-xs font-normal text-muted-foreground">
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
 };
 
 const parseSizeNum = (size?: string | null): number | null => {
@@ -370,12 +411,15 @@ export const BrowseTable = ({
     });
   };
 
-  const SortHeader = ({ label, k, className = '' }: { label: string; k: SortKey; className?: string }) => (
+  const SortHeader = ({ label, k, className = '', info }: { label: string; k: SortKey; className?: string; info?: ReactNode }) => (
     <TableHead className={className}>
-      <button className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort(k)}>
-        {label}
-        {sortKey === k ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
-      </button>
+      <div className="flex items-center gap-1">
+        <button className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort(k)}>
+          {label}
+          {sortKey === k ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+        </button>
+        {info && <HeaderInfo label={label}>{info}</HeaderInfo>}
+      </div>
     </TableHead>
   );
 
@@ -537,7 +581,7 @@ export const BrowseTable = ({
                   <SortHeader label="Rooms" k="rooms" />
                   <SortHeader label="Size" k="size" />
                   <SortHeader label="Price" k="price_usd" />
-                  <SortHeader label="Verified" k="last_verified_at" />
+                  <SortHeader label="Verified" k="last_verified_at" info={VERIFIED_INFO} />
                   <TableHead>Source</TableHead>
                 </TableRow>
               </TableHeader>
