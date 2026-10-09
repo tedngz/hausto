@@ -18,6 +18,7 @@ import {
   lockableStops,
   lockInDeadline,
   lockInStatus,
+  passLiveAt,
   type LockInChoice,
   type LockInDecision,
   type LockInRefusal,
@@ -42,6 +43,8 @@ export interface LockInContext {
   renterId: string;
   /** The account the request belongs to. A WhatsApp-only renter has none. */
   userId: string | null;
+  /** When the request was made: a Pass live then covers the plan (`planPassCover`). */
+  requestedAt: string;
   phoneE164: string;
   view: RequestView;
   stops: PlanStop[];
@@ -55,7 +58,7 @@ export async function loadLockIn(
   key: { ref?: string; requestId?: string },
   now: number,
 ): Promise<LockInContext | null> {
-  let q = db.from('viewing_requests').select('id, ref, renter_id');
+  let q = db.from('viewing_requests').select('id, ref, renter_id, created_at');
   q = key.requestId ? q.eq('id', key.requestId) : q.eq('ref', String(key.ref ?? ''));
   const { data: request } = await q.maybeSingle();
   if (!request) return null;
@@ -87,6 +90,7 @@ export async function loadLockIn(
     ref: String(request.ref),
     renterId: String(renter.id),
     userId: (renter.user_id as string | null) ?? null,
+    requestedAt: String(request.created_at),
     phoneE164: String(renter.phone_e164),
     view,
     stops,
@@ -103,6 +107,38 @@ export async function hasPassCover(db: Supa, userId: string | null): Promise<boo
     db.rpc('has_complimentary_pass', { _user_id: userId }),
   ]);
   return bought === true || complimentary === true;
+}
+
+/**
+ * Does the Pass cover this plan? A live one does, and so does one that was
+ * live when the request was made (lock-in.ts `passLiveAt`). Everything that
+ * decides how a plan locks in asks this rather than `hasPassCover`: the page,
+ * the payment, a "yes" on WhatsApp, and the plan's own last line.
+ */
+export async function planPassCover(
+  db: Supa,
+  plan: { userId: string | null; requestedAt: string },
+): Promise<boolean> {
+  if (!plan.userId) return false;
+  if (await hasPassCover(db, plan.userId)) return true;
+  const { data, error } = await db.from('passes')
+    .select('purchased_at, expires_at, refunded_at')
+    .eq('renter_id', plan.userId)
+    .eq('kind', 'pass');
+  // As before this existed: the live Pass alone. A WhatsApp "yes" must not
+  // fail on a read that only ever widens cover.
+  if (error) {
+    console.error('[lock-in] passes read failed:', error);
+    return false;
+  }
+  return passLiveAt(
+    ((data ?? []) as Record<string, unknown>[]).map(p => ({
+      purchasedAt: String(p.purchased_at),
+      expiresAt: String(p.expires_at),
+      refundedAt: (p.refunded_at as string | null) ?? null,
+    })),
+    plan.requestedAt,
+  );
 }
 
 /** Has this WhatsApp number had its free viewing? Once per number, not per account. */
@@ -143,7 +179,7 @@ export async function lockIn(
   if (!honoured) return { ok: false, reason: 'NOT_OPEN', status: ctx.status };
 
   const [hasPass, freeAvailable] = await Promise.all([
-    hasPassCover(db, ctx.userId),
+    planPassCover(db, ctx),
     freeViewingAvailable(db, ctx.phoneE164),
   ]);
   const decision: LockInDecision = decideLockIn({

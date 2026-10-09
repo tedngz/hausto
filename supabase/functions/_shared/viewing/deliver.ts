@@ -39,7 +39,7 @@ import { hcmcLong } from './format.ts';
 import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
 import { lockInDeadline, renderLockInLine, PASS_DAYS, PASS_PRICE_USD } from './lock-in.ts';
-import { freeViewingAvailable, hasPassCover } from './lock-in-run.ts';
+import { freeViewingAvailable, hasPassCover, planPassCover } from './lock-in-run.ts';
 import { prioritySearchPath, REPLY_WITHIN_HOURS } from './place.ts';
 import { VIEWINGS_PATH } from './renter-view.ts';
 import { SITE_URL } from './watch.ts';
@@ -461,6 +461,8 @@ async function prioritySearchFor(
 /**
  * The lock-in line for a renter without the Pass, or undefined for one with
  * it - a Pass holder's "yes" locks the plan in, as it always did (SPEC §9).
+ * "With it" is the Pass covering this plan: live now, or live when the request
+ * was made (`planPassCover`).
  *
  * The deadline is the one this delivery will set: the plan arrives now unless
  * it already has, and the three-hour floor runs from this send. Once the plan
@@ -469,12 +471,12 @@ async function prioritySearchFor(
  */
 async function lockInLineFor(
   db: Supa,
-  request: { ref: string; renter_id: string },
+  request: { ref: string; renter_id: string; created_at: string },
   view: ReturnType<typeof reduceRequest>,
 ): Promise<string | undefined> {
   const { data: renter } = await db
     .from('renters').select('user_id, phone_e164').eq('id', request.renter_id).maybeSingle();
-  if (await hasPassCover(db, renter?.user_id ?? null)) return undefined;
+  if (await planPassCover(db, { userId: renter?.user_id ?? null, requestedAt: request.created_at })) return undefined;
   const now = new Date().toISOString();
   const deadline = lockInDeadline({
     ...view,
