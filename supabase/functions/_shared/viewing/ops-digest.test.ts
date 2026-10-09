@@ -48,12 +48,12 @@ describe('viewing request updates', () => {
   });
 });
 
-describe('availability and priority search updates', () => {
+describe('availability and area search updates', () => {
   it('a new request needs someone, with its own clock', () => {
     expect(inquiryUpdates('BUILDING', 'Empire City', [iev('CONFIRMED')])[0])
       .toMatchObject({ what: 'new availability request - the renter is waiting, reply due within 24 hours', needsYou: true });
-    expect(inquiryUpdates('SEARCH', 'Thao Dien', [iev('CONFIRMED')])[0].what).toContain('priority search');
-    expect(inquiryUpdates('SEARCH', 'Thao Dien', [iev('CONFIRMED')])[0].what).toContain('48 hours');
+    expect(inquiryUpdates('SEARCH', 'Thao Dien', [iev('CONFIRMED')])[0].what).toContain('area search');
+    expect(inquiryUpdates('SEARCH', 'Thao Dien', [iev('CONFIRMED')])[0].what).toContain('3 days');
   });
 
   it('offers and closes are news', () => {

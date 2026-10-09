@@ -15,6 +15,7 @@ import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
 import { useComplexes } from '@/hooks/useComplexes';
 import { ComplexPriceBands } from '@/components/ComplexPriceBands';
+import { REPLY_WITHIN_HOURS, SEARCH_NAME, replyWithinText } from '../../supabase/functions/_shared/viewing/place.ts';
 
 const ROOM_LABEL: Record<string, string> = {
   studio: 'Studio', '1br': '1 Bedroom', '2br': '2 Bedroom', '3br': '3 Bedroom', '4br': '4 Bedroom',
@@ -363,7 +364,7 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
                 <Card className={isPanel ? 'p-5 border-primary/30 shadow-lg' : 'p-6 border-primary/30 shadow-xl'}>
                   <div className={`flex items-center gap-2 text-primary ${isPanel ? 'mb-2' : 'mb-3'}`}>
                     <CalendarCheck className={isPanel ? 'h-4 w-4' : 'h-5 w-5'} aria-hidden="true" />
-                    <span className="text-xs uppercase tracking-wider font-medium">Concierge</span>
+                    <span className="text-xs uppercase tracking-wider font-medium">{SEARCH_NAME}</span>
                   </div>
                   <h3 className={`font-serif mb-2 ${isPanel ? 'text-xl leading-snug' : 'text-2xl leading-tight'}`}>
                     Check what is free for your move-in date
@@ -377,9 +378,9 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
                   {/* Each promise stays whole when the line wraps - "On" and
                       "WhatsApp" used to land on different lines. */}
                   <p className="text-xs text-muted-foreground mt-3 flex flex-wrap justify-center gap-x-1.5">
-                    <span>No fee</span>
+                    <span>With the Pass</span>
                     <span aria-hidden="true">·</span>
-                    <span>Reply within 24h</span>
+                    <span>Reply within {replyWithinText(REPLY_WITHIN_HOURS.BUILDING)}</span>
                     <span aria-hidden="true">·</span>
                     <span>On WhatsApp</span>
                   </p>

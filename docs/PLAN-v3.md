@@ -499,10 +499,11 @@ budget, bedrooms, move-in and pets, asked for under a thin search in Browse or
 the chat. It is the Pass's - a signed-in Pass holder, one open search at a
 time - because it is a person's hours: the agents are found in Facebook and
 Zalo groups and agents' circles, entered by number, and every unit offered is
-one an agent confirmed. First places within 48 hours; a building keeps its 24.
-SPEC §11 "Priority search". What it needs from people: weekend cover, since 48
-hours includes weekends, and sourcing accounts on Facebook and Zalo kept apart
-from the bridge's.
+one an agent confirmed. First places within 3 days (48 hours until
+2026-10-10); a building keeps its 24. Renters see both as one feature,
+Extensive search (2026-10-10). SPEC §11 "Priority search". What it needs from
+people: weekend cover, since 3 days includes weekends, and sourcing accounts on
+Facebook and Zalo kept apart from the bridge's.
 
 **Charging:** since 2026-10-07 (owner's decision, SPEC §9) a building request,
 Priority search and every viewing request past one free place per WhatsApp

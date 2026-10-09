@@ -42,7 +42,7 @@ interface ListingPreviewDialogProps {
   onSchedule?: () => void;
   /** Where the listing came from, as the way out to the original posting. */
   source?: { name: string; href?: string | null };
-  /** Which ledger the listing lives in, forwarded to the card so its Deep Scan
+  /** Which ledger the listing lives in, forwarded to the card so its Deep scan
    *  chip reads the right one. */
   propertyType?: PropertyType;
 }
@@ -145,7 +145,7 @@ export const ListingPreviewDialog = ({
             />
           )}
           {/* What we have seen of the listing over time - price moves, days on
-              the market - is in its Deep Scan now (ListingHistoryNote). */}
+              the market - is in its Deep scan now (ListingHistoryNote). */}
         </DialogContent>
       </Dialog>
     </>

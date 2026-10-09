@@ -9,7 +9,7 @@ import { PASS_MODAL_EVENT, type PassModalDetail } from '@/lib/passEvents';
  *
  * The pages that own a paywall already mount their own SubscriptionModal and
  * pass a callback down. That works while the ask lives on the page; it stops
- * working once a leaf component several levels down - the Deep Scan chip on a
+ * working once a leaf component several levels down - the Deep scan chip on a
  * property card - has to raise it, because the card is rendered by browse, the
  * swipe deck, matches, Hausto Agent, complex pages and the listing page, and
  * only some of them have a modal to hand it.

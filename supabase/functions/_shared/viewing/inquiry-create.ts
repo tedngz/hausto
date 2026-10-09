@@ -20,7 +20,7 @@
 
 import { CONFIRM_TTL_DAYS, generateWatchCode, watchExpiry } from './watch.ts';
 import { buildInquiryLink, buildSearchLink, validateInquiryInput } from './inquiry.ts';
-import { REPLY_WITHIN_HOURS, areaLabel } from './place.ts';
+import { REPLY_WITHIN_HOURS, SEARCH_NAME, areaLabel } from './place.ts';
 import { hasPassCover } from './lock-in-run.ts';
 import { PASS_DAYS, PASS_PRICE_USD } from './lock-in.ts';
 import { reduceInquiry, type InquiryEvent } from '../viewing-domain.ts';
@@ -80,9 +80,7 @@ export async function createInquiry(
       : 'Sign in to ask us about this building.');
   }
   if (!(await hasPassCover(db, userId))) {
-    return refuse(402, 'pass_required', v.areaDistrictCodes
-      ? `Priority search comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`
-      : `Asking us about a building comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`);
+    return refuse(402, 'pass_required', `${SEARCH_NAME} comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`);
   }
 
   // ── Where ─────────────────────────────────────────────────────────────────

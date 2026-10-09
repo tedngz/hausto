@@ -70,7 +70,7 @@ export const PropertyListingCard = ({
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : PLACEHOLDER_IMAGES;
   const [current, setCurrent] = useState(0);
   const [requestOpen, setRequestOpen] = useState(false);
-  // Controlled so pressing the Deep Scan CTA can close it: the scan is read
+  // Controlled so pressing the Deep scan CTA can close it: the scan is read
   // in the chat, and a popover left open sits over the card it is about.
   const [scanOpen, setScanOpen] = useState(false);
   const [fits, setFits] = useState<Record<number, 'cover' | 'contain'>>({});
@@ -321,11 +321,11 @@ export const PropertyListingCard = ({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                aria-label="Open the Deep Scan for this listing"
+                aria-label="Open the Deep scan for this listing"
                 className="flex items-center gap-[5px] rounded-full bg-primary/10 text-primary px-3 py-1.5 text-[11.5px] whitespace-nowrap transition-colors hover:bg-primary/20"
               >
                 <Search className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
-                Deep Scan
+                Deep scan
               </button>
             </PopoverTrigger>
             <PopoverContent

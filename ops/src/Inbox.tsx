@@ -47,7 +47,7 @@ export function Inbox({ rows, error, onOpen, onReload }: {
         <div className={`tile ${soon ? 'warn' : ''}`}><div className="n">{soon}</div><div className="small muted">due soon</div></div>
         <div className="tile"><div className="n">{count('VIEWING')}</div><div className="small muted">viewing requests</div></div>
         <div className="tile"><div className="n">{count('BUILDING')}</div><div className="small muted">building requests</div></div>
-        <div className="tile"><div className="n">{count('SEARCH')}</div><div className="small muted">priority searches</div></div>
+        <div className="tile"><div className="n">{count('SEARCH')}</div><div className="small muted">area searches</div></div>
         <div className="tile"><div className="n">{ai}</div><div className="small muted">AI proposals waiting</div></div>
       </div>
 

@@ -16,7 +16,7 @@ export interface DeepAnalysis {
 export type PropertyType = 'internal' | 'external';
 
 /**
- * The Deep Scan for one listing, for this renter.
+ * The Deep scan for one listing, for this renter.
  *
  * Two halves on purpose. The query is a plain table read - a read already paid
  * for stays readable after the pass lapses, so it must not depend on holding
@@ -67,7 +67,7 @@ export const useDeepAnalysis = (propertyId?: string, propertyType: PropertyType 
         // Each of these wants a different next move from the renter, so none of
         // them collapse into "something went wrong".
         const messages: Record<string, string> = {
-          PASS_REQUIRED: 'A Hausto Pass unlocks the Deep Scan on every listing.',
+          PASS_REQUIRED: 'A Hausto Pass unlocks the Deep scan on every listing.',
           NO_IMAGES: "This listing has no photos, so there's nothing to read yet.",
           BUDGET_EXHAUSTED: "We've hit today's analysis limit - try again tomorrow.",
         };

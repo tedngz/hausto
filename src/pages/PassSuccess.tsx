@@ -98,10 +98,10 @@ const PassSuccess = () => {
               {kind === 'topup'
                 ? 'It runs until your pass ends.'
                 : lockIn?.lockedIn
-                  ? 'We tell the agents to expect you, and on the morning of each viewing we send where to meet on WhatsApp. Your Pass covers every viewing we confirm for the next 30 days.'
+                  ? 'We tell the agents to expect you, and on the morning of each viewing we send where to meet on WhatsApp. Your Pass covers every viewing we arrange for the next 30 days.'
                   : lockIn
                     ? `Your Pass is live, but ${lockIn.ref ?? 'that plan'} could not be locked in - its time had passed. We will be in touch about it.`
-                    : 'Every viewing we confirm, unlimited AI and Deep Scan, for the next 30 days.'}
+                    : 'Every viewing we arrange, unlimited AI and Deep scan, for the next 30 days.'}
             </p>
             {whatsappLink && (
               <div className="mb-6 rounded-md border p-4 text-left text-sm">

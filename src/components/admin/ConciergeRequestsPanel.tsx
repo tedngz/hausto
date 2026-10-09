@@ -344,7 +344,7 @@ export const ConciergeRequestsPanel = () => {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium">
-                        {row.complexes?.name ?? (row.area_label ? `Priority search: ${row.area_label}` : 'Unknown complex')}
+                        {row.complexes?.name ?? (row.area_label ? `Area search: ${row.area_label}` : 'Unknown complex')}
                         {row.complexes?.slug && (
                           <a
                             href={`/complexes/${row.complexes.slug}`}

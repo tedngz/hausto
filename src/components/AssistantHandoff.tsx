@@ -69,7 +69,7 @@ export const AssistantHandoff = () => {
       navigate('/hub');
     };
 
-    // A Deep Scan asked for from a card off the hub. The scan is read in the
+    // A Deep scan asked for from a card off the hub. The scan is read in the
     // chat, so the ask travels there the same way the sparkle does.
     const onScan = (event: Event) => {
       const detail = (event as CustomEvent<DeepScanDetail>).detail;

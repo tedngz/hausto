@@ -27,12 +27,30 @@ export interface InquiryPlace {
 /** The districts an area request may name, at most. Wider is a different search. */
 export const MAX_AREA_DISTRICTS = 4;
 
-/** A promise per kind: a building's agents are few and known; an area's are not. */
-export const REPLY_WITHIN_HOURS: Record<PlaceKind, number> = { BUILDING: 24, AREA: 48 };
+/**
+ * What renters call it, building or area (owner's decision, 2026-10-10): one
+ * feature - when Browse or a building's page has nothing that fits, we ask the
+ * agents in our network. The console still tells the two apart (`Building`,
+ * `Area search`), since they are worked differently, and the code keeps its
+ * old names (`prioritySearch*`, `search_for_me`, `complex_inquiries`).
+ */
+export const SEARCH_NAME = 'Extensive search';
+
+/**
+ * A promise per kind: a building's agents are few and known; an area's are
+ * not. An area was 48 hours until 2026-10-10 (owner's decision); a request
+ * keeps the promise its SUBMITTED made.
+ */
+export const REPLY_WITHIN_HOURS: Record<PlaceKind, number> = { BUILDING: 24, AREA: 72 };
+
+/** How a promise reads: "24 hours", "3 days". */
+export function replyWithinText(hours: number): string {
+  return hours > 24 && hours % 24 === 0 ? `${hours / 24} days` : `${hours} hours`;
+}
 
 /**
  * A search showing fewer places than this is thin, and Browse and the chat
- * offer Priority search under it - prefilled from that search.
+ * offer an Extensive search under it - prefilled from that search.
  */
 export const THIN_SEARCH = 3;
 

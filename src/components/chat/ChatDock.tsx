@@ -181,7 +181,7 @@ export const ChatDock = ({
         className={`glass-card flex flex-col rounded-t-3xl ${dragging ? '' : 'transition-[height] duration-200'}`}
         // A third of the viewport by default, not two thirds: on a phone the
         // dock used to bury whatever the renter was asking about, so the answer
-        // arrived with no way to see what it referred to. A Deep Scan is longer
+        // arrived with no way to see what it referred to. A Deep scan is longer
         // than that third, though, so the renter can drag it taller - up to
         // 85dvh - and the choice sticks.
         style={{

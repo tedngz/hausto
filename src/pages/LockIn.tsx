@@ -190,7 +190,7 @@ export default function LockIn() {
                 {busy === 'all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Lock in {n === 1 ? 'this viewing' : `all ${n}`}
               </Button>
-              <p className="text-xs text-muted-foreground">Your Pass covers every viewing we confirm.</p>
+              <p className="text-xs text-muted-foreground">Your Pass covers every place in this plan.</p>
             </>
           ) : (
             <>
@@ -216,8 +216,8 @@ export default function LockIn() {
               </Button>
               <p className="text-xs text-muted-foreground">
                 {plan.freeViewingAvailable
-                  ? 'Your first viewing is on us, once per WhatsApp number. The Pass covers every viewing we confirm for its 30 days. One-off payment, nothing recurring.'
-                  : 'Your free viewing has been used. The Pass covers every viewing we confirm for its 30 days. One-off payment, nothing recurring.'}
+                  ? 'Your first viewing is on us, once per WhatsApp number. The Pass covers every viewing we arrange for its 30 days. One-off payment, nothing recurring.'
+                  : 'Your free viewing has been used. The Pass covers every viewing we arrange for its 30 days. One-off payment, nothing recurring.'}
               </p>
               <RefundPromise />
             </>

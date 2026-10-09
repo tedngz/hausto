@@ -47,7 +47,7 @@ const PropertyDetail = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatHeaderPortal, setChatHeaderPortal] = useState<HTMLDivElement | null>(null);
 
-  // A Deep Scan or a sparkle fired from the card is answered in the chat, which
+  // A Deep scan or a sparkle fired from the card is answered in the chat, which
   // on a phone is a collapsed bar: without this the press looks like it did
   // nothing and the reply arrives out of sight. Same reasoning as the hub's.
   // The sparkle is not a signed-in feature here. The chat already knows the
@@ -257,7 +257,7 @@ const PropertyDetail = () => {
   // One chat instance, moved between the rail and the sheet by which of the
   // two ChatDock renders - never both, so the conversation is never doubled.
   // It opens pinned to the listing on the page: that is what a renter reading
-  // this page is going to ask about, and a Deep Scan asked for from the card
+  // this page is going to ask about, and a Deep scan asked for from the card
   // lands in the same thread.
   const chat = (
     <HomeAI

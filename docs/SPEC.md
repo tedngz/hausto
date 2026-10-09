@@ -1088,9 +1088,21 @@ the page, the payment and a WhatsApp "yes" alike):
 
 | Renter | Lock-in |
 |---|---|
-| Holds the Pass (bought or complimentary) | Every stop, cover `PASS`. They never spend the free viewing |
+| Holds the Pass (bought or complimentary), or held it when the request was made | Every stop, cover `PASS`. They never spend the free viewing |
 | No Pass, free viewing unused on this number | One stop they pick, cover `FREE_VIEWING`; the other agents are owed a release |
 | No Pass, free viewing used | Buy the Pass from the page, which locks in every stop |
+
+**A request made under the Pass stays covered** (2026-10-10). Agents answer
+days after they are asked and viewings may be two weeks out, so a request made
+on day 29 reaches its plan after the Pass has run out; reading the Pass only at
+lock-in sold that renter a second one. `planPassCover` (`lock-in-run.ts`) asks
+whether a Pass is live now or was live when the request was made
+(`viewing_requests.created_at` inside a `passes` row's purchase-to-expiry,
+`passLiveAt`), and everything that decides how a plan locks in asks it: the
+page, the payment, a "yes" on WhatsApp and the plan's last line. A refunded
+Pass covers nothing, even for a request made before the refund - the money
+came back. Asking for something new (a request, a place joined, a search)
+still needs a Pass live at the time (`hasPassCover`).
 
 **The message.** The itinerary itself is unchanged apart from its last line.
 A Pass holder still reads "Reply YES to lock these in", and their yes locks it
@@ -1456,15 +1468,26 @@ requested the one way there is (invariant 8), from the listing page.
 
 **Priority search** (the pricing rework, step 5) is the same request for an area
 rather than a building - up to four districts - and is the Pass's: a person
-searches Facebook groups and agents' circles, the first places are promised
-within 48 hours, and every place offered is one an agent confirmed. A building
-request is the Pass's too since 2026-10-07 (owner's decision; it was free for
-everyone), signed in. See "Priority search" below; everything else in
-this section holds for both. Renters have seen it as Priority search since
-2026-10-07, the name the Pass sells it by, and since 2026-10-09 (owner's
-decision) that is its name everywhere - the code, the console and these docs.
-It was called "Search for me" before; the `search_for_me` chat block keeps the
-old spelling on the wire, because the SPA and `chat-ai` deploy apart.
+asks round agents for it, the first places are promised within 3 days (48
+hours until 2026-10-10, owner's decision), and every place offered is one an
+agent confirmed. A building request is the Pass's too since 2026-10-07
+(owner's decision; it was free for everyone), signed in. See "Priority search"
+below; everything else in this section holds for both.
+
+**What renters call it** (owner's decision, 2026-10-10): both kinds are one
+feature, **Extensive search** - when Browse or a building's page has nothing
+that fits, we ask the agents in our network. `SEARCH_NAME` in
+`_shared/viewing/place.ts` is the name wherever a renter reads it: the Pass,
+the form's title, Browse's prompt, the Viewings tab, the building page and the
+no-supply message. Renter copy says where we look only as "our network" -
+never Facebook, groups or any other named source. A building still answers
+within 24 hours and an area within 3 days (`REPLY_WITHIN_HOURS`); the Pass
+states the longer, and `replyWithinText` writes it "3 days" rather than "72
+hours". The console still tells them apart, as "Building" and "Area search",
+since they are worked differently. The code keeps its names - Priority search
+(`prioritySearch*`, `PrioritySearchPrompt`), and before it "Search for me",
+which the `search_for_me` chat block still spells on the wire because the SPA
+and `chat-ai` deploy apart.
 
 ### The form (`ConciergeCaptureModal`)
 
@@ -1821,12 +1844,13 @@ digest box; with it, the form.
   requests are not counted.
 - 1-4 `district_code` values, once each (`validateInquiryInput`); the label is
   `areaLabel()`, "District 2 and Binh Thanh".
-- `SUBMITTED {area_district_codes, reply_within_hours: 48}`, which moves the
-  reducer's deadline (`InquiryView.replyWithinMs`) and the reminders. A building
-  stays at 24 hours, so the paid search is never the slower one for the same ask.
+- `SUBMITTED {area_district_codes, reply_within_hours: 72}` (48 before
+  2026-10-10; a request keeps the promise its SUBMITTED made), which moves the
+  reducer's deadline (`InquiryView.replyWithinMs`) and the reminders. A
+  building stays at 24 hours.
 - The handshake reads as a search - `Hi Hausto - please search <area> for me
-  (HW-XXXX)` - and the confirmation promises the first places within 48 hours,
-  each confirmed with its agent.
+  (HW-XXXX)` - and the confirmation promises the first places within 3 days,
+  each confirmed with its agent, from "the agents in our network".
 
 **Worked the same way, with three differences**, on the console's Availability
 screen:
@@ -1860,7 +1884,7 @@ as the request. The Tuesday sweep matches its new listings by district code
 rather than `complex_listing_ids()`, and labels each place by its district.
 
 **People.** It is all manual - reading groups cannot be automated, so the AI
-operator does not take it over - and the 48 hours run through weekends.
+operator does not take it over - and the 3 days run through weekends.
 `priority-search-rehearsal.test.ts` walks it end to end: the brief, the code,
 agents asked on Zalo and by number, units captured, one offer, the reply, and
 the viewing request it closes on.

@@ -103,15 +103,15 @@ describe('the words', () => {
     expect(windowClosesAt(null)).toBeNull();
   });
 
-  it('promises a search 48 hours, each place confirmed with its agent', () => {
+  it('promises a search 3 days, each place confirmed with its agent, and never names where we look', () => {
     const body = renderInquiryConfirmed({
       ...summary, complexName: 'District 2 and Binh Thanh', kind: 'AREA', watchExpiresAt: '2026-11-29T16:59:59Z',
     });
     expect(body).toContain('your search in District 2 and Binh Thanh is in');
-    expect(body).toContain('Facebook groups and agents\' circles');
-    expect(body).toContain('within 48 hours - each one confirmed with its agent');
+    expect(body).toContain('the agents in our network');
+    expect(body).toContain('within 3 days - each one confirmed with its agent');
     expect(body).not.toContain('24 hours');
-    // "Facebook" is not booking talk (invariant 6); the word is.
+    expect(body).not.toMatch(/facebook|group/i);
     expect(body).not.toMatch(/\bbook(ed|ing)?\b/i);
     expect(body).not.toMatch(/[—–]/);
   });

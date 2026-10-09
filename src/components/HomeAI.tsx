@@ -161,7 +161,7 @@ interface HomeAIProps {
   /** Listings pinned before the conversation's first message - what a sparkle
    *  fired off the hub hands over (see components/AssistantHandoff). */
   initialSubjects?: AssistantOpenDetail[];
-  /** A Deep Scan asked for from a card elsewhere, read here on arrival. */
+  /** A Deep scan asked for from a card elsewhere, read here on arrival. */
   initialDeepScan?: DeepScanDetail;
   onInitialQueryConsumed?: () => void;
   /** 'page' is the full-width Discover view; 'rail' fills a narrow docked
@@ -873,7 +873,7 @@ export const HomeAI = ({
     return { name: getPropertySourceLogo(property.source || '').name, href: null };
   };
 
-  // A Deep Scan asked for from a card on this page. The chat is already here,
+  // A Deep scan asked for from a card on this page. The chat is already here,
   // so the ask is answered in place rather than travelling through the handoff.
   useEffect(() => {
     const onScan = (event: Event) => {
@@ -992,7 +992,7 @@ export const HomeAI = ({
         </Card>}
 
       {/* Chat Messages for Signed In Users — compact until there's content, then grows/scrolls */}
-      {/* A Deep Scan opens this too. It is read here, so it has to be able to
+      {/* A Deep scan opens this too. It is read here, so it has to be able to
           be the first thing in the thread - a renter can ask for one before
           they have said anything to the AI, and an empty conversation used to
           mean there was no thread for the scan to land in. */}
@@ -1109,7 +1109,7 @@ export const HomeAI = ({
               </div>
             </div>}
 
-          {/* Where a Deep Scan is read. It is long, and written against the
+          {/* Where a Deep scan is read. It is long, and written against the
               renter's preferences, so it belongs in the conversation - with the
               room to read it, the listing it read still on screen beside it,
               and the AI that can be asked about what it says. A scan asked for
@@ -1421,7 +1421,7 @@ export const HomeAI = ({
 
         {/* Starter suggestions — shown until the conversation has content, so
             first-time users learn the AI does both searches AND area advice. A
-            Deep Scan counts as content: in the mobile dock the chips plus the
+            Deep scan counts as content: in the mobile dock the chips plus the
             composer fill the sheet, and the scan they were sent to read is left
             with no height to render into. */}
         {!isRail && !hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !scanRequest && !analysisProperty && !isSearching && !isSendingMessage && (

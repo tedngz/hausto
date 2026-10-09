@@ -19,7 +19,7 @@
 
 import { formatVnd, hcmcLong, hcmcTime, hcmcDate } from './format.ts';
 import type { RequestView } from '../viewing-domain.ts';
-import { districtLabel } from './place.ts';
+import { districtLabel, replyWithinText, SEARCH_NAME } from './place.ts';
 
 /** ` - District 2` after a price, or nothing. Renters read names, not `D2` or `BINH_THANH`. */
 const inDistrict = (code: string | null): string => (code ? ` - ${districtLabel(code)}` : '');
@@ -464,11 +464,11 @@ export interface PrioritySearchOffer {
 function prioritySearchLines(o: PrioritySearchOffer): string[] {
   if (o.hasPass) {
     return [
-      `Your Pass includes Priority search: our team looks for places that fit and sends them here within ${o.replyWithinHours} hours. `
+      `Your Pass includes ${SEARCH_NAME}: we ask the agents in our network for places that fit and send them here within ${replyWithinText(o.replyWithinHours)}. `
         + `Start one, filled in from this request: ${o.url}`,
     ];
   }
-  const pitch = `have our team look for you with Priority search, part of the Pass ($${o.passPriceUsd} for ${o.passDays} days): ${o.url}`;
+  const pitch = `let us ask the agents in our network for you - ${SEARCH_NAME}, part of the Pass ($${o.passPriceUsd} for ${o.passDays} days): ${o.url}`;
   return o.freeViewing
     ? [
       `Your free viewing is still unused - pick another place and we will arrange it: ${o.browseUrl}`,

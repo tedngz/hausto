@@ -407,7 +407,7 @@ export function planRequest(p: PlanInput): Proposal[] {
             ? 'Every agent has answered: none is free at the renter\'s times, but some offered others. Send them.'
             : busyOnly > 0
               ? `Every agent has answered and none can do the renter's days, but ${busyOnly === 1 ? 'one place has' : `${busyOnly} places have`} not been rented. Ask the renter for other days.`
-              : 'Every agent has answered and nothing is left. Tell the renter, with close matches or Priority search.',
+              : 'Every agent has answered and nothing is left. Tell the renter, with close matches or an Extensive search.',
         confidence: assembled.warnings.length > 0 ? 'LOW' : 'HIGH',
       });
     }

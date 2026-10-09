@@ -62,7 +62,7 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
               {pass.isComplimentary
                 ? 'Included with your admin account'
                 : `${pass.daysLeft} day${pass.daysLeft === 1 ? '' : 's'} left`}
- · every viewing we confirm is covered
+ · every viewing we arrange is covered
             </p>
             {/* A complimentary pass has no end to extend. */}
             {!pass.isComplimentary && (
@@ -72,8 +72,8 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
             )}
           </> : <>
             <p className="text-sm text-muted-foreground">
-              Your first viewing is on us. The Pass has us arrange every one after, plus a Deep Scan
-              on any listing - with its price history - before you spend a Saturday on it.
+              Your first viewing is on us. The Pass has us arrange every one after, plus a Deep scan
+              on any listing - with any price changes we have seen - before you spend a Saturday on it.
             </p>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />

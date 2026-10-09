@@ -30,7 +30,7 @@ export interface ChatHandoff {
   subjects?: AssistantOpenDetail[];
   /** Listing ids the compare panel should reopen on once the table has them. */
   compareIds?: string[];
-  /** A Deep Scan asked for off the hub, to be read on arrival. */
+  /** A Deep scan asked for off the hub, to be read on arrival. */
   deepScan?: DeepScanDetail;
 }
 

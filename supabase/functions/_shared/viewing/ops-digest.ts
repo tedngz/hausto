@@ -21,6 +21,7 @@ import type { DomainEvent, InquiryEvent } from '../viewing-domain.ts';
 import { CONSOLE_URL, type IntakeAlert } from './ops-alert.ts';
 import { hcmcLong } from './format.ts';
 import { consoleLink } from './inbox.ts';
+import { REPLY_WITHIN_HOURS, replyWithinText } from './place.ts';
 
 export const OPS_DIGEST_JOB = 'OPS_DIGEST';
 
@@ -101,18 +102,18 @@ export function viewingUpdates(ref: string, events: DomainEvent[], requestId?: s
   return out;
 }
 
-/** An availability request's events - a building's, or a priority search's. */
+/** An Extensive search's events - a building's, or an area's. */
 export function inquiryUpdates(kind: 'BUILDING' | 'SEARCH', name: string, events: InquiryEvent[], inquiryId?: string): Update[] {
   const out: Update[] = [];
   const link = inquiryId ? consoleLink(kind, inquiryId) : undefined;
-  const label = kind === 'SEARCH' ? 'priority search' : 'availability request';
+  const label = kind === 'SEARCH' ? 'area search' : 'availability request';
   for (const e of events) {
     const p = (e.payload ?? {}) as Record<string, unknown>;
     const add = (what: string, needsYou = false) =>
       out.push({ kind, name, what, needsYou, at: e.occurred_at, ...(link ? { link } : {}) });
     switch (e.type) {
       case 'CONFIRMED':
-        add(`new ${label} - the renter is waiting, reply due within ${kind === 'SEARCH' ? 48 : 24} hours`, true);
+        add(`new ${label} - the renter is waiting, reply due within ${replyWithinText(REPLY_WITHIN_HOURS[kind === 'SEARCH' ? 'AREA' : 'BUILDING'])}`, true);
         break;
       case 'BRIEF_CHANGED': add('the renter changed what they would take', true); break;
       case 'UNITS_OFFERED': add('units went to the renter'); break;
@@ -143,7 +144,7 @@ export function escalationUpdate(ref: string, rationale: string, at: string, req
 const KIND_LABEL: Record<RequestKind, string> = {
   VIEWING: 'Viewing requests',
   BUILDING: 'Building availability',
-  SEARCH: 'Priority searches',
+  SEARCH: 'Area searches',
 };
 
 /**

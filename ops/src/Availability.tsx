@@ -168,7 +168,7 @@ export function Availability({ openId, onOpen }: { openId: string | null; onOpen
                 <tr key={r.id} onClick={() => setOpenId(r.id)}>
                   <td>
                     <strong>{r.complex_name}</strong>{' '}
-                    {r.area_district_codes ? <span className="tag">Priority search</span> : <span className="small muted">{r.district ?? ''}</span>}
+                    {r.area_district_codes ? <span className="tag">Area search</span> : <span className="small muted">{r.district ?? ''}</span>}
                   </td>
                   <td className="small">{summary(r)}</td>
                   <td className="small">{v.state}{v.closedReason ? ` · ${v.closedReason}` : ''}</td>
@@ -291,7 +291,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
         <button onClick={onBack}>Back</button>
         <h2 style={{ fontSize: 15, margin: 0 }}>{d.complex.name}</h2>
         {area
-          ? <span className="tag">Priority search</span>
+          ? <span className="tag">Area search</span>
           : <span className="small muted">{d.complex.district ?? ''}{d.complex.management_company ? ` · ${d.complex.management_company}` : ''}</span>}
         <div className="spacer" />
         <span className="tag">{v.state}{v.closedReason ? ` · ${v.closedReason}` : ''}</span>
