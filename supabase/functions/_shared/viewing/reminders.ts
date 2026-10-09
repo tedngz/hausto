@@ -80,7 +80,7 @@ export function lastHeardFromUs(events: DomainEvent[], createdAt: string): numbe
     // hearing from us, and a holding update on top of it would be the second
     // of two messages saying less than the first.
     if (e.type === 'ITINERARY_DELIVERED' || e.type === 'ITINERARY_HELD'
-      || e.type === 'HOLDING_UPDATE_SENT' || e.type === 'REPLY_SENT') {
+      || e.type === 'HOLDING_UPDATE_SENT' || e.type === 'REPLY_SENT' || e.type === 'OTHER_DAYS_ASKED') {
       last = Math.max(last, Date.parse(e.occurred_at));
     }
   }
@@ -115,8 +115,10 @@ export function dueActions(input: ScheduleInput): DueAction[] {
     const silentFor = now - lastHeardFromUs(events, createdAt);
     // A held itinerary waits on the renter too: they have been told the plan
     // is ready, and "we are still working on it" a day later would contradict
-    // that. Their reply releases it.
-    if (silentFor >= SILENCE_ACTION_MS && !WAITING_ON_RENTER.has(view.state) && !view.heldItinerary) {
+    // that. Their reply releases it. So does a question about other days:
+    // the next move is theirs, and "we are waiting on the agents" is false.
+    const waitingOnRenter = WAITING_ON_RENTER.has(view.state) || !!view.heldItinerary || !!view.otherDaysAsked;
+    if (silentFor >= SILENCE_ACTION_MS && !waitingOnRenter) {
       actions.push({
         kind: 'HOLDING_UPDATE',
         requestId,
@@ -140,14 +142,19 @@ export function dueActions(input: ScheduleInput): DueAction[] {
     // sent by a timer to someone mulling over flats is how a number gets
     // reported. A to-do in the console instead; the drain closes it once the
     // renter answers or an operator writes to them.
-    if (view.state === 'DELIVERED') {
+    // The same for a question about other days that went unanswered: new
+    // times clear it (AVAILABILITY_CHANGED), and nothing else will.
+    const asked = view.state === 'DELIVERED' ? 'the plan'
+      : view.otherDaysAsked && !view.otherDaysAsked.held ? 'the question about other days'
+      : null;
+    if (asked) {
       const last = lastHeardFromUs(events, createdAt);
       const answered = events.some(e => e.type === 'RENTER_REPLIED' && Date.parse(e.occurred_at) > last);
       if (!answered && now - last >= CHASE_RENTER_AFTER_MS) {
         actions.push({
           kind: 'CHASE_RENTER',
           requestId,
-          reason: `no answer to the plan for ${Math.floor((now - last) / HOUR_MS)}h`,
+          reason: `no answer to ${asked} for ${Math.floor((now - last) / HOUR_MS)}h`,
         });
       }
     }

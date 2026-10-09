@@ -16,7 +16,7 @@ import {
   MAX_AREA_DISTRICTS, REPLY_WITHIN_HOURS, districtCodeOf,
 } from '../../supabase/functions/_shared/viewing/place.ts';
 
-/** What a thin search already knows, so Search for me opens filled in. */
+/** What a thin search already knows, so Priority search opens filled in. */
 export interface SearchPrefill {
   /** District names as the renter app writes them: "District 2", "Binh Thanh". */
   districts?: string[];
@@ -50,7 +50,7 @@ const joinPlaces = (names: string[]) =>
   names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 
 /**
- * "Request availability at Empire City" (SPEC §11), and Search for me - the
+ * "Request availability at Empire City" (SPEC §11), and Priority search - the
  * same ask for an area, which is the Pass's.
  *
  * Both are the Pass's (owner's decision, 2026-10-07). A person on our team

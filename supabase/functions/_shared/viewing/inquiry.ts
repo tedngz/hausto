@@ -35,7 +35,7 @@ export const CONCIERGE_REPLY_HOURS = 24;
 const DAY_MS = 86_400_000;
 
 export interface InquiryInput {
-  /** One building, or - Search for me - an area of district codes. Exactly one. */
+  /** One building, or - Priority search - an area of district codes. Exactly one. */
   complexId: string | null;
   areaDistrictCodes: string[] | null;
   name: string;
@@ -114,7 +114,7 @@ export interface InquirySummary {
   fullName: string;
   /** The building's name, or the area's label. */
   complexName: string;
-  /** An area (Search for me) is promised 48 hours, not 24. */
+  /** An area (Priority search) is promised 48 hours, not 24. */
   kind?: 'BUILDING' | 'AREA';
   bedrooms: number;
   budgetMaxVnd: number | null;
@@ -152,7 +152,7 @@ export function describeInquiry(s: InquirySummary): string {
  */
 export function renderInquiryConfirmed(s: InquirySummary & { watchExpiresAt: string }): string {
   if (s.kind === 'AREA') {
-    // Search for me: a person searches agents' circles and groups, which is
+    // Priority search: a person searches agents' circles and groups, which is
     // slower than asking a building's agents - so the promise is 48 hours, and
     // every place offered is one an agent has confirmed.
     return [
@@ -168,7 +168,7 @@ export function renderInquiryConfirmed(s: InquirySummary & { watchExpiresAt: str
   ].join('\n\n');
 }
 
-/** The wa.me link for a search (Search for me): the same handshake, worded as a search. */
+/** The wa.me link for a Priority search: the same handshake, worded as a search. */
 export function buildSearchLink(businessPhoneE164: string, code: string, areaName: string): string {
   const number = businessPhoneE164.replace(/[^0-9]/g, '');
   const text = `Hi Hausto - please search ${areaName} for me (${code})`;

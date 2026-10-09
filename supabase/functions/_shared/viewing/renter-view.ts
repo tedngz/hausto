@@ -29,9 +29,16 @@ export type PlaceStatus =
   | 'NO_ANSWER'    // silent after chasing, or no working number
   | 'REMOVED';     // the renter took it out
 
+/**
+ * The hub, opened on the Viewings tab. Where a WhatsApp message sends a renter
+ * to change their times (itinerary.ts renderOtherDays).
+ */
+export const VIEWINGS_PATH = '/hub?tab=viewings';
+
 /** Where the request as a whole stands. */
 export type RequestStage =
   | 'ASKING'       // agents being asked
+  | 'NEW_TIMES'    // no agent can do their times; we asked them for other days
   | 'PLANNING'     // every agent answered; the plan is being put together
   | 'PLAN_READY'   // the plan is waiting behind a template for the renter's reply
   | 'PLAN_SENT'    // the plan is on WhatsApp, to lock in
@@ -193,7 +200,9 @@ function stageOf(view: RequestView, now: number): RequestStage {
     case 'DRAFT':
     case 'SUBMITTED':
     case 'CONTACTING':
-      return 'ASKING';
+      // Held behind a template, the renter has not read the question yet,
+      // but the page can ask it: it is the same question.
+      return view.otherDaysAsked ? 'NEW_TIMES' : 'ASKING';
     case 'ASSEMBLING':
       return view.heldItinerary ? 'PLAN_READY' : 'PLANNING';
     case 'DELIVERED': return 'PLAN_SENT';
@@ -205,6 +214,7 @@ function stageOf(view: RequestView, now: number): RequestStage {
 
 const STAGE_LABEL: Record<RequestStage, string> = {
   ASKING: 'Asking the agents - we message you on WhatsApp once they answer',
+  NEW_TIMES: 'The agents cannot do these days - change your times and we will ask again',
   PLANNING: 'The agents have answered - your plan is coming on WhatsApp',
   PLAN_READY: 'Your plan is ready - reply to us on WhatsApp to see it',
   PLAN_SENT: 'Your plan is on WhatsApp',

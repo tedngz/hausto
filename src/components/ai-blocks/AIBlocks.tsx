@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Building2, MapPin, Route, ArrowRight, Search, MessageCircle } from 'lucide-react';
-import { SearchForMePrompt } from '@/components/SearchForMePrompt';
+import { PrioritySearchPrompt } from '@/components/PrioritySearchPrompt';
 
 // Parse "[Search] ..." or "[Ask] ..." prefix from an AI follow-up suggestion.
 // Defaults to "ask" when no tag is present so the chip still works.
@@ -54,7 +54,8 @@ export type AIBlock =
   | { type: 'followups'; suggestions: string[] }
   | {
       // Added by chat-ai, never the model: a search that found little, and
-      // what it asked for, so Search for me opens filled in.
+      // what it asked for, so Priority search opens filled in. Named for its
+      // first name, "Search for me" - see prioritySearchBlock in chat-ai.
       type: 'search_for_me';
       found?: number;
       districts?: string[];
@@ -276,7 +277,7 @@ export const AIBlocks = ({ blocks, onFollowup }: AIBlocksProps) => {
 
           case 'search_for_me':
             return (
-              <SearchForMePrompt
+              <PrioritySearchPrompt
                 key={i}
                 className="max-w-[640px]"
                 found={block.found ?? 0}

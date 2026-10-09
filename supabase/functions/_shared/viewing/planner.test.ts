@@ -353,3 +353,48 @@ describe('when every window the renter gave has passed', () => {
     expect(plan(submitted(1), { items: items(1), availability: [], now: after + HOUR_MS }).map(p => p.action)).toEqual(['CONTACTED']);
   });
 });
+
+describe('nothing at the renter\'s times', () => {
+  const busy = () => [
+    ...submitted(2),
+    ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'UNAVAILABLE_DATE', slots: [] }, 'i1'),
+    ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'ALREADY_RENTED', slots: [] }, 'i2'),
+  ];
+
+  it('proposes asking the renter for other days when a place was only busy', () => {
+    const p = byKey(plan(busy()))['DELIVER:r:days'];
+    expect(p).toMatchObject({ action: 'DELIVER', input: { requestId: 'r' } });
+    expect(p.rationale).toContain('Ask the renter for other days');
+    expect(byKey(plan(busy()))['DELIVER:r']).toBeUndefined();
+  });
+
+  it('proposes telling them, with close matches or Priority search, when everything was rented', () => {
+    const events = [
+      ...submitted(2),
+      ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'ALREADY_RENTED', slots: [] }, 'i1'),
+      ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'NO_RESPONSE', slots: [] }, 'i2'),
+    ];
+    expect(byKey(plan(events))['DELIVER:r'].rationale).toContain('Priority search');
+  });
+
+  it('waits on the renter once asked, and asks again after new times come back the same', () => {
+    const asked = [...busy(), ev('OTHER_DAYS_ASKED', 2 * HOUR_MS, { message_id: 'm1' })];
+    expect(plan(asked).filter(p => p.key.startsWith('DELIVER:'))).toEqual([]);
+
+    const again = [
+      ...asked,
+      ev('AVAILABILITY_CHANGED', 3 * HOUR_MS, { availability: [{ date: '2026-10-01', part: 'MORNING' }] }),
+      ev('OUTCOME_RECORDED', 4 * HOUR_MS, { outcome: 'UNAVAILABLE_DATE', slots: [] }, 'i1'),
+    ];
+    expect(byKey(plan(again, { now: T0 + 5 * HOUR_MS }))['DELIVER:r:days:t1']).toMatchObject({ action: 'DELIVER' });
+  });
+
+  it('proposes the plan after all when a place that joined is confirmed', () => {
+    const events = [
+      ...busy(), ev('OTHER_DAYS_ASKED', 2 * HOUR_MS, { message_id: 'm1' }),
+      ev('ITEM_ADDED', 3 * HOUR_MS, {}, 'i3'),
+      ev('OUTCOME_RECORDED', 4 * HOUR_MS, { outcome: 'CONFIRMED', slots: slot('2026-09-29T02:00:00Z') }, 'i3'),
+    ];
+    expect(byKey(plan(events, { items: items(3), now: T0 + 5 * HOUR_MS }))['DELIVER:r']).toMatchObject({ action: 'DELIVER' });
+  });
+});

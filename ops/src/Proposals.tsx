@@ -30,7 +30,9 @@ const LABEL: Record<string, string> = {
   NUDGE: 'Chase the agent',
   OUTCOME: 'Record an outcome',
   NOTIFY_REALTOR: 'Tell the agent',
-  DELIVER: 'Send the itinerary',
+  // The plan, other times, a question about days, or nothing left - the
+  // rationale says which (planner.ts), as deliver() decides it.
+  DELIVER: 'Send to the renter',
   CANCEL_REQUEST: 'Cancel the request',
   REPLY: 'Reply to the renter',
   ESCALATE: 'Needs a person',

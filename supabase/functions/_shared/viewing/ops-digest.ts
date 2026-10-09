@@ -2,7 +2,7 @@
 // (2026-10-08, the admin revamp).
 //
 // Three kinds of request reach an operator: viewing requests, availability
-// requests for a building, and priority searches (Search for me, an area).
+// requests for a building, and priority searches (an area).
 // Before this, a new viewing request was emailed and so were an agent's
 // replies about a building - but a renter answering on WhatsApp, a plan going
 // out or lapsing, a lock-in, or the AI operator handing something to a person

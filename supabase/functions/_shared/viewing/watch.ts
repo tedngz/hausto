@@ -141,7 +141,7 @@ export function codeUsable(createdAt: string, expiresAt: string, now: Date): 'OK
 
 export interface ActiveWatch {
   id: string;
-  /** Null for an area watch (Search for me), which follows districts instead. */
+  /** Null for an area watch (Priority search), which follows districts instead. */
   complex_id: string | null;
   area_district_codes?: string[] | null;
   area_label?: string | null;

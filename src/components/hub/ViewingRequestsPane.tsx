@@ -35,8 +35,8 @@ import { AvailabilityPicker, PART_LABEL, prettyDate } from '@/components/Availab
 import { RequestViewingModal, type RequestSeed } from '@/components/RequestViewingModal';
 import { cn } from '@/lib/utils';
 import { MAX_ITEMS, type AvailabilityWindow, type DayPart } from '../../../supabase/functions/_shared/viewing/intake.ts';
-import type {
-  PlaceStatus, RenterPlace, RenterRequest, RequestStage,
+import {
+  VIEWINGS_PATH, type PlaceStatus, type RenterPlace, type RenterRequest, type RequestStage,
 } from '../../../supabase/functions/_shared/viewing/renter-view.ts';
 
 type ManagedRequest = RenterRequest & { waLink: string };
@@ -48,6 +48,7 @@ const CLOSED: ReadonlySet<RequestStage> = new Set(['DONE', 'NOTHING_FREE', 'CANC
 
 const STAGE_TONE: Record<RequestStage, string> = {
   ASKING: 'bg-amber-100 text-amber-900',
+  NEW_TIMES: 'bg-primary/10 text-primary',
   PLANNING: 'bg-amber-100 text-amber-900',
   PLAN_READY: 'bg-primary/10 text-primary',
   PLAN_SENT: 'bg-primary/10 text-primary',
@@ -59,6 +60,7 @@ const STAGE_TONE: Record<RequestStage, string> = {
 
 const STAGE_SHORT: Record<RequestStage, string> = {
   ASKING: 'Asking agents',
+  NEW_TIMES: 'Pick other days',
   PLANNING: 'Plan coming',
   PLAN_READY: 'Plan ready',
   PLAN_SENT: 'Plan sent',
@@ -139,7 +141,8 @@ export const ViewingRequestsPane = () => {
   if (!user) {
     return (
       <p className="py-10 text-center text-sm text-muted-foreground">
-        <Link to="/auth" className="underline">Sign in</Link> to see your viewing requests.
+        {/* Back to this tab afterwards - a WhatsApp link asking for other days lands here. */}
+        <Link to="/auth" state={{ returnTo: VIEWINGS_PATH }} className="underline">Sign in</Link> to see your viewing requests.
       </p>
     );
   }
@@ -226,9 +229,11 @@ function RequestCard({ request: r, busy, run }: { request: ManagedRequest; busy:
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-muted/50 px-3 py-2 text-sm">
             <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 text-muted-foreground">{windowsText(r.availability)}</span>
+            {/* Asked for other days, it is the one thing to do here. */}
             {r.canChangeTimes && (
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => setTimesOpen(true)}>
-                Change times
+              <Button size="sm" variant={r.stage === 'NEW_TIMES' ? 'default' : 'ghost'}
+                className={cn('h-7 px-2', r.stage !== 'NEW_TIMES' && 'text-primary')} onClick={() => setTimesOpen(true)}>
+                {r.stage === 'NEW_TIMES' ? 'Pick other days' : 'Change times'}
               </Button>
             )}
           </div>

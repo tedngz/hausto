@@ -94,7 +94,7 @@ async function alertAgentReplies(
     try {
       const { data: inq } = await db.from('complex_inquiries')
         .select('complex_id, area_district_codes, area_label').eq('id', r.inquiryId).maybeSingle();
-      // A building, or an area (Search for me).
+      // A building, or an area (Priority search).
       const place = inq ? await placeOf(db, inq) : null;
       const { data: agent } = await db.from('realtors').select('display_name').eq('phone_e164', r.fromPhone).maybeSingle();
       await sendIntakeAlert(db, renderAgentReplyAlert({

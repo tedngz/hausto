@@ -454,7 +454,9 @@ renter takes the place out (§9, "Changing a request").
 **Partial success is the happy path.** Three confirmed of five requested is the
 normal outcome. Any function signature or UI state that assumes all items resolve
 the same way is wrong. `FAILED_NO_SUPPLY` means *zero* items confirmed, and it
-ships with substitutes, never on its own.
+ships with substitutes, never on its own. Zero confirmed is not always zero
+supply: an agent who cannot do the renter's days (`UNAVAILABLE`) has not said
+the place is gone, so the renter is asked for other days instead (§5).
 
 A request moves to `ASSEMBLING` when every item has left `PENDING`/`CONTACTED`,
 or when the assembly deadline fires - whichever comes first. Ops can force it.
@@ -503,6 +505,7 @@ Event types:
 | `REQUEST_CONFIRMED` | request | `{confirmed_item_ids[], cover?, checkout_id?}` - the lock-in (§9). `cover` ∈ `PASS`, `FREE_VIEWING` (`COVERS`); absent on confirmations from before the pricing rework. Sets `confirmedCover` on the view |
 | `ITEM_WITHDRAWN` | item | `{}` - the renter took the place out (§9). Final: the item is `WITHDRAWN` whatever its agent says after; what the agent had said is kept as `withdrawnFrom`. Left out of `summarise` and the itinerary's "3 of 5" |
 | `AVAILABILITY_ADDED` | request | `{added, availability}` - times the renter added as a place joined (§1). Moves no state and undoes no answer |
+| `OTHER_DAYS_ASKED` | request | `{message_id, held?, template?}` - nothing confirmed, no other times offered, and at least one place only `UNAVAILABLE`, so the renter was asked for other days (§5). Moves no state - nothing is assembled or delivered, so their times stay open to change. Sets `otherDaysAsked` on the view (the newest wins; `held` while it waits behind `request_update`), cleared by `AVAILABILITY_CHANGED` and by `ITINERARY_DELIVERED` |
 | `AVAILABILITY_CHANGED` | request | `{availability, previous}` - the renter's new times, before assembly (§9). Every item whose answer was about the old times (`CONTACTED`, `CONFIRMED`, `ALTERNATIVE_OFFERED`, `UNAVAILABLE`, `NO_RESPONSE`) goes back to `PENDING` with no slots or nudges; rented, re-priced and unreachable stand. Each `PENDING` item counts a `round`; one whose agent was holding time carries `staleHold` until they are asked again or answer. Moves `ASSEMBLING` back to `CONTACTING` |
 | `REQUEST_CANCELLED` | request | `{reason, note?}` - `reason` ∈ `CANCEL_REASONS` (`RENTER_DECLINED`, `RENTER_FOUND_PLACE`, `RENTER_UNRESPONSIVE`, `DUPLICATE`, `NOT_LOCKED_IN`, `OTHER`); who cancelled is the event's `actor` - `SYSTEM` for `NOT_LOCKED_IN` (§9) |
 | `REQUEST_FAILED` | request | `{reason, substitute_listing_ids[]}` |
@@ -794,7 +797,7 @@ change. It is held in one place:
   contact import, the weekly contact check). `RECORD_CONTACT` sets `realtor_id`
   and never writes it, and an agent's offered unit (§11) carries no contact.
   **Never `realtors.phone_e164`**: an agent an operator found - on a request,
-  for a building, for Search for me - agreed to talk to Hausto, not to be
+  for a building, for Priority search - agreed to talk to Hausto, not to be
   published, and reaches a renter only on the viewing day.
 - `get-public-property` says whether there is a number (`has_agent_number`) and
   strips `contact_name`, `contact_phone`, `contact_phone_e164`, `source_url` and
@@ -925,8 +928,30 @@ number even by mistake (§6 by shape, not by discipline).
 Nothing says "booked". At delivery the request is `DELIVERED`, not `CONFIRMED`
 - the renter has not agreed to anything - and §6 forbids implying otherwise.
 
-`FAILED_NO_SUPPLY` ships with substitutes or, when there are none yet, with a
-promise to come back the same day. Never on its own.
+**Nothing confirmed is one of two messages** (2026-10-09, owner's decision), as
+`deliver()` decides it from the log:
+
+- **Some place was only busy on those days** (`UNAVAILABLE`, from
+  `UNAVAILABLE_DATE`): `renderOtherDays` lists those places, says they have
+  not been rented, and links the Viewings tab (`/hub?tab=viewings`) to pick
+  other days. It is a question, not a plan: it writes `OTHER_DAYS_ASKED` and
+  neither `ITINERARY_ASSEMBLED` nor `ITINERARY_DELIVERED`, so "Change times"
+  stays open (`canChangeTimes`), the Viewings tab shows `NEW_TIMES` ("Pick
+  other days"), and new times send every agent back to be asked. Close
+  matches are not offered: the places the renter chose are still there. Until
+  2026-10-09 this was the no-supply message, which told the renter places
+  were gone that were only busy.
+- **Nothing can be seen on other days** - every place rented, re-priced,
+  unanswered or unreachable: `renderNoSupply`, with up to three close matches
+  (`substitutes.ts`), or with none found, Priority search (§11) - a link that
+  opens it filled in from the shortlist (its districts, the most bedrooms, the
+  dearest price; `prioritySearchPath`). A Pass holder is told it is theirs; a
+  renter without the Pass is pointed first at the free viewing their number
+  still has, then at Priority search with the Pass's price, in one line. Until
+  2026-10-09 it ended "we will come back to you today", a follow-up nothing in
+  the system made.
+
+Never on its own, either way.
 
 **Other times an agent offered are relayed, not dropped.** An
 `ALTERNATIVE_OFFERED` item with slots is listed after the plan, in the same
@@ -946,9 +971,13 @@ template that says the same thing in outline and asks them to reply:
 |---|---|---|
 | At least one stop | `itinerary_ready` | how many are confirmed, when the earliest is |
 | Nothing confirmed, close matches found | `no_supply_substitutes` | the request ref |
-| Other times on offer, or nothing found yet | `request_update` | the listing, or "5 places" |
+| Other times on offer, nothing found, or a question about other days | `request_update` | the listing, or "5 places" |
 
-It writes `ITINERARY_ASSEMBLED` and `ITINERARY_HELD`, never
+A question about other days is held the same way but logged as
+`OTHER_DAYS_ASKED` with `held: true` - nothing assembled, so the times stay
+open - and released the same way.
+
+For a plan, it writes `ITINERARY_ASSEMBLED` and `ITINERARY_HELD`, never
 `ITINERARY_DELIVERED`: the renter knows a plan exists and has not seen it, so
 nothing they say yet can confirm it, and the request stays `ASSEMBLING`. No
 `SUGGESTIONS_OFFERED` either - nothing has been shown. Their next message
@@ -970,7 +999,11 @@ something.** Asserted as a property test over randomly generated event logs
 
 - The clock starts at intake - the confirmation page already made a promise -
   and moves forward on `ITINERARY_DELIVERED`, `ITINERARY_HELD`,
-  `HOLDING_UPDATE_SENT` or `REPLY_SENT`.
+  `HOLDING_UPDATE_SENT`, `REPLY_SENT` or `OTHER_DAYS_ASKED`.
+- Asked for other days, the request waits on the renter: no holding update is
+  owed ("we are waiting on the agents" would be false). Unanswered for 48
+  hours - and not held - it becomes a `CHASE_RENTER` to-do like an unanswered
+  plan; new times close it.
 - A held itinerary waits on the renter too: they were told the plan is ready,
   and "still working on it" a day later would contradict that. No holding
   update is owed while one is held; their reply releases it.
@@ -1041,7 +1074,8 @@ A building (§11) is the Pass's too.
 **Locking in a confirmed plan is still a step.** Agents confirm a time before
 the renter commits, and the plan - each stop's place, day and time, and no
 field for an agent - is what they lock in. A request where no agent confirms
-ends with substitutes or offered times, as before.
+ends with offered times, a question about other days, close matches or
+Priority search (§5).
 
 Where a stop's ad lists the agent's number, "Request viewing" offers it (§6),
 so a renter holding a plan knows which places are free and could ring those
@@ -1418,15 +1452,17 @@ A request is not a viewing request. It spends no credit and is not in the
 event log: it asks a person to look, and viewings of what they find are
 requested the one way there is (invariant 8), from the listing page.
 
-**Search for me** (the pricing rework, step 5) is the same request for an area
+**Priority search** (the pricing rework, step 5) is the same request for an area
 rather than a building - up to four districts - and is the Pass's: a person
 searches Facebook groups and agents' circles, the first places are promised
 within 48 hours, and every place offered is one an agent confirmed. A building
 request is the Pass's too since 2026-10-07 (owner's decision; it was free for
-everyone), signed in. See "Search for me" below; everything else in
-this section holds for both. Renters see it as **Priority search** (2026-10-07),
-the name the Pass sells it by; "Search for me" stays its name in the code and
-here.
+everyone), signed in. See "Priority search" below; everything else in
+this section holds for both. Renters have seen it as Priority search since
+2026-10-07, the name the Pass sells it by, and since 2026-10-09 (owner's
+decision) that is its name everywhere - the code, the console and these docs.
+It was called "Search for me" before; the `search_for_me` chat block keeps the
+old spelling on the wire, because the SPA and `chat-ai` deploy apart.
 
 ### The form (`ConciergeCaptureModal`)
 
@@ -1455,7 +1491,7 @@ watch_id               uuid references complex_watches -- the handshake
 renter_id              uuid references renters        -- set when the code arrives
 whatsapp_confirmed_at  timestamptz     -- the concierge's clock starts
 complex_id             uuid            -- now nullable: NULL for an area
-area_district_codes    text[]          -- Search for me: 1-4 district_code values
+area_district_codes    text[]          -- Priority search: 1-4 district_code values
 area_label             text            -- "District 2 and Binh Thanh"
 ```
 
@@ -1734,7 +1770,7 @@ how many listings they have there and citywide, when they last listed, and when
 they last replied to us - who to ask first. `BUILDING_AGENT_SOURCES` in
 `viewing-domain.ts`; the target is `ROSTER_TARGET` (3) per building.
 
-### Search for me (the pricing rework, step 5)
+### Priority search (the pricing rework, step 5)
 
 A Pass holder who cannot find a fit in Browse or the chat asks us to look, and
 a person searches Facebook groups and agents' circles for them. It is the
@@ -1804,7 +1840,7 @@ rather than `complex_listing_ids()`, and labels each place by its district.
 
 **People.** It is all manual - reading groups cannot be automated, so the AI
 operator does not take it over - and the 48 hours run through weekends.
-`search-for-me-rehearsal.test.ts` walks it end to end: the brief, the code,
+`priority-search-rehearsal.test.ts` walks it end to end: the brief, the code,
 agents asked on Zalo and by number, units captured, one offer, the reply, and
 the viewing request it closes on.
 
@@ -1816,7 +1852,7 @@ point.
 ```
 complex_watches
 id              uuid pk
-complex_id      uuid references complexes -- NULL for an area (Search for me)
+complex_id      uuid references complexes -- NULL for an area (Priority search)
 area_district_codes text[]                -- the area's districts, 1-4
 area_label      text                      -- "District 2 and Binh Thanh"
 code            text unique not null      -- HW-XXXX, the ref alphabet

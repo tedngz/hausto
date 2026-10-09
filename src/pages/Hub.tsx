@@ -18,6 +18,7 @@ import { HubNavigation } from '@/components/hub/HubNavigation';
 import { HubModeTabs, type HubMode } from '@/components/hub/HubModeTabs';
 import { ViewingRequestsPane } from '@/components/hub/ViewingRequestsPane';
 import { HubNewListings } from '@/components/hub/HubNewListings';
+import { ConciergeCaptureModal, type SearchPrefill } from '@/components/ConciergeCaptureModal';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useComplexes } from '@/hooks/useComplexes';
@@ -28,6 +29,7 @@ import { clearChatHandoff, peekChatHandoff } from '@/lib/chatHandoff';
 import { ASSISTANT_COMPARE_EVENT, ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
 import { DEEP_SCAN_EVENT } from '@/lib/deepScanEvents';
 import { cn } from '@/lib/utils';
+import { prioritySearchFromQuery } from '../../supabase/functions/_shared/viewing/place.ts';
 
 /**
  * The hub: one screen for the three things renters were bouncing between.
@@ -60,10 +62,25 @@ const Hub = () => {
     clearChatHandoff();
   }, []);
 
+  // Links from WhatsApp: `?tab=viewings` to pick other days for a request,
+  // and `?priority=...` to start a Priority search filled in from one whose
+  // places all fell through (deliver.ts). The search's parameters stay in the
+  // address while its form is open - signing in comes back to it - and are
+  // dropped once it closes, so a reload does not reopen it.
+  const [linked] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return { viewings: params.get('tab') === 'viewings', priority: prioritySearchFromQuery(params) };
+  });
+  const [prioritySearch, setPrioritySearch] = useState<SearchPrefill | null>(linked.priority);
+  const closePrioritySearch = () => {
+    setPrioritySearch(null);
+    navigate('/hub', { replace: true });
+  };
+
   // A carried-over comparison opens on Browse, not AI: the side-by-side panel
   // belongs to the table, and the chat answers about it from the rail.
   const [mode, setMode] = useState<HubMode>(
-    handoff?.compareIds ? 'browse' : handoff ? 'ai' : 'browse',
+    linked.viewings ? 'viewings' : handoff?.compareIds ? 'browse' : handoff ? 'ai' : 'browse',
   );
   // Profile is a full-pane detour rather than a tab - it is account admin, not
   // part of the search loop the tabs describe.
@@ -72,7 +89,8 @@ const Hub = () => {
   // saved preferences are still making their way back from the DB. A renter
   // who arrives mid-sentence from home starts skipped: the quiz would swallow
   // the message they just sent, and it is still one tap away in the nav menu.
-  const [skippedOnboarding, setSkippedOnboarding] = useState(!!handoff);
+  // So does one who followed a link here to do one particular thing.
+  const [skippedOnboarding, setSkippedOnboarding] = useState(!!handoff || linked.viewings || !!linked.priority);
   // One-shot opening message - from the quiz, or carried over from home.
   const [seedQuery, setSeedQuery] = useState<string | undefined>(handoff?.query);
   const [seedImages, setSeedImages] = useState<File[] | undefined>(handoff?.images);
@@ -405,6 +423,16 @@ const Hub = () => {
           isOpen={isSubscriptionModalOpen}
           onClose={() => setIsSubscriptionModalOpen(false)}
         />
+
+        {/* From a WhatsApp link: signed out it asks for a sign-in, without the
+            Pass it pitches the Pass, and with it the form, filled in. */}
+        {linked.priority && (
+          <ConciergeCaptureModal
+            open={!!prioritySearch}
+            onOpenChange={open => { if (!open) closePrioritySearch(); }}
+            search={linked.priority}
+          />
+        )}
       </div>
     </CurrencyProvider>
   );

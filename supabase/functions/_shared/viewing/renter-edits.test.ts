@@ -243,4 +243,18 @@ describe('what the renter sees', () => {
   it('describes windows the way the renter picked them', () => {
     expect(describeWindows(NEW)).toBe('Tue 29 Sept afternoon, Wed 30 Sept morning');
   });
+
+  it('asks for other days once we have, and lets the times be changed', async () => {
+    seed('OUTCOME_RECORDED', { outcome: 'UNAVAILABLE_DATE' }, 'i1');
+    seed('OUTCOME_RECORDED', { outcome: 'UNAVAILABLE_DATE' }, 'i2');
+    seed('OTHER_DAYS_ASKED', { message_id: 'm1' });
+    const r = seen();
+    expect(r).toMatchObject({ stage: 'NEW_TIMES', canChangeTimes: true });
+    expect(r.stageLabel).toBe('The agents cannot do these days - change your times and we will ask again');
+    expect(r.places.map(p => p.label)).toEqual(['Not free at your times', 'Not free at your times']);
+
+    // The new times answer it: every agent is asked again.
+    expect(await edit({ kind: 'CHANGE_TIMES', availability: NEW })).toMatchObject({ ok: true });
+    expect(seen().stage).toBe('ASKING');
+  });
 });

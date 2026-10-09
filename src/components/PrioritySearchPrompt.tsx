@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils';
 import { REPLY_WITHIN_HOURS } from '../../supabase/functions/_shared/viewing/place.ts';
 
 /**
- * Search for me, offered under a thin search (the pricing rework, step 5):
+ * Priority search, offered under a thin search (the pricing rework, step 5):
  * in Browse when the filters leave little, and in the chat when a search
  * found little - prefilled from that search either way. The modal decides
  * what the renter sees next: sign in, the Pass, or the form.
  */
-export function SearchForMePrompt({ prefill, found, className }: {
+export function PrioritySearchPrompt({ prefill, found, className }: {
   prefill: SearchPrefill;
   /** How many places the search showed; fewer than THIN_SEARCH. */
   found: number;
@@ -27,8 +27,6 @@ export function SearchForMePrompt({ prefill, found, className }: {
           Comes with the Pass.
         </p>
       </div>
-      {/* Renters know it as Priority search, the name the Pass sells it by;
-          "Search for me" is still its name in the code and the SPEC. */}
       <Button size="sm" className="shrink-0" onClick={() => setOpen(true)}>
         <Search className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
         Start a priority search

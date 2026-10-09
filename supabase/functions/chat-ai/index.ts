@@ -801,12 +801,12 @@ const MAIN_DISTRICT_NAMES = ['district 1', 'district 2', 'district 3', 'district
   'go vap', 'tan binh', 'tan phu', 'binh tan'];
 
 /**
- * Search for me, offered under a thin search (the pricing rework, step 5):
+ * Priority search, offered under a thin search (the pricing rework, step 5):
  * the criteria this conversation has settled on, in the renter app's words -
  * "District 2", "Binh Thanh" - so its form opens filled in rather than asking
  * again. Wards are left out; their district is already in the list.
  */
-function searchForMeBlock(context: AccumulatedContext, found: number) {
+function prioritySearchBlock(context: AccumulatedContext, found: number) {
   const districts = context.specificDistricts
     .filter(d => MAIN_DISTRICT_NAMES.includes(d))
     .map(d => d.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
@@ -817,6 +817,9 @@ function searchForMeBlock(context: AccumulatedContext, found: number) {
   // The form takes 3 to 500 million a month; anything else is left for the renter.
   const budget = context.maxPrice && context.maxPrice >= 3_000_000 && context.maxPrice <= 500_000_000
     ? Math.round(context.maxPrice) : null;
+  // The block keeps its first name on the wire: the SPA publishes from
+  // Lovable and this deploys on merge, so renaming it would leave one reading
+  // a type the other no longer sends.
   return { type: 'search_for_me', found, districts, bedrooms, budgetMaxVnd: budget };
 }
 
@@ -3479,8 +3482,8 @@ Maximum ${maxResults} properties in results.`;
       } catch { /* non-JSON reply, nothing to strip */ }
     }
 
-    // A search in Ho Chi Minh City that found little gets Search for me under
-    // it, prefilled from what this conversation asked for (searchForMeBlock).
+    // A search in Ho Chi Minh City that found little gets Priority search under
+    // it, prefilled from what this conversation asked for (prioritySearchBlock).
     // Attached here, before the reply is persisted, because a signed-in
     // renter's thread renders from chat_messages. Only when this message was
     // a search (a home, a size or a price in it) - never small talk, and never
@@ -3491,7 +3494,7 @@ Maximum ${maxResults} properties in results.`;
         const parsed = JSON.parse(responseContent);
         const shown = Array.isArray(parsed?.results) ? parsed.results.length : 0;
         if (parsed && typeof parsed === 'object' && shown < THIN_SEARCH) {
-          parsed.blocks = [...(Array.isArray(parsed.blocks) ? parsed.blocks : []), searchForMeBlock(accContext, shown)];
+          parsed.blocks = [...(Array.isArray(parsed.blocks) ? parsed.blocks : []), prioritySearchBlock(accContext, shown)];
           responseContent = JSON.stringify(parsed);
         }
       } catch { /* a prose reply: nothing to attach it to */ }

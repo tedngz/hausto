@@ -23,7 +23,7 @@ const LABEL: Record<string, string> = {
   VIEWING_DAY: 'Viewing-day message',
   CONFIRM_REALTOR: 'Confirm with the agent',
   RELEASE_REALTOR: 'Release the agent',
-  CHASE_RENTER: 'The renter has not answered the plan - ask again, or cancel',
+  CHASE_RENTER: 'The renter has not answered the plan or the question about other days - ask again, or cancel',
 };
 
 /** Kinds the runner sends by itself - shown for visibility, not as work. */

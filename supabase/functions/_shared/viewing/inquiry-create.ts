@@ -10,7 +10,7 @@
 // Two kinds, both for a signed-in Pass holder (owner's decision, 2026-10-07 -
 // a building was free for anyone until then):
 //   * **A building** (`complexId`).
-//   * **An area** (`areaDistrictCodes`) - Search for me, the Pass's headline
+//   * **An area** (`areaDistrictCodes`) - Priority search, the Pass's headline
 //     (the pricing rework, step 5). A person searches agents' circles for it,
 //     which costs real hours, so it also takes one open search at a time and
 //     promises 48 hours rather than 24.

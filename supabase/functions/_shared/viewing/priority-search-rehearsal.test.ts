@@ -1,4 +1,4 @@
-// Search for me, end to end (the pricing rework, step 5; SPEC §11): an area
+// Priority search, end to end (the pricing rework, step 5; SPEC §11): an area
 // request from the brief, to the agents asked, to one offer, to the viewing
 // request it leads to - on the FakeDb and the MockAdapter, through the calls
 // the form, the webhook, the console and the Zalo bridge make. Silent unless:
@@ -136,9 +136,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe('Search for me rehearsal', () => {
+describe('Priority search rehearsal', () => {
   it('goes from the brief, to agents asked, to one offer, to a linked viewing request', async () => {
-    if (PRINT) console.log('\n\n══ REHEARSAL - Search for me, District 2 and Binh Thanh ══');
+    if (PRINT) console.log('\n\n══ REHEARSAL - Priority search, District 2 and Binh Thanh ══');
 
     // 1. The brief, from the search modal. Nothing is sent until the code arrives.
     const created = await create(brief, USER);

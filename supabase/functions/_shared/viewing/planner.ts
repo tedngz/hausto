@@ -23,7 +23,7 @@ import { summarise, type DomainEvent, type RequestView } from '../viewing-domain
 import { realtorDecisionsOwed, NUDGE_AFTER_MS } from './reminders.ts';
 import { waitingReplies } from './thread.ts';
 import { NUDGES_BEFORE_NO_RESPONSE } from './outcomes.ts';
-import { assembleItinerary, busySlots, clashesWith, type BusySlot } from './itinerary.ts';
+import { assembleItinerary, busySlots, clashesWith, freeOnOtherDays, type BusySlot } from './itinerary.ts';
 import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft, clashDraft } from '../realtor/drafts.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
 import type { DraftResult } from './renter-reply.ts';
@@ -359,8 +359,12 @@ export function planRequest(p: PlanInput): Proposal[] {
   // this far anyway is a person's to fix.
   const s = summarise(view);
   // A held plan has been sent as far as it can go; the renter's reply
-  // releases it (deliver.ts), not another proposal.
-  if (!view.deliveredMessageId && !view.heldItinerary && s.total > 0 && s.unresolved === 0) {
+  // releases it (deliver.ts), not another proposal. Asked for other days,
+  // the next move is the renter's too - unless the answer has changed since,
+  // as when a place that joined was confirmed.
+  const waitingOnDays = !!view.otherDaysAsked && s.confirmed === 0
+    && !Object.values(view.items).some(i => i.state === 'ALTERNATIVE_OFFERED');
+  if (!view.deliveredMessageId && !view.heldItinerary && !waitingOnDays && s.total > 0 && s.unresolved === 0) {
     const byTime = Object.values(view.items)
       .filter(i => i.state === 'CONFIRMED')
       .map(i => ({ id: i.itemId, at: (i.slots[0] as { starts_at?: string } | undefined)?.starts_at ?? '' }))
@@ -374,19 +378,34 @@ export function planRequest(p: PlanInput): Proposal[] {
       byTime,
     );
     const clash = assembled.warnings.find(w => w.kind === 'OVERLAP');
+    // The same branches as deliver.ts, so the rationale says what will go.
+    const busyOnly = s.confirmed === 0 && assembled.alternatives.length === 0
+      ? freeOnOtherDays(view, p.items.map(i => ({
+        itemId: i.itemId, listingTitle: i.listingTitle, districtCode: i.districtCode, priceVndAtRequest: i.priceVnd,
+      }))).length
+      : 0;
+    // Asking for other days is its own decision, so a plan that follows it -
+    // a place joined and was confirmed - is proposed rather than taken for
+    // the same one. New times are a new round of answers, and a new decision.
+    const key = `DELIVER:${requestId}${busyOnly > 0 ? ':days' : ''}`
+      + `${view.availabilityChanges > 0 ? `:t${view.availabilityChanges}` : ''}`;
     if (clash) {
       propose({
-        itemId: null, key: `DELIVER:${requestId}`, action: 'ESCALATE',
+        itemId: null, key, action: 'ESCALATE',
         input: { requestId, reason: 'ITINERARY_CLASH' },
         rationale: `Every agent has answered, but two viewings clash: ${clash.message}`,
       });
     } else {
       propose({
-        itemId: null, key: `DELIVER:${requestId}`, action: 'DELIVER',
+        itemId: null, key, action: 'DELIVER',
         input: { requestId, order: byTime },
         rationale: s.confirmed > 0
           ? `Every agent has answered: ${s.confirmed} of ${s.total} confirmed. Send the plan.`
-          : 'Every agent has answered and none is free at the renter\'s times. Send what there is.',
+          : assembled.alternatives.length > 0
+            ? 'Every agent has answered: none is free at the renter\'s times, but some offered others. Send them.'
+            : busyOnly > 0
+              ? `Every agent has answered and none can do the renter's days, but ${busyOnly === 1 ? 'one place has' : `${busyOnly} places have`} not been rented. Ask the renter for other days.`
+              : 'Every agent has answered and nothing is left. Tell the renter, with close matches or Priority search.',
         confidence: assembled.warnings.length > 0 ? 'LOW' : 'HIGH',
       });
     }

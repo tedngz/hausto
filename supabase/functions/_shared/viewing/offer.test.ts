@@ -101,7 +101,7 @@ describe('the offer message', () => {
   });
 });
 
-describe('the offer for a search (Search for me)', () => {
+describe('the offer for a Priority search', () => {
   const units = [
     { id: 'u-1', title: '2BR at Masteri Thao Dien, floor 12', priceVnd: 24_000_000, bedrooms: 2, areaSqm: 80, confirmedAt: '2026-10-06T06:00:00Z' },
   ];

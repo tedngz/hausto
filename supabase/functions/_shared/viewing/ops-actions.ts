@@ -760,7 +760,7 @@ async function requestAction(
       return refuse(status, r.code, r.message);
     }
     return done({
-      recorded: r.held ? 'ITINERARY_HELD' : 'ITINERARY_DELIVERED',
+      recorded: r.otherDays ? 'OTHER_DAYS_ASKED' : r.held ? 'ITINERARY_HELD' : 'ITINERARY_DELIVERED',
       messageId: r.messageId, stops: r.stops, deduplicated: r.deduplicated,
     });
   }

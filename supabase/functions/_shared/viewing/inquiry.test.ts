@@ -117,7 +117,7 @@ describe('the words', () => {
   });
 });
 
-describe('Search for me - an area instead of a building', () => {
+describe('Priority search - an area instead of a building', () => {
   const area = { ...valid, complexId: undefined, areaDistrictCodes: ['D2', 'BINH_THANH'] };
 
   it('takes district codes in place of a building, once each', () => {

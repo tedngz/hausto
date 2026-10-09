@@ -82,7 +82,7 @@ const handler = async (req: Request): Promise<Response> => {
       return json({ success: true, skipped: "email requests are retired" });
     }
 
-    // A building, or an area (Search for me), which has no complex row.
+    // A building, or an area (Priority search), which has no complex row.
     const place = await placeOf(supabase, inquiry);
     const complex = place ? { slug: place.slug, district: place.district } : null;
     const complexName = place?.name ?? "Unknown complex";
@@ -149,7 +149,7 @@ const handler = async (req: Request): Promise<Response> => {
       headers: conversationHeaders(inqToken(inquiry.id)),
       html: `
         <h1>New concierge availability request</h1>
-        <p>A renter asked the concierge to ${place?.kind === "AREA" ? "search (Search for me, 48 hours)" : "check live availability at"}
+        <p>A renter asked the concierge to ${place?.kind === "AREA" ? "run a priority search (48 hours) in" : "check live availability at"}
         <strong>${esc(complexName)}</strong>${complex?.district ? ` (${esc(complex.district)})` : ""}.</p>
 
         <h2>Renter</h2>

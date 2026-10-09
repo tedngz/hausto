@@ -84,7 +84,7 @@ paths.** Enforce at the query layer, not the template layer (SPEC §6).
   consent: `dayStops` in `_shared/viewing/viewing-day.ts`, whose only caller is
   the viewing-day message (owner's decision, 2026-09-30).
 
-An agent an operator found - `RECORD_CONTACT`, building agents, Search for me -
+An agent an operator found - `RECORD_CONTACT`, building agents, Priority search -
 agreed to talk to Hausto, not to be published, so only the second path carries
 their number. Do not add a third. Beyond `ViewingChoice`, the chat, WhatsApp,
 cards, Browse and the previews carry no number and link nowhere outside Hausto;
@@ -519,7 +519,7 @@ WhatsApp "yes" alike:
   where the purchase is recorded, on both paths. The number to watch: lock-ins
   with no Pass and no free viewing - always zero.
 
-Search for me - an availability request for an area rather than a building
+Priority search - an availability request for an area rather than a building
 (SPEC §11) - is the Pass's too, read the same way (`hasPassCover`) when the
 request is made, one open search per account. So is a building request since
 2026-10-07 (owner's decision; it was free for everyone and filled the agent
