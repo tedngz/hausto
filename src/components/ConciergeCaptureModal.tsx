@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -65,6 +66,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
   const { pass, isLoading: passLoading, purchasePass, refetchPass } = usePass();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const isSearch = !!search;
 
   const [submitting, setSubmitting] = useState(false);
@@ -159,6 +161,8 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
       return;
     }
     setHandoff({ code: data.code, waLink: data.waLink, alertsUntil: data.alertsUntil, place: data.complexName });
+    // The Viewings tab lists it from now on (ViewingRequestsPane).
+    void queryClient.invalidateQueries({ queryKey: ['my-viewing-requests'] });
   };
 
   const buyPass = async () => {
@@ -253,8 +257,8 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
             </p>
             <p className="text-xs text-muted-foreground">
               Your code is <span className="font-mono font-medium text-foreground">{handoff.code}</span> - it works for a week.
+              {' '}This request and what we find are in your Viewings tab too.
             </p>
-            <Button variant="ghost" className="w-full" onClick={close}>Done</Button>
           </div>
         ) : (
           <>
