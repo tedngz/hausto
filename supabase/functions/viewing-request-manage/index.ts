@@ -1,7 +1,9 @@
 // The hub's Viewings tab (2026-10-08): the renter's requests with the places
-// in them and where each stands, and the changes they may make.
+// in them and where each stands, and the changes they may make - and, read
+// only, their availability requests and what we found (2026-10-09,
+// renter-inquiry-view.ts).
 //
-//   POST { action: 'list' }
+//   POST { action: 'list' }                -> { requests, inquiries }
 //   POST { action: 'remove', ref, itemId, clientKey? }
 //   POST { action: 'times', ref, availability, clientKey? }
 //   POST { action: 'cancel', ref, reason: 'RENTER_FOUND_PLACE' | 'RENTER_DECLINED', clientKey? }
@@ -18,6 +20,7 @@ import { reduceRequest, type DomainEvent } from '../_shared/viewing-domain.ts';
 import { buildDeepLink, hcmcDate, type AvailabilityWindow } from '../_shared/viewing/intake.ts';
 import { findOpenRequests } from '../_shared/viewing/open-request.ts';
 import { renterRequestView } from '../_shared/viewing/renter-view.ts';
+import { listRenterInquiries } from '../_shared/viewing/renter-inquiry-view.ts';
 import { applyRenterEdit, type RenterEdit } from '../_shared/viewing/renter-edits.ts';
 import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
 import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
@@ -118,7 +121,16 @@ Deno.serve(async (req) => {
   const db = createClient(SUPABASE_URL, SERVICE_ROLE);
 
   try {
-    if (body.action === 'list' || !body.action) return json({ requests: await list(db, user.id) });
+    if (body.action === 'list' || !body.action) {
+      // Availability requests and Priority searches sit beside them (2026-10-09),
+      // read-only. Never the reason the tab fails: the viewings come back regardless.
+      const [requests, inquiries] = await Promise.all([
+        list(db, user.id),
+        listRenterInquiries(db, user.id, { now: Date.now(), businessPhone: BUSINESS_PHONE, sinceDays: LIST_DAYS })
+          .catch(e => { console.error('[viewing-request-manage] inquiries failed:', e); return []; }),
+      ]);
+      return json({ requests, inquiries });
+    }
 
     const ref = String(body.ref ?? '').trim().toUpperCase();
     const { data: request } = await db

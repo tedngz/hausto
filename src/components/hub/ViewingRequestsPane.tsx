@@ -10,12 +10,16 @@
 //
 // Adding a place is the request modal's join, opened from here with the
 // places the renter saved - one way to ask for a viewing (invariant 8).
+//
+// Availability requests and Priority searches sit among them (2026-10-09),
+// read-only: where each stands and the places we sent, each opening the same
+// modal with the request remembered, so the viewing closes it (SPEC §11).
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CalendarClock, ChevronDown, Loader2, MessageCircle, Plus, X,
+  Building2, CalendarClock, ChevronDown, Loader2, MessageCircle, Plus, Search, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,17 +38,48 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { AvailabilityPicker, PART_LABEL, prettyDate } from '@/components/AvailabilityPicker';
 import { RequestViewingModal, type RequestSeed } from '@/components/RequestViewingModal';
 import { cn } from '@/lib/utils';
+import { rememberOfferInquiry } from '@/lib/offerInquiry';
 import { MAX_ITEMS, type AvailabilityWindow, type DayPart } from '../../../supabase/functions/_shared/viewing/intake.ts';
 import {
   VIEWINGS_PATH, type PlaceStatus, type RenterPlace, type RenterRequest, type RequestStage,
 } from '../../../supabase/functions/_shared/viewing/renter-view.ts';
+import type {
+  InquiryStage, RenterFoundPlace, RenterInquiry,
+} from '../../../supabase/functions/_shared/viewing/renter-inquiry-view.ts';
 
 type ManagedRequest = RenterRequest & { waLink: string };
+type ManagedInquiry = RenterInquiry & { waLink: string };
 
 const QUERY_KEY = 'my-viewing-requests';
 
 /** Closed requests fold away under the live ones. */
 const CLOSED: ReadonlySet<RequestStage> = new Set(['DONE', 'NOTHING_FREE', 'CANCELLED']);
+const INQUIRY_CLOSED: ReadonlySet<InquiryStage> = new Set(['VIEWING', 'NOTHING_FOUND', 'CLOSED', 'NOT_SENT']);
+
+const INQUIRY_TONE: Record<InquiryStage, string> = {
+  SEND_CODE: 'bg-primary/10 text-primary',
+  CHECKING: 'bg-amber-100 text-amber-900',
+  FOUND: 'bg-primary/10 text-primary',
+  VIEWING: 'bg-muted text-muted-foreground',
+  NOTHING_FOUND: 'bg-muted text-muted-foreground',
+  CLOSED: 'bg-muted text-muted-foreground',
+  NOT_SENT: 'bg-muted text-muted-foreground',
+};
+
+const INQUIRY_SHORT: Record<InquiryStage, string> = {
+  SEND_CODE: 'Not sent yet',
+  CHECKING: 'Asking agents',
+  FOUND: 'Places found',
+  VIEWING: 'Viewing requested',
+  NOTHING_FOUND: 'Nothing found',
+  CLOSED: 'Closed',
+  NOT_SENT: 'Not sent',
+};
+
+/** One list, newest first: a viewing request or an availability request. */
+type Entry =
+  | { type: 'viewing'; key: string; createdAt: string; request: ManagedRequest }
+  | { type: 'inquiry'; key: string; createdAt: string; inquiry: ManagedInquiry };
 
 const STAGE_TONE: Record<RequestStage, string> = {
   ASKING: 'bg-amber-100 text-amber-900',
@@ -112,11 +147,17 @@ export const ViewingRequestsPane = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isError } = useQuery<ManagedRequest[]>({
+  const { data, isLoading, isError } = useQuery<{ requests: ManagedRequest[]; inquiries: ManagedInquiry[] }>({
     queryKey: [QUERY_KEY, user?.id],
     enabled: !!user?.id,
     staleTime: 15_000,
-    queryFn: async () => ((await manage({ action: 'list' })).requests ?? []) as ManagedRequest[],
+    queryFn: async () => {
+      const r = await manage({ action: 'list' });
+      return {
+        requests: (r.requests ?? []) as ManagedRequest[],
+        inquiries: (r.inquiries ?? []) as ManagedInquiry[],
+      };
+    },
   });
 
   const [busy, setBusy] = useState<string | null>(null);
@@ -159,7 +200,12 @@ export const ViewingRequestsPane = () => {
     return <p className="py-10 text-center text-sm text-muted-foreground">Your requests did not load. Try again in a moment.</p>;
   }
 
-  if (!data?.length) {
+  const entries: Entry[] = [
+    ...(data?.requests ?? []).map((r): Entry => ({ type: 'viewing', key: r.ref, createdAt: r.createdAt, request: r })),
+    ...(data?.inquiries ?? []).map((q): Entry => ({ type: 'inquiry', key: q.id, createdAt: q.createdAt, inquiry: q })),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  if (entries.length === 0) {
     return (
       <div className="py-10 text-center">
         <p className="text-sm text-muted-foreground">No viewing requests yet.</p>
@@ -170,12 +216,16 @@ export const ViewingRequestsPane = () => {
     );
   }
 
-  const live = data.filter(r => !CLOSED.has(r.stage));
-  const past = data.filter(r => CLOSED.has(r.stage));
+  const isClosed = (e: Entry) => (e.type === 'viewing' ? CLOSED.has(e.request.stage) : INQUIRY_CLOSED.has(e.inquiry.stage));
+  const live = entries.filter(e => !isClosed(e));
+  const past = entries.filter(isClosed);
+  const card = (e: Entry) => (e.type === 'viewing'
+    ? <RequestCard key={e.key} request={e.request} busy={busy} run={run} />
+    : <InquiryCard key={e.key} inquiry={e.inquiry} />);
 
   return (
     <div className="space-y-3 py-4">
-      {live.map(r => <RequestCard key={r.ref} request={r} busy={busy} run={run} />)}
+      {live.map(card)}
       {live.length === 0 && (
         <p className="py-4 text-center text-sm text-muted-foreground">Nothing in progress.</p>
       )}
@@ -186,13 +236,121 @@ export const ViewingRequestsPane = () => {
             Past requests ({past.length})
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-3">
-            {past.map(r => <RequestCard key={r.ref} request={r} busy={busy} run={run} />)}
+            {past.map(card)}
           </CollapsibleContent>
         </Collapsible>
       )}
     </div>
   );
 };
+
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Ho_Chi_Minh' });
+
+/**
+ * An availability request or Priority search: what was asked, where it
+ * stands, and the places we sent. Nothing to change here - that is a
+ * conversation on its WhatsApp thread.
+ */
+function InquiryCard({ inquiry: q }: { inquiry: ManagedInquiry }) {
+  const [seed, setSeed] = useState<RequestSeed | null>(null);
+  const closed = INQUIRY_CLOSED.has(q.stage);
+  const area = q.kind === 'AREA';
+  const KindIcon = area ? Search : Building2;
+
+  const requestViewing = (p: RenterFoundPlace) => {
+    // As the offer link does: the viewing request carries this one, and closes it.
+    rememberOfferInquiry(p.listingId, q.id);
+    setSeed({ listingId: p.listingId, title: p.title, imageUrl: p.imageUrl });
+  };
+
+  return (
+    <Card className={cn(closed && 'opacity-80')}>
+      <CardContent className="space-y-3 p-4">
+        {/* Header: which request, what for, and where it stands. */}
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-sm font-semibold">{q.code}</span>
+              <span className="text-xs text-muted-foreground">{shortDate(q.createdAt)}</span>
+            </div>
+            <p className="mt-0.5 text-sm font-medium">
+              {area ? `Priority search in ${q.place}` : `Availability at ${q.place}`}
+            </p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{q.stageLabel}</p>
+          </div>
+          <span className={cn('shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium', INQUIRY_TONE[q.stage])}>
+            {q.stage === 'CHECKING' && area ? 'Searching' : INQUIRY_SHORT[q.stage]}
+          </span>
+        </div>
+
+        {/* What they asked for. */}
+        {q.brief && (
+          <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+            <KindIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-muted-foreground">{q.brief}</span>
+          </div>
+        )}
+
+        {/* What we found. */}
+        {q.found.length > 0 && (
+          <ul className="divide-y rounded-lg border">
+            {q.found.map(p => (
+              <li key={p.listingId} className="flex items-start gap-3 px-3 py-2.5">
+                <Link to={p.path} className="shrink-0">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt="" loading="lazy"
+                      className={cn('h-12 w-12 rounded-md object-cover', !p.listed && 'grayscale opacity-50')} />
+                  ) : (
+                    <div className="h-12 w-12 rounded-md bg-muted" />
+                  )}
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <Link to={p.path}
+                    className={cn('line-clamp-1 text-sm font-medium hover:underline', !p.listed && 'text-muted-foreground')}>
+                    {p.title}
+                  </Link>
+                  <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                    {p.listed
+                      ? [p.bedrooms ? `${p.bedrooms} bed` : null, p.priceVnd ? `${vnd(p.priceVnd)}/mo` : null].filter(Boolean).join(' · ')
+                      : 'No longer available'}
+                  </p>
+                  {/* Under the place rather than beside it: a phone has no room for both. */}
+                  {p.listed && (
+                    <Button size="sm" variant="outline" className="mt-2 h-7 px-2.5 text-xs" onClick={() => requestViewing(p)}>
+                      Request viewing
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {q.alertsUntil && (
+          <p className="text-xs text-muted-foreground">
+            Until {shortDate(q.alertsUntil)} we also tell you on WhatsApp when a new listing there fits.
+          </p>
+        )}
+
+        {/* Before the code arrives, the form's own message, so sending it still starts the request. */}
+        {q.stage !== 'NOT_SENT' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={q.stage === 'SEND_CODE' ? 'default' : 'ghost'} asChild>
+              <a href={q.waLink} target="_blank" rel="noreferrer">
+                <MessageCircle className="mr-1.5 h-4 w-4" /> {q.stage === 'SEND_CODE' ? 'Send it on WhatsApp' : 'WhatsApp'}
+              </a>
+            </Button>
+          </div>
+        )}
+      </CardContent>
+
+      {seed && (
+        <RequestViewingModal open onOpenChange={o => { if (!o) setSeed(null); }} seed={seed} />
+      )}
+    </Card>
+  );
+}
 
 type Run = (label: string, body: Record<string, unknown>, done: string) => Promise<boolean>;
 

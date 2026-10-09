@@ -1187,7 +1187,9 @@ handed over as words - `events` is not readable from a browser, and a client
 reducing half a log would show a state the system does not agree with. Per
 place: asking the agent, free at a time, locked in, other times offered, not
 free, rented, a new price, no answer, removed. The DTO has no agent field of
-any kind (§6). Closed requests fold away under live ones.
+any kind (§6). Closed requests fold away under live ones. Availability
+requests and Priority searches sit among them, read-only (§11, "In the
+Viewings tab").
 
 **What they may change** (`renter-edits.ts`), each one an event:
 
@@ -1481,6 +1483,25 @@ form shows the Pass instead) validates (`validateInquiryInput`), writes the
 request and a `PENDING` complex
 watch with the same criteria, whose code is the handshake. Browsers can no
 longer insert `complex_inquiries` directly.
+
+The second step has no Done button (2026-10-09): it read as finishing the
+request when sending the message is what starts it. The dialog's close is
+enough, and the request waits in the Viewings tab with the same link.
+
+**In the Viewings tab** (2026-10-09). `viewing-request-manage`'s `list` also
+returns `inquiries` - the account's WhatsApp requests from the last 90 days,
+made signed in or confirmed from a number linked to it
+(`listRenterInquiries`, `renter-inquiry-view.ts`) - and the tab shows them
+among the viewing requests, newest first, read-only. Each says what was asked
+for (the brief in force, so a `BRIEF_CHANGED` shows), where it stands in the
+renter's words (`SEND_CODE` until the code arrives, with the form's own
+wa.me link; `CHECKING` with the promised time; `FOUND`; and the close reasons,
+where `VIEWING`, `NOTHING_FOUND`, `CLOSED` and a lapsed code's `NOT_SENT` fold
+away under Past), and the places offered, in offer order, each linking to
+`/property/<id>?inq=<request>` with a Request viewing button that remembers
+the request as the offer link does - so the viewing closes it (S7.1c). No
+agent field of any kind, not even how many were asked (§6); places captured
+but not yet offered stay out.
 
 ### `complex_inquiries` (additive columns)
 
