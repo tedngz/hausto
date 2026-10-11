@@ -109,10 +109,16 @@ export const ListingPreviewDialog = ({
 
       <Dialog open={open} modal={!embedded} onOpenChange={onOpenChange}>
         {/* Close lives inline with share/like via the card's onClose - hide the
-            default dialog X. Phones match the swipe/matches width so a listing
-            looks the same wherever it opens; desktop keeps the roomier modal.
-            Bound to the viewport and scrolling, in dvh rather than vh, so a
-            collapsing address bar cannot hide the bottom of it. */}
+            default dialog X. Sized as the listing page sizes its card - 760px,
+            and below that the page's 16px gutter either side - so a listing
+            opened here is the card its page shows, at every width. Bound to
+            the viewport and scrolling, in dvh rather than vh, so a collapsing
+            address bar cannot hide the bottom of it; the scrollbar is hidden
+            because it took its width out of the card's.
+
+            In the hub the 760 is restated after HUB_PANEL_POSITION, whose xl
+            cap is sized for the compare table and otherwise wins: the preview
+            opened at 869px over a 1440px screen. */}
         <DialogContent
           overlayClassName={embedded ? 'hidden' : undefined}
           // A tap on the chat is not a tap to dismiss. Radix dismisses a
@@ -121,8 +127,8 @@ export const ListingPreviewDialog = ({
           // about to ask about. The card carries its own close button, and
           // Escape still works.
           onInteractOutside={embedded ? (e) => e.preventDefault() : undefined}
-          className={`max-w-md sm:max-w-[760px] max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
-            embedded ? HUB_PANEL_POSITION : ''
+          className={`w-[calc(100%-2rem)] max-w-[760px] max-h-[92dvh] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
+            embedded ? `${HUB_PANEL_POSITION} xl:max-w-[min(760px,calc(100vw-var(--hub-rail)-6rem))]` : ''
           }`}
         >
           <DialogTitle className="sr-only">{apartment?.title || 'Listing'}</DialogTitle>
@@ -135,7 +141,7 @@ export const ListingPreviewDialog = ({
               vibeDetailsText={vibeDetailsText}
               scoreContext={scoreContext}
               quoteFallback={quoteFallback}
-              defaultExpanded
+              detail
               liked={liked}
               onLike={onLike}
               onClose={() => onOpenChange(false)}
