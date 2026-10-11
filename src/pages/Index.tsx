@@ -7,10 +7,10 @@ const Index = () => {
     <CurrencyProvider>
       <Helmet>
         <title>Hausto - Vibe check your next home</title>
-        <meta name="description" content="Ho Chi Minh City rentals, vibe checked. Let our AI deal with the agents - you just show up." />
+        <meta name="description" content="Ho Chi Minh City rentals, vibe checked. Let us deal with the agents, enjoy renting hassle-free!" />
         <link rel="canonical" href="https://hausto.lovable.app/" />
         <meta property="og:title" content="Hausto - Vibe check your next home" />
-        <meta property="og:description" content="Ho Chi Minh City rentals, vibe checked. Let our AI deal with the agents - you just show up." />
+        <meta property="og:description" content="Ho Chi Minh City rentals, vibe checked. Let us deal with the agents, enjoy renting hassle-free!" />
         <meta property="og:url" content="https://hausto.lovable.app/" />
       </Helmet>
       <LandingPage />
