@@ -40,10 +40,15 @@ type Feature = { lead: string; rest?: string };
 
 const AI_CREDITS = FREE_TIER_LIMITS.dailyAiRequests;
 
+// Browsing is free and the whole of it: every listing we gather, never a
+// sample, so the Pass sells our work and not the data. "All our sources",
+// never their names (owner's decision, 2026-10-10).
 const FREE: Feature[] = [
+  { lead: 'Every listing', rest: ' - from all our sources in one place, duplicates merged' },
+  { lead: 'Vetted complexes', rest: ' - profiles of well-known buildings, on a map' },
   { lead: '1 free viewing', rest: ' - we arrange one place with its agent' },
   { lead: "Agents' numbers", rest: ' - where the ad lists one, to call yourself' },
-  { lead: 'Basic vibe analysis' },
+  { lead: 'Standard vibe check' },
   { lead: `${AI_CREDITS} AI credits`, rest: ' a day' },
 ];
 
