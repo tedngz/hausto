@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { HaustoLogo } from "@/components/HaustoLogo";
 import { Card, CardContent } from "@/components/ui/card";
 import { useCallback, useEffect, useRef } from "react";
-import { Home, ShieldHalf, BadgeCheck, Users, Sparkles, ArrowRight, Building2, MessageSquare, LogOut } from "lucide-react";
+import { Home, BadgeCheck, Users, Sparkles, ArrowRight, Building2, MessageSquare, LogOut, createLucideIcon } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,6 +10,15 @@ import AnimatedBackground from "@/components/AnimatedBackground";
 import { useComplexes } from "@/hooks/useComplexes";
 import { ComplexCard } from "@/components/ComplexCard";
 import { LiveListingsPreview } from "@/components/LiveListingsPreview";
+
+// Hat and glasses. The installed lucide predates its own incognito icon.
+const Incognito = createLucideIcon("Incognito", [
+  ["path", { d: "M2 11h20", key: "brim" }],
+  ["path", { d: "M5 11l1.6-5.6A2 2 0 0 1 8.5 4h7a2 2 0 0 1 1.9 1.4L19 11", key: "crown" }],
+  ["circle", { cx: "7", cy: "17", r: "3", key: "lens-l" }],
+  ["circle", { cx: "17", cy: "17", r: "3", key: "lens-r" }],
+  ["path", { d: "M10 17a2 2 0 0 1 4 0", key: "bridge" }],
+]);
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -122,8 +131,8 @@ export const LandingPage = () => {
               <span className="text-primary">Vibe check</span>
               <span className="block">your next home</span>
             </h1>
-            <p className="mx-auto mb-6 max-w-2xl text-lg text-muted-foreground md:mb-8 md:text-xl">
-              Let our AI deal with the agents - you just show up.
+            <p className="mx-auto mb-6 max-w-2xl text-lg italic text-muted-foreground md:mb-8 md:text-xl">
+              Let us deal with the agents, enjoy renting hassle-free!
             </p>
 
             <div ref={chatRef} className="mb-4">
@@ -184,7 +193,7 @@ export const LandingPage = () => {
           <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
             <CardContent className="p-8 text-center">
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
-                <ShieldHalf className="h-8 w-8 text-primary" />
+                <Incognito className="h-8 w-8 text-primary" />
               </div>
               <h3 className="text-2xl text-foreground mb-4 font-normal font-serif">Your number stays private</h3>
               <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">Agents never get it from us, so no follow-up spam.</p>
