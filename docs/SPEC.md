@@ -614,7 +614,7 @@ same actions under `AGENT:<version>`, never a second implementation.
 | `VIEWING_DETAILS` | item | `VIEWING_DETAILS_RECORDED`; refused unless the item is `CONFIRMED`, when the free text carries any phone number, or when `sharePhone` is true and the item has no agent contact (§9) |
 | `REPLY` | request | `messages` via `sendFreeForm` (window and 3-in-a-row rules apply), `REPLY_SENT` |
 | `ACK_REPLIES` | request | `REPLIES_ACKNOWLEDGED`; refused when nothing is waiting |
-| `CANCEL_REQUEST` | request | `REQUEST_CANCELLED {reason, note?}`; completes open `CONFIRM_REALTOR`, `NUDGE_REALTOR` and `RESOLVE_REALTOR` jobs. Refunds nothing: requests are free, and a refund for a locked-in plan that collapses is a person's, in Polar, under the written policy (§9). The lock-in deadline reaches this same action as `SYSTEM` |
+| `CANCEL_REQUEST` | request | `REQUEST_CANCELLED {reason, note?}`; completes open `CONFIRM_REALTOR`, `NUDGE_REALTOR` and `RESOLVE_REALTOR` jobs. Refunds nothing: requests are free, and a Pass is refunded by a person, in Polar, under the written policy (§9) - a locked-in plan that collapses is not one of its conditions. The lock-in deadline reaches this same action as `SYSTEM` |
 
 A new request emails everyone with the `ops` role (`_shared/viewing/ops-alert.ts`,
 from `viewing-request-create` after the charge, never blocking it): the ref, the
@@ -1126,13 +1126,26 @@ the ref, refused once the deadline has passed, and writes
 in where the purchase is recorded (`_shared/polar-pass.ts`), which both the
 redirect and the webhook run, so a renter who pays and closes the tab keeps the
 plan; the second to arrive finds it locked in. A payment that lands after the
-plan was cancelled buys a Pass and keeps nothing - a person refunds or extends
-it under the written policy.
+plan was cancelled buys a Pass and keeps nothing - a person refunds it: nothing
+has been asked for under it, so the policy's first condition covers it.
 
-**Refunds** (the refund policy, 2026-10-08). Money back - or 30 more days, the
-renter's choice - when none of the viewings asked for while the Pass runs can
-go ahead: no agent confirms, the agent cancels, or the place is let first. A
-person applies it, in Polar. A refund in full then ends the Pass it refunds:
+**Refunds** (the refund policy, 2026-10-11). The Pass pays for our work, not
+the agents' answers, so the refund is tied to what we do. A full refund when
+either holds:
+
+- **Unused, within 7 days of buying**: since buying, the renter has not asked
+  us to arrange a viewing, locked a plan in with it, or started an Extensive
+  search.
+- **No agent reached within 3 days**: for a request, we have not reached the
+  agent for any of its places within 3 days of it being made. Reaching some is
+  the work done (invariant 5).
+
+Not refundable once we have reached the agents or searched - whether or not an
+agent answers, keeps the time, or lets the place first - nor for parts of the
+Pass left unused. A confirmed viewing that falls through is re-arranged where
+we can, not refunded. The 2026-10-08 version (money back when no viewing could
+go ahead, or 30 more days) promised an outcome nobody controls and is retired.
+A person applies it, in Polar. A refund in full then ends the Pass it refunds:
 Polar's `order.refunded` reaches `handle-polar-webhooks`, which calls
 `record_pass_refund` to stamp `passes.refunded_at` and bring that purchase's
 `expires_at` forward to the refund. That covers refunds Polar makes itself,
