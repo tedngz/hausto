@@ -29,8 +29,10 @@ import { RequestViewingModal } from '@/components/RequestViewingModal';
 // Where it differs from the page: on a shelf of listings a card can't spend the
 // vertical space, so the description is clamped to one line behind a "more"
 // toggle and the amenities live behind their own icon rather than an always-open
-// grid. Surfaces showing one listing at a time pass defaultExpanded to open both
-// on mount and read like the page does.
+// grid. The preview that opens a single listing over browse passes `detail`,
+// which lays the details out as the page does - title beside price, the full
+// description, "What's inside" - so opening a listing and visiting its page
+// show the same card.
 
 export interface EditorialApartment {
   id: string;
@@ -97,10 +99,11 @@ interface EditorialPropertyCardProps {
   aspectClass?: string;
   /** Smaller typography and padding so the photo dominates (used in the Hausto Agent's compact cards) */
   compact?: boolean;
-  /** Open the description and amenities on mount. For surfaces built around a
-   *  single listing (browse, swipe, the listing page) where the renter is
-   *  reading one place rather than scanning a shelf of them. */
-  defaultExpanded?: boolean;
+  /** The listing page's layout (PropertyListingCard) rather than a shelf
+   *  card's: title beside price, the description and amenities always open,
+   *  the page's type sizes. For a surface showing one listing on its own, where
+   *  the renter is reading one place rather than scanning a shelf of them. */
+  detail?: boolean;
   /** Extra actions rendered in the top-right cluster, before the share/like buttons (e.g. a delete button) */
   topRightActions?: ReactNode;
   /** Rendered inside the card, under the CTAs, behind a rule. For anything that
@@ -153,7 +156,7 @@ export const EditorialPropertyCard = ({
   onImageIndexChange,
   aspectClass = 'aspect-[4/3] sm:aspect-[3/2]',
   compact = false,
-  defaultExpanded = false,
+  detail = false,
   topRightActions,
   footer,
   className = '',
@@ -168,9 +171,9 @@ export const EditorialPropertyCard = ({
   const frameRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
   const [noHover, setNoHover] = useState(false);
-  const [descOpen, setDescOpen] = useState(defaultExpanded);
+  const [descOpen, setDescOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
-  const [showAmenities, setShowAmenities] = useState(defaultExpanded);
+  const [showAmenities, setShowAmenities] = useState(false);
   // Swipe bookkeeping: start point, and a flag so the tap that ends a swipe
   // doesn't also open the card.
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -185,6 +188,7 @@ export const EditorialPropertyCard = ({
   const ctaCount = [showShortlist, !!onContact, !!onSchedule && !showShortlist].filter(Boolean).length;
   const loneCta = ctaCount === 1 && !compact;
   const ctaClass = loneCta ? 'w-full sm:w-auto sm:min-w-64 sm:px-12 rounded-full' : 'flex-1 rounded-full';
+  const ctaSize = compact ? 'sm' : detail ? 'lg' : 'default';
 
   // Touch devices have no hover: keep the slideshow arrows visible.
   useEffect(() => {
@@ -299,7 +303,8 @@ export const EditorialPropertyCard = ({
   // Freshness chip: how recently the source listing was confirmed still live.
   // Claims "live on source", never "available" — availability is only settled at viewing time.
 
-  const arrowsVisible = hover || noHover;
+  // The page keeps its arrows up, so a detail card does too.
+  const arrowsVisible = hover || noHover || detail;
 
   const description = useMemo(() => {
     const desc = apartment.description?.trim();
@@ -310,7 +315,11 @@ export const EditorialPropertyCard = ({
     return desc;
   }, [apartment.description, displayTitle, caption]);
 
-  const amenities = useMemo(() => getNormalizedAmenities(apartment.amenities, 12), [apartment.amenities]);
+  // Nine on the page: three full rows of its three columns.
+  const amenities = useMemo(
+    () => getNormalizedAmenities(apartment.amenities, detail ? 9 : 12),
+    [apartment.amenities, detail],
+  );
   const hasAmenities = amenities.length > 0;
 
   const ratingLabel = vibeScore ? getVibeRatingLabel(Number(vibeScore.overall)) : null;
@@ -398,6 +407,23 @@ export const EditorialPropertyCard = ({
     }
   };
 
+  // A detail card gives the address two lines, as the page does; a shelf card
+  // one.
+  const locationButton = (
+    <button
+      className={`flex items-center gap-[7px] text-muted-foreground hover:text-foreground transition-colors w-fit max-w-full text-left ${compact ? 'text-[11.5px]' : 'text-[13px]'}`}
+      onClick={handleLocationClick}
+      disabled={isGeocoding}
+      aria-label="Show on map"
+    >
+      <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+      <span className={`underline decoration-border underline-offset-4 hover:decoration-foreground ${detail ? 'line-clamp-2' : 'line-clamp-1'}`}>
+        {displayLocation}
+      </span>
+      {isGeocoding && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
+    </button>
+  );
+
   return (
     <article
       className={`group w-full overflow-hidden rounded-[22px] bg-card text-foreground border border-border/60 ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
@@ -436,8 +462,9 @@ export const EditorialPropertyCard = ({
             objectFit: fit,
             objectPosition: 'center',
             transition: `transform 1200ms ${EASE}`,
-            // Zooming a letterboxed photo would crop it again - only cover zooms.
-            transform: hover && fit === 'cover' ? 'scale(1.07)' : 'scale(1)',
+            // Zooming a letterboxed photo would crop it again - only cover
+            // zooms. A detail card is not on a shelf, so it holds still.
+            transform: hover && fit === 'cover' && !detail ? 'scale(1.07)' : 'scale(1)',
           }}
           onError={e => {
             const target = e.target as HTMLImageElement;
@@ -553,7 +580,11 @@ export const EditorialPropertyCard = ({
       </div>
 
       {/* ===== Details ===== */}
-      <div className={`flex flex-col ${compact ? 'gap-2.5 p-4' : 'gap-3.5 p-5'}`}>
+      <div
+        className={`flex flex-col ${
+          compact ? 'gap-2.5 p-4' : detail ? 'gap-4 sm:gap-[18px] p-5 sm:px-6 sm:pt-[22px] sm:pb-6' : 'gap-3.5 p-5'
+        }`}
+      >
         {/* Badges */}
         <div className="flex flex-wrap gap-2">
           {/* Renters with preferences see how well it matches them; everyone
@@ -628,103 +659,143 @@ export const EditorialPropertyCard = ({
           </Popover>
           </div>
 
-        {/* Title + location */}
-        <div className="flex flex-col gap-2 min-w-0">
-          <h3 className={`font-serif font-medium leading-[1.1] [text-wrap:pretty] ${compact ? 'text-[15px] line-clamp-2' : 'text-xl sm:text-[22px] line-clamp-3'}`}>
-            {displayTitle}
-          </h3>
-          <button
-            className={`flex items-center gap-[7px] text-muted-foreground hover:text-foreground transition-colors w-fit max-w-full text-left ${compact ? 'text-[11.5px]' : 'text-[13px]'}`}
-            onClick={handleLocationClick}
-            disabled={isGeocoding}
-            aria-label="Show on map"
-          >
-            <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-            <span className="underline decoration-border underline-offset-4 hover:decoration-foreground line-clamp-1">
-              {displayLocation}
-            </span>
-            {isGeocoding && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
-          </button>
-        </div>
-
-        {/* Price · spec, with the amenities toggle alongside the spec */}
-        <div className="flex items-baseline justify-between gap-3">
-          <p className={`font-serif font-semibold leading-tight whitespace-nowrap ${compact ? 'text-base' : 'text-xl'}`}>
-            {formatPrice(apartment.price)}
-            <span className={`font-sans font-normal text-muted-foreground ${compact ? 'text-[11px]' : 'text-[13px]'}`}> /mo</span>
-          </p>
-          <div className="flex items-center gap-2 min-w-0">
-            {sizeLine && (
-              <span className={`text-muted-foreground text-right line-clamp-1 ${compact ? 'text-[11px]' : 'text-[12.5px]'}`}>
-                {sizeLine}
-              </span>
-            )}
-            {hasAmenities && (
-              <button
-                type="button"
-                aria-label={showAmenities ? 'Hide amenities' : 'Show amenities'}
-                aria-expanded={showAmenities}
-                title="Amenities"
-                className={`flex-shrink-0 flex items-center justify-center rounded-full border transition-colors ${compact ? 'w-6 h-6' : 'w-7 h-7'} ${showAmenities
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-secondary text-muted-foreground border-transparent hover:text-foreground'}`}
-                onClick={e => {
-                  e.stopPropagation();
-                  setShowAmenities(v => !v);
-                }}
-              >
-                <LayoutGrid className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Amenities — behind the icon above rather than an always-open grid */}
-        {hasAmenities && showAmenities && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-2.5 border-t border-border pt-3">
-            {amenities.map(({ key, label, icon: Icon }) => (
-              <div key={key} className={`flex items-center gap-2 text-foreground/85 ${compact ? 'text-[11px]' : 'text-[12.5px]'}`}>
-                {Icon ? (
-                  <Icon className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                ) : (
-                  <span className="w-[7px] h-[7px] rounded-[2px] bg-primary flex-shrink-0" />
-                )}
-                <span className="line-clamp-1">{label}</span>
+        {detail ? (
+          <>
+            {/* The page's header: title + location left, price + spec right,
+                generously spaced so a long title never crowds the price. On a
+                phone the price drops to a full-width row under the title. */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-10">
+              <div className="flex flex-col gap-2 min-w-0">
+                <h3 className="font-serif font-medium text-2xl sm:text-[32px] leading-[1.06] [text-wrap:pretty]">
+                  {displayTitle}
+                </h3>
+                {locationButton}
               </div>
-            ))}
-          </div>
-        )}
+              <div className="flex items-baseline justify-between gap-3 sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:flex-shrink-0 sm:text-right">
+                <p className="font-serif font-semibold text-xl sm:text-[28px] leading-tight whitespace-nowrap">
+                  {formatPrice(apartment.price)}
+                  <span className="font-sans font-normal text-[13px] text-muted-foreground"> /mo</span>
+                </p>
+                {sizeLine && <p className="text-[12.5px] text-muted-foreground text-right">{sizeLine}</p>}
+              </div>
+            </div>
 
-        {/* Description — one line, expandable. A card can't afford the full
-            prose the listing page shows. */}
-        {description && (
-          <div className="border-t border-border pt-3">
-            <p className={`text-muted-foreground leading-[1.6] [text-wrap:pretty] ${descOpen ? '' : 'line-clamp-1'} ${compact ? 'text-[11.5px]' : 'text-[13px]'}`}>
-              {description}
-            </p>
-            <button
-              type="button"
-              aria-expanded={descOpen}
-              className={`mt-1 font-medium text-primary hover:underline underline-offset-2 ${compact ? 'text-[11px]' : 'text-[12px]'}`}
-              onClick={e => {
-                e.stopPropagation();
-                setDescOpen(v => !v);
-              }}
-            >
-              {descOpen ? 'less' : 'more'}
-            </button>
-          </div>
+            {/* The whole description, then the amenities, both open - the
+                page's order, with nothing behind a toggle. */}
+            {description && (
+              <p className="border-t border-border pt-[18px] text-[13.5px] leading-[1.6] text-muted-foreground text-justify hyphens-auto [text-wrap:pretty]">
+                {description}
+              </p>
+            )}
+
+            {hasAmenities && (
+              <div>
+                <p className="font-mono text-[10.5px] tracking-[0.14em] uppercase text-muted-foreground mb-3">What's inside</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-3">
+                  {amenities.map(({ key, label, icon: Icon }) => (
+                    <div key={key} className="flex items-center gap-2.5 text-[12.5px] text-foreground/85">
+                      {Icon ? (
+                        <Icon className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      ) : (
+                        <span className="w-[7px] h-[7px] rounded-[2px] bg-primary flex-shrink-0" />
+                      )}
+                      <span className="line-clamp-1">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Title + location */}
+            <div className="flex flex-col gap-2 min-w-0">
+              <h3 className={`font-serif font-medium leading-[1.1] [text-wrap:pretty] ${compact ? 'text-[15px] line-clamp-2' : 'text-xl sm:text-[22px] line-clamp-3'}`}>
+                {displayTitle}
+              </h3>
+              {locationButton}
+            </div>
+
+            {/* Price · spec, with the amenities toggle alongside the spec */}
+            <div className="flex items-baseline justify-between gap-3">
+              <p className={`font-serif font-semibold leading-tight whitespace-nowrap ${compact ? 'text-base' : 'text-xl'}`}>
+                {formatPrice(apartment.price)}
+                <span className={`font-sans font-normal text-muted-foreground ${compact ? 'text-[11px]' : 'text-[13px]'}`}> /mo</span>
+              </p>
+              <div className="flex items-center gap-2 min-w-0">
+                {sizeLine && (
+                  <span className={`text-muted-foreground text-right line-clamp-1 ${compact ? 'text-[11px]' : 'text-[12.5px]'}`}>
+                    {sizeLine}
+                  </span>
+                )}
+                {hasAmenities && (
+                  <button
+                    type="button"
+                    aria-label={showAmenities ? 'Hide amenities' : 'Show amenities'}
+                    aria-expanded={showAmenities}
+                    title="Amenities"
+                    className={`flex-shrink-0 flex items-center justify-center rounded-full border transition-colors ${compact ? 'w-6 h-6' : 'w-7 h-7'} ${showAmenities
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-secondary text-muted-foreground border-transparent hover:text-foreground'}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      setShowAmenities(v => !v);
+                    }}
+                  >
+                    <LayoutGrid className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Amenities — behind the icon above rather than an always-open grid */}
+            {hasAmenities && showAmenities && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-2.5 border-t border-border pt-3">
+                {amenities.map(({ key, label, icon: Icon }) => (
+                  <div key={key} className={`flex items-center gap-2 text-foreground/85 ${compact ? 'text-[11px]' : 'text-[12.5px]'}`}>
+                    {Icon ? (
+                      <Icon className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    ) : (
+                      <span className="w-[7px] h-[7px] rounded-[2px] bg-primary flex-shrink-0" />
+                    )}
+                    <span className="line-clamp-1">{label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Description — one line, expandable. A card can't afford the full
+                prose the listing page shows. */}
+            {description && (
+              <div className="border-t border-border pt-3">
+                <p className={`text-muted-foreground leading-[1.6] [text-wrap:pretty] ${descOpen ? '' : 'line-clamp-1'} ${compact ? 'text-[11.5px]' : 'text-[13px]'}`}>
+                  {description}
+                </p>
+                <button
+                  type="button"
+                  aria-expanded={descOpen}
+                  className={`mt-1 font-medium text-primary hover:underline underline-offset-2 ${compact ? 'text-[11px]' : 'text-[12px]'}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    setDescOpen(v => !v);
+                  }}
+                >
+                  {descOpen ? 'less' : 'more'}
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {/* CTAs. A lone button on a full-size card is held to a pill's width
             and centred over the centred small print under it - stretched
             across a wide modal it read as a banner, not a button. */}
         {(onContact || onSchedule || showShortlist) && (
-          <div className={`flex items-center gap-2 pt-0.5 ${loneCta ? 'justify-center' : ''}`}>
+          <div className={`flex items-center gap-2 ${detail ? 'mt-1' : 'pt-0.5'} ${loneCta ? 'justify-center' : ''}`}>
             {/* One button, not two. See RequestViewingModal for why. */}
             {showShortlist && (
               <Button
-                size={compact ? 'sm' : 'default'}
+                size={ctaSize}
                 className={ctaClass}
                 onClick={e => { e.stopPropagation(); setRequestOpen(true); }}
               >
@@ -733,7 +804,7 @@ export const EditorialPropertyCard = ({
             )}
             {onContact && (
               <Button
-                size={compact ? 'sm' : 'default'}
+                size={ctaSize}
                 variant={onSchedule ? 'outline' : 'default'}
                 className={ctaClass}
                 onClick={e => {
@@ -750,7 +821,7 @@ export const EditorialPropertyCard = ({
                 not on offer. */}
             {onSchedule && !showShortlist && (
               <Button
-                size={compact ? 'sm' : 'default'}
+                size={ctaSize}
                 className={ctaClass}
                 onClick={e => {
                   e.stopPropagation();
@@ -766,7 +837,7 @@ export const EditorialPropertyCard = ({
         {/* No rule above it: the footer is the CTA's small print, and a line
             between them cut it off from the button it explains. */}
         {footer && (
-          <div className="-mt-1" onClick={e => e.stopPropagation()}>
+          <div className={detail ? undefined : '-mt-1'} onClick={e => e.stopPropagation()}>
             {footer}
           </div>
         )}
