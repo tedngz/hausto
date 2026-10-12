@@ -132,7 +132,7 @@ export const LandingPage = () => {
               <span className="block">your next home</span>
             </h1>
             <p className="mx-auto mb-6 max-w-2xl text-lg italic text-muted-foreground md:mb-8 md:text-xl">
-              Let us deal with the agents, enjoy renting hassle-free!
+              Search Vietnam’s best rentals in seconds. Zero runaround.
             </p>
 
             <div ref={chatRef} className="mb-4">
