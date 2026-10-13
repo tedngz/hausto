@@ -24,11 +24,13 @@ else
   SQL=$(cat)
 fi
 
-# JSON-encode the SQL body with node to handle quotes/newlines safely
-BODY=$(node -e "console.log(JSON.stringify({query: require('fs').readFileSync(0,'utf8')}))" <<<"$SQL")
-
+# JSON-encode the SQL body with node to handle quotes/newlines safely, and pipe
+# it to curl rather than passing it as an argument: on Windows an argument goes
+# through the ANSI code page, which turned "Phú" into "Ph�" in a
+# description written through here - stored, and reported as success.
+node -e "console.log(JSON.stringify({query: require('fs').readFileSync(0,'utf8')}))" <<<"$SQL" |
 curl -sS -X POST "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
-  -d "$BODY"
+  --data-binary @-
 echo
