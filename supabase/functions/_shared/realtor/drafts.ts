@@ -48,6 +48,8 @@ export function draftForRealtor(opts: {
   unit: AgentUnit;
   priceVnd: number;
   availability: { date: string; part: string }[];
+  /** When the renter expects to move in. Absent from older requests. */
+  moveInDate?: string | null;
   /** Asked before, at times the renter has since changed (AVAILABILITY_CHANGED). */
   rescheduled?: boolean;
 }): string {
@@ -64,6 +66,9 @@ export function draftForRealtor(opts: {
       : `Bên em có khách muốn xem ${opts.unit.name}.`,
     ...unitLink(opts.unit),
     `Giá đang đăng: ${vnd(opts.priceVnd)}/tháng.`,
+    // A unit free now is no use to someone moving in two months out, and one
+    // coming free next month may be exactly right - the agent weighs this first.
+    ...(opts.moveInDate ? [`Khách dự kiến vào ở khoảng ${dayMonth(opts.moveInDate)}.`] : []),
     '',
     windows
       ? `Khách rảnh ${windows}. Anh/chị sắp xếp được khung nào ạ?`

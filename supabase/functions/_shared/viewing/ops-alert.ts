@@ -39,6 +39,8 @@ export function renderIntakeAlert(opts: {
   /** Set when places joined a request that was already open. */
   added?: number;
   availability: { date: string; part: string }[];
+  /** When the renter expects to move in, if they said. */
+  moveInDate?: string | null;
   createdAt: Date;
   /** The places just asked for that have no agent number. */
   missingContact?: MissingContact[];
@@ -81,6 +83,7 @@ export function renderIntakeAlert(opts: {
     text: [
       `${opts.ref} came in at ${at} (Ho Chi Minh City) for ${places}.`,
       `Renter is free: ${windows}.`,
+      ...(opts.moveInDate ? [`Expects to move in: ${opts.moveInDate}.`] : []),
       '',
       'The renter has been promised news within 24 hours of now. The agents are the slow part - contact them first.',
       ...findFirst,

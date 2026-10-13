@@ -4,6 +4,8 @@ import {
   isValidRef,
   refFromMessage,
   validateAvailability,
+  validateMoveIn,
+  MAX_MOVE_IN_DAYS,
   extendAvailability,
   validateShortlist,
   DAY_PARTS,
@@ -103,6 +105,31 @@ describe('availability', () => {
     const r = validateAvailability([{ date: today, part: 'MORNING' }], today);
     expect(r.ok).toBe(false);
     expect(r.error).toContain(earliest);
+  });
+});
+
+describe('move-in date', () => {
+  const today = '2026-10-13';
+
+  it('takes a date from today to six months out', () => {
+    expect(validateMoveIn('2026-10-13', today)).toEqual({ ok: true, value: '2026-10-13' });
+    expect(validateMoveIn('2026-11-01', today)).toEqual({ ok: true, value: '2026-11-01' });
+    expect(validateMoveIn(addDays(today, MAX_MOVE_IN_DAYS), today).ok).toBe(true);
+  });
+
+  it('refuses the past, past six months, and anything not a date', () => {
+    expect(validateMoveIn('2026-10-12', today)).toMatchObject({ ok: false, error: 'Move-in date is in the past.' });
+    expect(validateMoveIn(addDays(today, MAX_MOVE_IN_DAYS + 1), today))
+      .toMatchObject({ ok: false, error: 'Move-in date is more than six months away.' });
+    expect(validateMoveIn('next month', today).ok).toBe(false);
+    expect(validateMoveIn('2026-13-45', today).ok).toBe(false);
+    expect(validateMoveIn(20261101, today).ok).toBe(false);
+  });
+
+  it('accepts none, so a page from before the field is not refused', () => {
+    expect(validateMoveIn(undefined, today)).toEqual({ ok: true, value: null });
+    expect(validateMoveIn(null, today)).toEqual({ ok: true, value: null });
+    expect(validateMoveIn('', today)).toEqual({ ok: true, value: null });
   });
 });
 
@@ -226,6 +253,13 @@ describe('the events an intake writes', () => {
     expect(resolved[0].item_id).toBe('i1');
     expect(resolved[0].payload).toEqual({ realtor_id: 'r1', method: 'AGENT_ID' });
     expect(resolved[0].actor).toBe('SYSTEM');
+  });
+
+  it('records the move-in date on the submission, and nothing when there is none', () => {
+    const withDate = intakeEvents({ ...base, moveInDate: '2026-11-01', items: [] });
+    expect(withDate[0].payload).toEqual({ availability: base.availability, move_in_date: '2026-11-01' });
+    const without = intakeEvents({ ...base, moveInDate: null, items: [] });
+    expect(without[0].payload).toEqual({ availability: base.availability });
   });
 
   it('attributes the intake to the renter, not to us', () => {

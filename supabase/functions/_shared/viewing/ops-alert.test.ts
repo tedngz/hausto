@@ -2,6 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { renderIntakeAlert, sendIntakeAlert, missingContactsFor, CONSOLE_URL } from './ops-alert.ts';
 
 describe('the new-request alert (gap 10)', () => {
+  it('says when the renter expects to move in, when they said', () => {
+    const base = {
+      ref: 'HV-4KX9', placeCount: 1,
+      availability: [{ date: '2026-10-15', part: 'MORNING' }],
+      createdAt: new Date('2026-10-13T03:00:00Z'),
+    };
+    expect(renderIntakeAlert({ ...base, moveInDate: '2026-11-01' }).text).toContain('Expects to move in: 2026-11-01.');
+    expect(renderIntakeAlert(base).text).not.toContain('move in');
+  });
+
   const alert = renderIntakeAlert({
     ref: 'HV-4KX9',
     placeCount: 3,

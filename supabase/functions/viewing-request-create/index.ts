@@ -20,6 +20,7 @@ import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
 import {
   generateRef,
   validateAvailability,
+  validateMoveIn,
   extendAvailability,
   validateShortlist,
   screenCandidates,
@@ -319,6 +320,9 @@ Deno.serve(async (req) => {
   const availability = validateAvailability(body.availability, hcmcDate(new Date()));
   if (!availability.ok) return json({ error: 'invalid_availability', message: availability.error }, 400);
 
+  const moveIn = validateMoveIn(body.moveInDate, hcmcDate(new Date()));
+  if (!moveIn.ok) return json({ error: 'invalid_move_in', message: moveIn.error }, 400);
+
   const displayName = String(body.displayName ?? '').trim().slice(0, 80) || null;
   const db = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -430,7 +434,10 @@ Deno.serve(async (req) => {
   for (let attempt = 0; attempt < 5 && !request; attempt++) {
     const { data, error } = await db
       .from('viewing_requests')
-      .insert({ ref: generateRef(), renter_id: renter.id, availability: availability.value })
+      .insert({
+        ref: generateRef(), renter_id: renter.id, availability: availability.value,
+        move_in_date: moveIn.value ?? null,
+      })
       .select('id, ref')
       .single();
     if (!error) { request = data; break; }
@@ -469,6 +476,7 @@ Deno.serve(async (req) => {
   const { error: eventsErr } = await db.from('events').insert(intakeEvents({
     requestId: request.id,
     availability: availability.value!,
+    moveInDate: moveIn.value ?? null,
     items: items.map(i => ({
       itemId: i.id,
       listingId: i.listing_id,
@@ -490,6 +498,7 @@ Deno.serve(async (req) => {
     ref: request.ref,
     placeCount: items.length,
     availability: availability.value ?? [],
+    moveInDate: moveIn.value ?? null,
     createdAt: new Date(),
   }, items);
 
