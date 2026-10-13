@@ -17,6 +17,7 @@ import { linkAccount, linkCodeFromMessage, type LinkOutcome } from './account-li
 import { codeUsable, watchCodeFromMessage, type WatchProblem } from './watch.ts';
 import { pendingAlert } from './alerts.ts';
 import { itineraryAwaitingAnswer } from './open-request.ts';
+import { SEARCH_SESSION_MINUTES } from './search-limits.ts';
 import {
   confirmInquiryForWatch, inquiriesAnswered, recordInquiryInbound, type ConfirmedInquiry,
 } from './concierge.ts';
@@ -84,6 +85,57 @@ export interface InboundOutcome {
    * one reply it gets is the receipt (agent.ts REQUEST_RECEIVED).
    */
   received?: RequestReceived;
+  /** Set instead of `selection` when the newest list they were shown was search results. */
+  searchPick?: SelectionOutcome;
+  /** Search results went to them within SEARCH_SESSION_MINUTES. */
+  searching?: boolean;
+  /** Nothing has passed between us before, and they have no request. */
+  firstContact?: boolean;
+}
+
+/** The newest search we answered for this renter (renter_searches). */
+interface LastSearch {
+  listingIds: string[];
+  createdAt: string;
+}
+
+// deno-lint-ignore no-explicit-any
+async function lastAnsweredSearch(db: any, renterId: string): Promise<LastSearch | undefined> {
+  const { data } = await db
+    .from('renter_searches')
+    .select('listing_ids, created_at')
+    .eq('renter_id', renterId)
+    .not('message_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return undefined;
+  return {
+    listingIds: Array.isArray(data.listing_ids) ? data.listing_ids.map(String) : [],
+    createdAt: String(data.created_at),
+  };
+}
+
+/** When the request's newest suggestions went out, or null. */
+// deno-lint-ignore no-explicit-any
+async function newestOfferAt(db: any, requestId: string): Promise<string | null> {
+  const { data } = await db
+    .from('events')
+    .select('occurred_at')
+    .eq('request_id', requestId)
+    .eq('type', 'SUGGESTIONS_OFFERED')
+    .order('occurred_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.occurred_at ? String(data.occurred_at) : null;
+}
+
+/** A numbered reply, against the search results we sent. */
+function pickFromSearch(search: LastSearch, text: string, now: Date): SelectionOutcome {
+  const positions = parseSelection(text, search.listingIds.length || MAX_SELECTED);
+  if (positions.length === 0) return { positions: [] };
+  const resolved = resolveSelection(positions, { listingIds: search.listingIds, offeredAt: search.createdAt }, now);
+  return resolved.ok ? { positions, listingIds: resolved.listingIds } : { positions, problem: resolved.reason };
 }
 
 /** What the receipt for a request names. */
@@ -407,12 +459,34 @@ export async function handleInbound(
     ({ confirmed, lockIn: lockInPrompt } = await confirmIfDelivered(db, requestId, m.timestamp));
   }
 
-  // A selection resolves against the last list we showed them. Recorded here
+  // Search results we sent them, if any - the session a follow-up like "what
+  // about district 7" belongs to, and a list a number can pick from.
+  const lastSearch = coded ? undefined : await lastAnsweredSearch(db, renter.id);
+  const searching = !!lastSearch &&
+    now.getTime() - Date.parse(lastSearch.createdAt) <= SEARCH_SESSION_MINUTES * 60_000;
+
+  // A selection resolves against the last list we showed them - search
+  // results or a request's suggestions, whichever went out last. Recorded here
   // rather than acted on: creating the new request is the caller's job
-  // (viewing-agent-select), because it writes rows and queues operator work.
+  // (agent-act.ts), because it writes rows and queues operator work.
   let selection: SelectionOutcome | undefined;
-  if (intent === 'SELECTION' && requestId) {
-    selection = await resolveOffer(db, requestId, m.text, new Date(m.timestamp));
+  let searchPick: SelectionOutcome | undefined;
+  if (intent === 'SELECTION') {
+    const offeredAt = requestId && lastSearch ? await newestOfferAt(db, requestId) : null;
+    if (lastSearch && lastSearch.listingIds.length > 0 && (!offeredAt || Date.parse(lastSearch.createdAt) > Date.parse(offeredAt))) {
+      searchPick = pickFromSearch(lastSearch, m.text, now);
+    } else if (requestId) {
+      selection = await resolveOffer(db, requestId, m.text, now);
+    }
+  }
+
+  // A new number with nothing to go on - no request, no code, nothing we sent
+  // it answers. The one inbound row is this message.
+  let firstContact = false;
+  if (!requestId && !coded && !alertMessageId && !inquiryId && !lastSearch) {
+    const { data: prior } = await db
+      .from('messages').select('id').eq('to_phone', renter.phone_e164).limit(2);
+    firstContact = (prior ?? []).length <= 1;
   }
 
   const link = linkCode && intent !== 'OPT_OUT' ? await linkAccount(db, linkCode, renter, now) : undefined;
@@ -450,5 +524,8 @@ export async function handleInbound(
     ...(alertMessageId ? { alertMessageId } : {}),
     ...(inquiryId ? { inquiryId, inquiryIds } : {}),
     ...(received && !optedOut ? { received } : {}),
+    ...(searchPick ? { searchPick } : {}),
+    ...(searching ? { searching } : {}),
+    ...(firstContact && !optedOut ? { firstContact } : {}),
   };
 }

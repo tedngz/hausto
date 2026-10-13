@@ -30,7 +30,7 @@ and dialable brokers.
 | S3 normalization | Done | Canonical columns populated; 157 of 180 active rows shortlistable. `vibe` is out of the response, the style filter reads `styles`, the `$730` rule is asserted in CI, and the title/description price cross-check runs every 30 minutes (#117, #118). |
 | S4 intake + handshake | Done, and changed | Intake is `RequestViewingModal`: one button per card, a signed-in user, 1-5 listings, no today or tomorrow (CLAUDE.md invariants 7-8). Since 2026-10-07 a request is the Pass's past one free place per WhatsApp number (`requestGate`, SPEC §9); the plan is then locked in. The `wa.me` handshake is as planned. WhatsApp is on the Cloud API. |
 | S5 ops console | Done | At https://hausto-ops.vercel.app, deployed on merge. Paste-parse is built (`ops-parse-reply`, #108). Its ≥80%-on-30-replies bar is **unmeasured**: no broker reply has been recorded yet. |
-| S6 itinerary + delivery | Done | Itinerary with clash warnings, one-message delivery, rules-based intent, reminders and the silence-clock property test landed in #92; substitutes and the agent followed (#94), and all five templates are approved (#101). |
+| S6 itinerary + delivery | Done | Itinerary with clash warnings, one-message delivery, rules-based intent, reminders and the silence-clock property test landed in #92; substitutes and the agent followed (#94), and all five templates are approved (#101). Search from a cold DM is built (2026-10-13, below) with its limits; like the rest of the agent it waits on `VIEWING_AGENT_ENABLED`, which production has never set. |
 | S7 availability requests | Request built, handling not | The complex page's request is live on WhatsApp for any country's number (#123, #124). Six requests ever, all by email before that. 12 of 23 buildings have no known agent, so S7.0 - agents per building - comes first. Its code is built: the Buildings screen in the ops console and `complex_agents` (SPEC §11). Its work - recruiting agents - is not started. S7.1a is built: requests are worked on the console's Availability screen with typed steps (`inquiry_events`). S7.1b is built: an agent's offered unit becomes a requestable listing, and the one offer message goes from the console. S7.1c is built: offer links link the viewing request back, reminders fire at 16h and 22h, and Meta approved `request_update` on 2026-09-30, so S7.1 is done. S7.4, Priority search (the pricing rework, 2026-10-06), is built: the same request for an area, the Pass's, worked on the same screen with a 48-hour promise. S7.2a is built: agents are asked on Zalo through the bridge from the Availability screen, capped per agent and per day, and their replies come back to the request. S7.2b is built: agents' photos come through the bridge (device 0.2.0) onto units, and a reply can be read into suggested units the operator confirms. Both wait on S7.0's recruiting to be used; S7.3 (the AI operator sourcing alone) starts when requests pass about five a week. |
 
 Live traffic so far is one viewing request. The number to watch (below) has no
@@ -544,12 +544,23 @@ served to ChatGPT and Perplexity via llms.txt - one endpoint, three consumers.
   within 24 hours, and sets a watch that alerts new listings at the building
   through the digest's sweep. The sweep's cron now sends rather than dry-runs.
 
+- **Search from a cold DM** (owner's decision, 2026-10-13, reversing the line
+  below that kept first-time discovery out). Anyone may message the number with
+  what they want and get three listings back, each a link to its page; a new
+  number that opens with "hi" is told what to send. Still not a grid: the
+  results send them to the site, where the style layer is and where a viewing
+  is requested. Searches are limited per number, per account (the web chat's
+  AI credits) and in total, before the model runs. SPEC §5 "Search from a
+  cold DM"; `search-limits.ts`, `search-run.ts`.
+
 **Out of scope:**
-- First-time discovery. The style layer is visual - image highlights, style tags,
-  photo grids. WhatsApp cannot render a filterable grid and it is not worth
-  trying.
+- ~~First-time discovery.~~ Reversed 2026-10-13 for the three-results-and-links
+  form above. Browsing - the visual layer, filters, photo grids - stays on the
+  site: WhatsApp cannot render a filterable grid and it is not worth trying.
 - The initial multi-select. That is a web UI.
 - Open-ended conversation. Intent classification over a closed set, then route.
+- Making a request from search results on WhatsApp. A number picked from them
+  is answered with the page (invariant 8).
 
 Cost discipline: from 2026-10-01 messages inside the service window are billed.
 Every agent turn is a line item. Cap the agent at 3 suggestions per reply and one

@@ -37,7 +37,7 @@ import {
 import { renderIntakeAlert, sendIntakeAlert, missingContactsFor } from '../_shared/viewing/ops-alert.ts';
 import { countLapsedPlans, findJoinableRequest, findOpenRequests } from '../_shared/viewing/open-request.ts';
 import { freeViewingAvailable, hasPassCover } from '../_shared/viewing/lock-in-run.ts';
-import { requestGate, requestGateMessage } from '../_shared/viewing/intake.ts';
+import { oneOpenRequestMessage, requestGate, requestGateMessage } from '../_shared/viewing/intake.ts';
 import { PASS_DAYS, PASS_PRICE_USD } from '../_shared/viewing/lock-in.ts';
 import { linkViewingToInquiry } from '../_shared/viewing/concierge.ts';
 
@@ -378,7 +378,7 @@ Deno.serve(async (req) => {
   if (blocking) {
     return json({
       error: 'one_open_request',
-      message: `We are still working on ${blocking.ref}. Once you lock its plan in, or it lapses, you can request more places.`,
+      message: oneOpenRequestMessage(blocking.ref),
       ref: blocking.ref,
     }, 409);
   }

@@ -1,15 +1,17 @@
-// The follow-up search: a renter's sentence becomes three listings.
+// WhatsApp search: a renter's messages become three listings.
 //
-// PLAN-v3 scopes the agent narrowly and this is one of its four jobs. What it
-// is NOT is open-ended conversation or first-time discovery - the style layer
-// is visual, and WhatsApp cannot render a filterable grid worth looking at.
+// PLAN-v3 scoped this to the follow-up search; since 2026-10-13 it also answers
+// a cold DM - a number that has never made a request (owner's decision). The
+// run itself is _shared/viewing/search-run.ts, which the rehearsal drives on
+// FakeDb; this is the wiring: who may call, the model, the endpoint, chat-ai's
+// credit counter and the clock.
 //
 // Two things it does not decide for itself, both deliberate:
 //
-//   1. **It is not wired to fire on every inbound.** Turning it on means an
-//      LLM call plus a billed reply for any message that looks like a
-//      question, which is a spend decision rather than a code one. The
-//      capability is here and the caller chooses.
+//   1. **It is not wired to fire on every inbound.** The webhook calls it for
+//      what the agent reads as a search (agent.ts), and only with
+//      VIEWING_AGENT_ENABLED on. What one may cost, and who may spend it, is
+//      search-limits.ts.
 //   2. **It never sends more than one message.** PLAN-v3's "one photo and two
 //      lines each" cannot be honoured literally - a photo is its own WhatsApp
 //      message, so three photos is three messages and `sendFreeForm` refuses
@@ -22,15 +24,9 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
-import { SupabaseMessageStore } from '../_shared/whatsapp/store.ts';
-import { sendFreeForm, ServiceWindowClosedError, ConsecutiveMessageError } from '../_shared/whatsapp/send.ts';
-import {
-  validateFilters,
-  toQueryString,
-  renderSearchResults,
-  EXTRACTION_PROMPT,
-  type SearchResult,
-} from '../_shared/viewing/search.ts';
+import { toQueryString, type SearchFilters, type SearchResult } from '../_shared/viewing/search.ts';
+import { runSearch, searchOnce, type ChatMessage, type SearchDeps } from '../_shared/viewing/search-run.ts';
+import { aiCreditKey } from '../_shared/ai-credits.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 const corsHeaders = {
@@ -42,13 +38,88 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
 const SITE_URL = Deno.env.get('PUBLIC_SITE_URL') || 'https://hausto.com';
+const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
+const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 
 // The house model - 15 other functions use it, and extracting five fields from
-// one sentence is not work that needs anything larger.
+// a few sentences is not work that needs anything larger.
 const MODEL = 'gpt-4o-mini';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+/** Messages in, the model's JSON out. Throws, so the run un-counts the search. */
+async function extract(messages: ChatMessage[], renterId: string): Promise<unknown> {
+  if (!OPENAI_API_KEY) throw new Error('openai_not_configured');
+  // The budget guard the other OpenAI functions use. A spend cap that one
+  // function ignores is not a spend cap.
+  if (await isOpenAIBudgetExhausted()) throw new Error('budget_exhausted');
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      // Forces valid JSON out, which removes the whole class of "the model
+      // wrapped it in a markdown fence" parsing failures.
+      response_format: { type: 'json_object' },
+      temperature: 0,
+      max_tokens: 200,
+      messages,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    console.error('[viewing-agent-search] openai error:', JSON.stringify(data).slice(0, 300));
+    throw new Error(`llm_failed: ${res.status}`);
+  }
+  logOpenAIUsage({ fn: 'viewing-agent-search', model: MODEL, usage: data?.usage, metadata: { renterId } });
+  return JSON.parse(data?.choices?.[0]?.message?.content ?? '{}');
+}
+
+async function search(filters: SearchFilters): Promise<SearchResult[]> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/public-property-search?${toQueryString(filters)}`, {
+    headers: { Authorization: `Bearer ${SERVICE_ROLE}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(`search_failed: ${res.status}`);
+  return (data?.results ?? []) as SearchResult[];
+}
+
+/** One Upstash REST command, or null when Redis is not configured. */
+async function redis(path: string): Promise<unknown> {
+  if (!UPSTASH_REDIS_REST_URL || !UPSTASH_REDIS_REST_TOKEN) return null;
+  const resp = await fetch(`${UPSTASH_REDIS_REST_URL}/${path}`, {
+    headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!resp.ok) throw new Error(`redis ${resp.status}`);
+  return (await resp.json())?.result ?? null;
+}
+
+/**
+ * chat-ai's counter, on chat-ai's key (ai-credits.ts), so a renter's web chat
+ * and WhatsApp searches spend one allowance. Null on any failure: chat-ai
+ * fails open too, and the number's own cap still holds.
+ */
+const credits: SearchDeps['credits'] = {
+  async spend(userId) {
+    try {
+      const key = encodeURIComponent(aiCreditKey(userId));
+      const spent = Number(await redis(`incr/${key}`));
+      await redis(`expire/${key}/${60 * 60 * 48}`);
+      return Number.isFinite(spent) && spent > 0 ? spent : null;
+    } catch (e) {
+      console.warn('[viewing-agent-search] credit counter unavailable:', (e as Error).message);
+      return null;
+    }
+  },
+  async refund(userId) {
+    await redis(`decr/${encodeURIComponent(aiCreditKey(userId))}`);
+  },
+};
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -60,6 +131,7 @@ Deno.serve(async (req) => {
   // this spends money per call and sends from our number.
   const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
   let authorized = token === SERVICE_ROLE;
+  let isOps = false;
   if (!authorized) {
     const cronSecret = req.headers.get('x-cron-secret') || '';
     if (cronSecret) {
@@ -73,7 +145,7 @@ Deno.serve(async (req) => {
     if (userId) {
       const { data: role } = await db
         .from('user_roles').select('role').eq('user_id', userId).eq('role', 'ops').maybeSingle();
-      authorized = !!role;
+      authorized = isOps = !!role;
     }
   }
   if (!authorized) return json({ error: 'Unauthorized' }, 401);
@@ -82,155 +154,59 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
 
   const renterId = String(body.renterId ?? '');
-  const query = String(body.query ?? '').trim().slice(0, 500);
   const requestId = body.requestId ? String(body.requestId) : undefined;
   // Default false: a caller has to mean it. Returning the draft lets the
   // wiring be tested, and the ops console preview it, without spending a send.
   const send = body.send === true;
+  if (!renterId) return json({ error: 'renterId is required' }, 400);
 
-  if (!renterId || !query) return json({ error: 'renterId and query are required' }, 400);
-  if (!OPENAI_API_KEY) return json({ error: 'openai_not_configured' }, 500);
-
-  // The budget guard the other OpenAI functions use. A spend cap that one
-  // function ignores is not a spend cap.
-  if (await isOpenAIBudgetExhausted()) {
-    return json({ error: 'budget_exhausted', message: 'Daily OpenAI budget reached.' }, 429);
-  }
-
-  // ── Sentence → filters ────────────────────────────────────────────────────
-  let parsed: unknown;
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: MODEL,
-        // Forces valid JSON out, which removes the whole class of "the model
-        // wrapped it in a markdown fence" parsing failures.
-        response_format: { type: 'json_object' },
-        temperature: 0,
-        max_tokens: 200,
-        messages: [
-          { role: 'system', content: EXTRACTION_PROMPT },
-          { role: 'user', content: query },
-        ],
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      console.error('[viewing-agent-search] openai error:', JSON.stringify(data).slice(0, 300));
-      return json({ error: 'llm_failed', status: res.status }, 502);
-    }
-    logOpenAIUsage({ fn: 'viewing-agent-search', model: MODEL, usage: data?.usage, metadata: { renterId } });
-    parsed = JSON.parse(data?.choices?.[0]?.message?.content ?? '{}');
-  } catch (e) {
-    console.error('[viewing-agent-search] extraction failed:', (e as Error).message);
-    return json({ error: 'llm_failed', message: (e as Error).message }, 502);
-  }
-
-  const validation = validateFilters(parsed);
-  if (!validation.ok) return json({ error: 'unparseable_filters', detail: validation.error }, 502);
-  if (validation.dropped.length > 0) {
-    // Not an error - a dropped filter is a broader search. Logged because a
-    // field dropped on every call means the prompt and the contract disagree.
-    console.log(`[viewing-agent-search] dropped: ${validation.dropped.join(', ')}`);
-  }
-
-  // ── Filters → listings ────────────────────────────────────────────────────
-  let results: SearchResult[] = [];
-  try {
-    const url = `${SUPABASE_URL}/functions/v1/public-property-search?${toQueryString(validation.filters!)}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${SERVICE_ROLE}` },
-      signal: AbortSignal.timeout(15_000),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      console.error('[viewing-agent-search] search failed:', res.status);
-      return json({ error: 'search_failed', status: res.status }, 502);
-    }
-    results = (data?.results ?? []) as SearchResult[];
-  } catch (e) {
-    return json({ error: 'search_failed', message: (e as Error).message }, 502);
-  }
-
-  // ── Correct the prices before quoting them ────────────────────────────────
-  //
-  // The search endpoint used to return `price_vnd: Number(p.price)` - the raw
-  // column, which holds USD for housingsgn rows (SPEC §0: a live row reads
-  // price = 730, price_display = '$730 / month'), so a renter would have been
-  // told a $730 flat costs 730 dong. It now emits the canonical column, but
-  // the read stays: it supplies district_code, which the response does not
-  // carry at all, and it drops the price of a listing that went inactive
-  // between the search and now.
-  if (results.length > 0) {
-    const ids = results.map(r => r.id);
-    const { data: canonical } = await db
-      .from('external_properties')
-      .select('id, price_vnd, price_display, district_code')
-      .in('id', ids);
-    const byId = new Map((canonical ?? []).map((c: Record<string, unknown>) => [c.id, c]));
-    results = results.map(r => {
-      const c = byId.get(r.id);
-      return c
-        ? {
-            ...r,
-            price_vnd: (c.price_vnd as number) ?? null,
-            price_display: (c.price_display as string) ?? r.price_display ?? null,
-            district_code: (c.district_code as string) ?? null,
-          }
-        // No canonical row means the listing went inactive between the search
-        // and now. Dropping the price beats quoting an uncorrected one.
-        : { ...r, price_vnd: null };
-    });
-  }
-
-  let ref: string | undefined;
-  if (requestId) {
-    const { data } = await db.from('viewing_requests').select('ref').eq('id', requestId).maybeSingle();
-    ref = data?.ref;
-  }
-
-  const text = renderSearchResults({ results, siteUrl: SITE_URL, ref });
+  const deps: SearchDeps = {
+    extract: (messages) => extract(messages, renterId),
+    search,
+    credits,
+    sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+    now: () => new Date(),
+    siteUrl: SITE_URL,
+  };
 
   if (!send) {
-    return json({ success: true, sent: false, filters: validation.filters, matched: results.length, preview: text });
+    const query = String(body.query ?? '').trim().slice(0, 500);
+    if (!query) return json({ error: 'query is required for a preview' }, 400);
+    try {
+      const found = await searchOnce(db, query, null, deps);
+      return json({ success: true, sent: false, filters: found.filters, matched: found.results.length, preview: found.text });
+    } catch (e) {
+      return json({ error: 'search_failed', message: (e as Error).message }, 502);
+    }
   }
 
-  // ── One message ───────────────────────────────────────────────────────────
-  const store = new SupabaseMessageStore(db);
+  // Sending is the webhook's: it answers the renter's own messages, which is
+  // what the claim and the quota are keyed on. An operator previews.
+  if (isOps) return json({ error: 'Operators preview with send: false' }, 403);
+  const triggerMessageId = String(body.triggerMessageId ?? '');
+  if (!triggerMessageId) return json({ error: 'triggerMessageId is required to send' }, 400);
+
   let adapter;
   try { adapter = adapterFromEnv(Deno.env.toObject()); }
   catch (e) { return json({ error: (e as Error).message }, 500); }
 
-  try {
-    const result = await sendFreeForm(store, adapter, {
-      renterId,
-      requestId,
-      // Keyed on the query so the same question twice is one send, and a retry
-      // after a timeout cannot double-message.
-      purpose: `AGENT_SEARCH:${await hash(query)}`,
-      body: text,
+  const run = runSearch(db, adapter, { renterId, triggerMessageId, requestId }, deps)
+    .then(r => {
+      console.log(`[viewing-agent-search] ${renterId}: ${r.status}${'reason' in r ? ` ${r.reason}` : ''}${'error' in r ? ` ${r.error}` : ''}`);
+      return r;
+    })
+    .catch(e => {
+      console.error('[viewing-agent-search] run failed:', e);
+      return null;
     });
-    return json({
-      success: true, sent: true, messageId: result.message.id,
-      deduplicated: result.deduplicated, matched: results.length, preview: text,
-    });
-  } catch (e) {
-    if (e instanceof ServiceWindowClosedError) {
-      return json({ error: 'service_window_closed', message: e.message, preview: text }, 409);
-    }
-    if (e instanceof ConsecutiveMessageError) {
-      return json({ error: 'too_many_consecutive', message: e.message, preview: text }, 429);
-    }
-    return json({ error: 'send_failed', message: (e as Error).message, preview: text }, 500);
-  }
-});
 
-/** Short stable digest of the query, for the idempotency key. */
-async function hash(s: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-  return [...new Uint8Array(buf)].slice(0, 6).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+  // The run waits for the renter to stop typing, so it outlives the request:
+  // answered now, finished in the background. The webhook must not hold
+  // Meta's delivery open for it.
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (rt?.waitUntil) {
+    rt.waitUntil(run);
+    return json({ success: true, accepted: true }, 202);
+  }
+  return json({ success: true, result: await run });
+});

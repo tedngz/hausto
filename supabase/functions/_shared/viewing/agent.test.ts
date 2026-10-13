@@ -164,3 +164,43 @@ describe('a yes without the Pass (SPEC §9)', () => {
     expect(decideAction(input({ optedOut: true, lockIn })).kind).toBe('NONE');
   });
 });
+
+describe('search from a cold DM (2026-10-13)', () => {
+  it('greets a new number that did not open with a search, once the switch is on', () => {
+    expect(decideAction(input({ firstContact: true, text: 'hi' }))).toEqual({ kind: 'WELCOME' });
+    expect(decideAction(input({ enabled: false, firstContact: true, text: 'hi' })).kind).toBe('NONE');
+  });
+
+  it('searches a new number that opened with a search, rather than greeting it', () => {
+    expect(decideAction(input({ firstContact: true, intent: 'SEARCH', text: '2br in d2 under 20tr' })).kind)
+      .toBe('SEARCH');
+  });
+
+  it('does not greet a no, or a number that opted out', () => {
+    expect(decideAction(input({ firstContact: true, intent: 'DECLINE', text: 'no' })).kind).toBe('NONE');
+    expect(decideAction(input({ firstContact: true, intent: 'OPT_OUT', text: 'stop' })).kind).toBe('NONE');
+  });
+
+  it('reads "what about district 7" right after results as a new search', () => {
+    expect(decideAction(input({ searching: true, intent: 'QUESTION', text: 'what about district 7?' })))
+      .toEqual({ kind: 'SEARCH', query: 'what about district 7?' });
+  });
+
+  it('leaves the same words to an operator outside a search', () => {
+    expect(decideAction(input({ intent: 'QUESTION', text: 'what about district 7?' })).kind).toBe('NONE');
+  });
+
+  it('leaves a question about a place to an operator, even mid-search', () => {
+    expect(decideAction(input({ searching: true, intent: 'QUESTION', text: 'is there parking?' })).kind).toBe('NONE');
+  });
+
+  it('answers a number picked from search results with the pages', () => {
+    expect(decideAction(input({ intent: 'SELECTION', text: '2', searchPick: { listingIds: ['l2'] } })))
+      .toEqual({ kind: 'SEARCH_PICK', listingIds: ['l2'] });
+  });
+
+  it('says why when a pick from search results cannot be honoured', () => {
+    expect(decideAction(input({ intent: 'SELECTION', text: '4', searchPick: { problem: 'OUT_OF_RANGE' } })))
+      .toEqual({ kind: 'SELECTION_PROBLEM', problem: 'OUT_OF_RANGE' });
+  });
+});

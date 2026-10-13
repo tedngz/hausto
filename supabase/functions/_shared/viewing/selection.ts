@@ -1,7 +1,7 @@
 // "Reply with a number." - and what happens when they do.
 //
-// Both `renderNoSupply` and `renderSearchResults` end with that line, and
-// until now nothing read the answer. The renter replied "2" and got silence,
+// `renderNoSupply` ends with that line (`renderSearchResults` did too, until
+// 2026-10-13), and until this file nothing read the answer. The renter replied "2" and got silence,
 // which is the same class of failure as the substitutes that were never
 // produced: a promise in shipped copy with nothing behind it.
 //
@@ -183,5 +183,26 @@ export function renderReRequested(opts: { ref: string; titles: string[] }): stri
     ...(n === 1 ? [] : opts.titles.map(t => `- ${t}`)),
     'We will come back with the times that are actually free, usually within a day.',
     `Ref ${opts.ref}`,
+  ].join('\n');
+}
+
+/**
+ * The places a renter picked, sent back with where to ask for them.
+ *
+ * The answer to a number picked from search results (agent.ts SEARCH_PICK),
+ * and to a pick from suggestions we cannot turn into a request from WhatsApp
+ * (agent-act.ts): a viewing is asked for on the site, signed in, where the
+ * Pass and the times are settled (invariant 8). `reason`, when there is one,
+ * says why it is the site this time. No "booking" (invariant 6).
+ */
+export function renderRequestOnSite(opts: {
+  reason?: string;
+  places: { title: string; url: string }[];
+}): string {
+  const n = opts.places.length;
+  return [
+    ...(opts.reason ? [opts.reason, ''] : []),
+    `To have us arrange ${n === 1 ? 'it' : 'them'}, open ${n === 1 ? 'the page' : 'each page'} and tap Request viewing:`,
+    ...opts.places.flatMap((p, i) => (n === 1 ? [p.title, p.url] : [`${i + 1}. ${p.title}`, `   ${p.url}`])),
   ].join('\n');
 }
