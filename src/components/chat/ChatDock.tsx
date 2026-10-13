@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { ASSISTANT_COMPARE_EVENT } from '@/lib/assistantEvents';
+import { markChatDockPointerDown } from '@/lib/hubLayout';
 
 /**
  * The Hausto Agent's shell: a rail on the side at desktop widths, a draggable
@@ -174,8 +175,16 @@ export const ChatDock = ({
     // z-[60], not z-50: a panel portaled to the body is later in the document
     // than this dock, so at an equal z-index the panel wins and the chat opens
     // behind it.
+    // That puts it over modal dialogs too - Extensive search, a viewing
+    // request, the Pass - which switch the rest of the page off
+    // (pointer-events: none on the body). pointer-events-auto keeps the sheet
+    // working, so the renter can fold it down to see the dialog it covers.
+    // Marking the pointerdown (and data-chat-dock, for focus) tells the
+    // dialog a tap here is not a tap outside it (components/ui/dialog.tsx).
     <div
-      className={hidden ? 'hidden' : 'z-[60] shrink-0'}
+      data-chat-dock
+      onPointerDownCapture={(e) => markChatDockPointerDown(e.nativeEvent)}
+      className={hidden ? 'hidden' : 'pointer-events-auto z-[60] shrink-0'}
     >
       <div
         className={`glass-card flex flex-col rounded-t-3xl ${dragging ? '' : 'transition-[height] duration-200'}`}

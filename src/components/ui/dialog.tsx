@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { isChatDockPointerDown } from "@/lib/hubLayout"
 
 const Dialog = DialogPrimitive.Root
 
@@ -34,7 +35,7 @@ const DialogContent = React.forwardRef<
      *  for a panel that leaves the rest of the page usable. */
     overlayClassName?: string
   }
->(({ className, overlayClassName, children, ...props }, ref) => (
+>(({ className, overlayClassName, children, onInteractOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
@@ -43,6 +44,19 @@ const DialogContent = React.forwardRef<
         "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
         className
       )}
+      // The chat sheet (ChatDock) sits above dialogs on a phone and stays
+      // usable while one is open, so the renter can fold it away to see the
+      // dialog. Touching it is not touching outside: the dialog stays. A tap
+      // is known by its pointerdown (see isChatDockPointerDown for why not
+      // its target); focus moving into the dock, by where it lands.
+      onInteractOutside={(e) => {
+        onInteractOutside?.(e)
+        const original = (e as CustomEvent<{ originalEvent?: Event }>).detail?.originalEvent
+        if (
+          (original && isChatDockPointerDown(original)) ||
+          (e.target as Element | null)?.closest?.("[data-chat-dock]")
+        ) e.preventDefault()
+      }}
       {...props}
     >
       {children}

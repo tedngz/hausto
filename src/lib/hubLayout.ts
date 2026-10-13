@@ -59,3 +59,18 @@ export const HUB_PANEL_POSITION = [
   'xl:left-[calc(50%-var(--hub-rail)/2)]',
   'xl:max-w-[calc(100vw-var(--hub-rail)-6rem)]',
 ].join(' ');
+
+/**
+ * Taps that began on the chat dock, so a modal dialog open over it does not
+ * read them as a tap outside and close (components/ui/dialog.tsx).
+ *
+ * The event, not its target. On a touch screen Radix decides "outside" on
+ * the click that ends the tap, after React has handled it - and tapping the
+ * collapsed bar re-renders it open, swapping out the very node the finger
+ * landed on (the hint, the chevron). Detached, that node has no dock above
+ * it to find, and the dialog closed. The pointerdown is the same object
+ * Radix hands the dialog, so marking it as it passes through the dock holds.
+ */
+const dockPointerDowns = new WeakSet<Event>();
+export const markChatDockPointerDown = (e: Event) => { dockPointerDowns.add(e); };
+export const isChatDockPointerDown = (e: Event) => dockPointerDowns.has(e);
