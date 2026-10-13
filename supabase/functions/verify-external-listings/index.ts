@@ -1,6 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { assessVerification } from '../_shared/crawl-telemetry.ts';
-import { fetchNhatotAd, buildNhatotListing } from '../_shared/nhatot.ts';
+import { fetchNhatotAd, buildNhatotListing, type NhatotAd } from '../_shared/nhatot.ts';
+import { normalizeListingCopy } from '../_shared/listing-language.ts';
+import { repricedCopy } from '../_shared/repriced-copy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,8 +38,10 @@ const BATDONGSAN_DAILY_CHECKS = 4;
 
 // `livePrice` is set only by verifiers that can read the listing's own price
 // back. It is what separates "the URL still resolves" from "this unit is still
-// on offer at this price", which is the only version ops can act on.
-type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePrice?: number };
+// on offer at this price", which is the only version ops can act on. `ad` is
+// the payload it was read from, kept so a re-price can rewrite the description
+// without a second fetch (_shared/repriced-copy.ts).
+type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePrice?: number; ad?: NhatotAd };
 
 // Sources whose price can be re-read during verification, and which are
 // therefore subject to the freshness decay below. nhatot's ad payload carries
@@ -231,7 +235,7 @@ async function verifyViaChototApi(url: string): Promise<DeadResult> {
     const data = await res.json().catch(() => null);
     if (data?.ad && typeof data.ad === 'object') {
       const price = typeof data.ad.price === 'number' && data.ad.price > 0 ? data.ad.price : undefined;
-      return { status: 'alive', livePrice: price };
+      return { status: 'alive', livePrice: price, ad: data.ad };
     }
     const msg = String(data?.message || '').toLowerCase();
     if (msg.includes('not found')) return { status: 'dead', reason: 'gateway_not_found' };
@@ -258,7 +262,7 @@ async function verifyViaChototApi(url: string): Promise<DeadResult> {
 async function resurrectNhatotAds(supabase: any, summary: { resurrected: number }): Promise<void> {
   const { data: buried, error } = await supabase
     .from('external_properties')
-    .select('id, source_url')
+    .select('id, source_url, title')
     .eq('source', 'nhatot')
     .eq('is_active', false)
     .eq('last_verification_reason', 'gateway_not_found')
@@ -267,7 +271,7 @@ async function resurrectNhatotAds(supabase: any, summary: { resurrected: number 
 
   if (error || !buried?.length) return;
 
-  for (const row of buried as { id: string; source_url: string }[]) {
+  for (const row of buried as { id: string; source_url: string; title: string | null }[]) {
     const ad = await fetchNhatotAd(row.source_url);
     if (!ad) continue;
     const listing = buildNhatotListing(ad, row.source_url);
@@ -275,6 +279,7 @@ async function resurrectNhatotAds(supabase: any, summary: { resurrected: number 
     // it would only be hidden again by the next pass.
     if (!listing || listing.images.length < 5) continue;
 
+    const copy = await repricedCopy(ad, row.source_url, row.title, normalizeListingCopy);
     const now = new Date().toISOString();
     await supabase.from('external_properties').update({
       is_active: true,
@@ -286,15 +291,17 @@ async function resurrectNhatotAds(supabase: any, summary: { resurrected: number 
       last_verification_status: 'alive',
       last_verification_reason: null,
       verification_failures: 0,
-      // The repost is a new ad in every respect but its id - price and gallery
-      // are refreshed from it rather than trusting what we stored months ago.
-      // Taking the price straight off the payload IS a price confirmation, and
-      // the freshest one available, so the decay clock restarts here.
+      // The repost is a new ad in every respect but its id - price, gallery
+      // and description are refreshed from it rather than trusting what we
+      // stored months ago. Taking the price straight off the payload IS a
+      // price confirmation, and the freshest one available, so the decay clock
+      // restarts here.
       price: listing.price,
       price_display: listing.priceDisplay,
       price_confirmed_at: now,
       images: listing.images,
       videos: listing.videos,
+      ...(copy ?? {}),
       updated_at: now,
     }).eq('id', row.id);
 
@@ -431,7 +438,7 @@ Deno.serve(async (req) => {
     // batdongsan is pulled separately below, under its own budget.
     const { data: tiered, error } = await supabase
       .from('external_properties')
-      .select('id, source, source_url, external_id, verification_failures, price, price_display')
+      .select('id, source, source_url, external_id, verification_failures, price, price_display, title')
       .eq('is_active', true)
       .neq('source', 'concierge')
       .neq('source', 'batdongsan')
@@ -459,7 +466,7 @@ Deno.serve(async (req) => {
       const bdsReverifyCutoff = new Date(nowMs - BATDONGSAN_REVERIFY_DAYS * dayMs).toISOString();
       const { data, error: bdsError } = await supabase
         .from('external_properties')
-        .select('id, source, source_url, external_id, verification_failures, price, price_display')
+        .select('id, source, source_url, external_id, verification_failures, price, price_display, title')
         .eq('is_active', true)
         .eq('source', 'batdongsan')
         .or(
@@ -511,6 +518,11 @@ Deno.serve(async (req) => {
             // SPEC exists to catch, and it should not have to.
             update.price = result.livePrice;
             update.price_display = `${result.livePrice.toLocaleString()} VND`;
+            if (result.ad) {
+              const copy = await repricedCopy(result.ad, item.source_url, item.title, normalizeListingCopy);
+              if (copy) Object.assign(update, copy);
+              else console.warn(`[verify-external-listings] Reprice ${item.id}: description not rewritten, may still quote the old rent`);
+            }
             summary.reprice++;
             console.log(`[verify-external-listings] Reprice ${item.id}: ${stored.toLocaleString()} -> ${result.livePrice.toLocaleString()} VND`);
           }
