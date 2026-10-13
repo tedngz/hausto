@@ -22,9 +22,10 @@ export const INTENTS = [
   'DECLINE',
   'RESCHEDULE',
   'QUESTION',
-  // Picking from a list we sent - "2", "1 and 3", "the second one". Both
-  // renderNoSupply and renderSearchResults end with "reply with a number", so
-  // this is an affordance we promised before we read it.
+  // Picking from a list we sent - "2", "1 and 3", "the second one".
+  // renderNoSupply ends with "reply with a number", so this is an affordance
+  // we promised before we read it; search results are numbered, and get
+  // picked from too (agent.ts SEARCH_PICK).
   'SELECTION',
   // Describing what they are looking for, not asking about something we
   // already sent. Deliberately narrow - see SEARCH_SIGNALS.
@@ -166,6 +167,33 @@ export function classifyIntent(raw: string): Classification {
   // Nothing matched. A human reads it - which is the right answer, and the
   // count of these is the evidence for whether a model would earn its cost.
   return { intent: 'UNKNOWN', reason: 'no rule matched' };
+}
+
+/**
+ * Phrases that change a search we just answered: an area, a size, a budget,
+ * or a comparative. Matched against the folded text.
+ */
+const REFINEMENT = [
+  /\b(district|quan|q)\s*\.?\s*\d{1,2}\b/,
+  /\bd\d{1,2}\b/,
+  /\b(thao dien|an phu|binh thanh|phu nhuan|tan binh|tan phu|go vap|thu duc|binh tan|nha be|phu my hung|thu thiem)\b/,
+  /\b\d\s*(br|bed|beds|bedroom|bedrooms|pn|phong ngu)\b/,
+  /\bstudio\b/,
+  /\b(cheaper|bigger|smaller|larger|more space|higher budget|lower budget|re hon|rong hon|lon hon)\b/,
+];
+
+/**
+ * Does this message change the search we just sent results for?
+ *
+ * Only ever asked within `SEARCH_SESSION_MINUTES` of results (agent.ts), and
+ * only of a message that matched no stronger rule. "What about district 7?"
+ * reads as a question, and an operator would answer it with exactly the
+ * search the agent can run; "is there parking?" matches nothing here and
+ * still goes to a person. Narrow for the same reason SEEKING is.
+ */
+export function looksLikeRefinement(raw: string): boolean {
+  const text = fold(String(raw ?? ''));
+  return text.length > 0 && text.length <= 120 && (BUDGET.test(text) || REFINEMENT.some(r => r.test(text)));
 }
 
 /**

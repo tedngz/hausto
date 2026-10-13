@@ -102,8 +102,12 @@ export class FakeDb {
           // persist-then-send path depends on 23505 coming back.
           // And the free viewing's primary key on the WhatsApp number (SPEC §9):
           // a second lock-in on one number must come back 23505 too.
+          // And the claim on a search burst (renter_searches.answers_message_id):
+          // two dispatches settling on one burst must not both answer it.
           if ((table === 'messages' && this.tables.messages.some(m => m.idempotency_key === r.idempotency_key))
-            || (table === 'free_viewings' && (this.tables.free_viewings ?? []).some(f => f.phone_e164 === r.phone_e164))) {
+            || (table === 'free_viewings' && (this.tables.free_viewings ?? []).some(f => f.phone_e164 === r.phone_e164))
+            || (table === 'renter_searches'
+              && (this.tables.renter_searches ?? []).some(s => s.answers_message_id === r.answers_message_id))) {
             return {
               select: () => ({ single: () => Promise.resolve({ data: null, error: { code: '23505' } }) }),
               then: (resolve: (x: { data: null; error: { code: string } }) => unknown) =>

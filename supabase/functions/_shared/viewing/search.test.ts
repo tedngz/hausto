@@ -3,6 +3,10 @@ import {
   validateFilters,
   toQueryString,
   renderSearchResults,
+  renderSearchRefused,
+  extractionMessages,
+  hasAnyFilter,
+  EXTRACTION_PROMPT,
   MAX_RESULTS,
   MIN_PLAUSIBLE_VND,
   MAX_PLAUSIBLE_VND,
@@ -188,5 +192,41 @@ describe('the reply', () => {
   it('never leaks a realtor number - it is given none', () => {
     const text = renderSearchResults({ results, siteUrl: 'https://hausto.com' });
     expect(text).not.toMatch(/\+?84\d{7,}/);
+  });
+});
+
+describe('search from a cold DM (2026-10-13)', () => {
+  const result = { id: 'l1', title: 'Sunny 2BR', price_vnd: 18_000_000 };
+
+  it('sends a renter to the page to request, rather than asking for a number', () => {
+    const text = renderSearchResults({ results: [result], siteUrl: 'https://hausto.com' });
+    expect(text).toContain('Open it and tap Request viewing');
+    expect(text).not.toMatch(/reply with a number/i);
+    expect(renderSearchResults({ results: [result, { ...result, id: 'l2' }], siteUrl: 'https://hausto.com' }))
+      .toContain('Open one and tap Request viewing');
+  });
+
+  it('shows the model the last filters, without the plumbing', () => {
+    const [system, user] = extractionMessages('what about district 7', {
+      district: 'thao dien', rooms: '2', max_budget: 20_000_000, limit: 3, source: 'external',
+    });
+    expect(system.content).toContain('{"district":"thao dien","max_budget":20000000,"rooms":"2"}');
+    expect(system.content).not.toContain('limit');
+    expect(user).toEqual({ role: 'user', content: 'what about district 7' });
+    expect(extractionMessages('2br', null)[0].content).toBe(EXTRACTION_PROMPT);
+  });
+
+  it('knows a search on nothing from a search on something', () => {
+    expect(hasAnyFilter({ limit: 3, source: 'external' })).toBe(false);
+    expect(hasAnyFilter({ limit: 3, source: 'external', rooms: '2' })).toBe(true);
+  });
+
+  it('says nothing past the daily cap, and something for every other refusal', () => {
+    expect(renderSearchRefused('GLOBAL_CAP', 'https://hausto.com')).toBeNull();
+    for (const r of ['NUMBER_LIMIT', 'ACCOUNT_CREDITS', 'DAILY_LIMIT'] as const) {
+      const text = renderSearchRefused(r, 'https://hausto.com')!;
+      expect(text, r).toContain('hausto.com/browse');
+      expect(text, r).not.toContain('—');
+    }
   });
 });

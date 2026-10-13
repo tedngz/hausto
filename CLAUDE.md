@@ -48,8 +48,8 @@ a new ORM. Everything below is additive.
   `ops` role and RLS. Keep it out of the renter SPA - different auth surface,
   different deploy cadence, and it should stay ugly and fast.
 - `public-property-search` is a stable contract. It serves AI crawlers
-  (llms.txt/AEO) and the WhatsApp agent's follow-up search
-  (`viewing-agent-search`). Extend it additively; never break its response
+  (llms.txt/AEO) and the WhatsApp agent's search (`viewing-agent-search`,
+  cold DMs included since 2026-10-13, limited in `search-limits.ts`). Extend it additively; never break its response
   shape.
 
 ### Non-negotiable invariants

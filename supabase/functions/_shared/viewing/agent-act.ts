@@ -10,8 +10,16 @@
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
 import { sendFreeForm, ServiceWindowClosedError, ConsecutiveMessageError } from '../whatsapp/send.ts';
-import { generateRef, intakeEvents, screenCandidates, type ShortlistCandidate } from './intake.ts';
-import { renderSelectionProblem, renderReRequested } from './selection.ts';
+import {
+  addDays, generateRef, hcmcDate, intakeEvents, MIN_LEAD_DAYS, oneOpenRequestMessage, requestGate, requestGateMessage,
+  screenCandidates, validateAvailability, type AvailabilityWindow, type ShortlistCandidate,
+} from './intake.ts';
+import { renderSelectionProblem, renderReRequested, renderRequestOnSite } from './selection.ts';
+import { countLapsedPlans, findOpenRequests } from './open-request.ts';
+import { freeViewingAvailable, hasPassCover } from './lock-in-run.ts';
+import { PASS_DAYS, PASS_PRICE_USD } from './lock-in.ts';
+import { renderWelcome } from './search.ts';
+import { WELCOME_PURPOSE } from './search-limits.ts';
 import type { AgentAction } from './agent.ts';
 import { renderAlertDetails, renderWatchConfirmed, renderWatchProblem } from './watch.ts';
 import { alertItemsFor, markAlertDetailed } from './alerts.ts';
@@ -33,7 +41,14 @@ export interface ActResult {
   messageId?: string;
   newRequestId?: string;
   ref?: string;
+  /** A pick that could not become a request here, sent to the site instead - and why. */
+  onSite?: string;
   error?: string;
+}
+
+/** A listing's page, which is where a viewing is asked for. */
+function pageOf(listing: { id: string; title?: string | null }): { title: string; url: string } {
+  return { title: listing.title ?? 'A place', url: `${SITE_URL}/property/${listing.id}` };
 }
 
 /**
@@ -48,7 +63,7 @@ export async function performAction(
   db: Supa,
   adapter: WhatsAppAdapter,
   action: AgentAction,
-  ctx: { renterId: string; requestId?: string; providerMessageId: string },
+  ctx: { renterId: string; requestId?: string; providerMessageId: string; now?: Date },
 ): Promise<ActResult> {
   const store = new SupabaseMessageStore(db);
 
@@ -67,6 +82,33 @@ export async function performAction(
 
     if (action.kind === 'RE_REQUEST') {
       return await createReRequest(db, adapter, action.listingIds, ctx);
+    }
+
+    if (action.kind === 'WELCOME') {
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        // Keyed on the renter alone: a number is greeted once, ever.
+        purpose: WELCOME_PURPOSE,
+        body: renderWelcome(),
+      });
+      return { performed: action.kind, messageId: result.message.id };
+    }
+
+    if (action.kind === 'SEARCH_PICK') {
+      // Re-read, as a re-request does: a listing can go between the results
+      // and the reply, and a link to a dead page is not an answer.
+      const { data: found } = await db
+        .from('external_properties').select('id, title, is_active').in('id', action.listingIds);
+      const live = action.listingIds
+        .map(id => ((found ?? []) as { id: string; title: string | null; is_active: boolean }[]).find(f => f.id === id))
+        .filter((f): f is { id: string; title: string | null; is_active: boolean } => !!f && f.is_active !== false);
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        requestId: ctx.requestId,
+        purpose: `SEARCH_PICK:${ctx.providerMessageId}`,
+        body: live.length > 0 ? renderRequestOnSite({ places: live.map(pageOf) }) : renderSelectionProblem('EXPIRED'),
+      });
+      return { performed: live.length > 0 ? action.kind : 'SELECTION_PROBLEM', messageId: result.message.id };
     }
 
     if (action.kind === 'WATCH_CONFIRMED') {
@@ -167,6 +209,54 @@ export async function performAction(
 }
 
 /**
+ * May a pick from suggestions become a request from WhatsApp, and on which
+ * times? The questions `viewing-request-create` asks at submit, asked again
+ * here - before 2026-10-13 a reply of "2" skipped every one of them, which was
+ * harmless only while VIEWING_AGENT_ENABLED was off.
+ *
+ * - a signed-in account behind the number, which plans lock in to;
+ * - no request already being worked (intake.ts `pickBlocking`);
+ * - `requestGate`: the Pass, or the number's one free place;
+ * - times still offerable (MIN_LEAD_DAYS) - the request picked from has them,
+ *   but it failed, usually because they went by.
+ *
+ * Any no sends them to the pages instead, where the modal asks each question
+ * properly. `reason` is null where the page explains itself.
+ */
+async function reRequestVerdict(
+  db: Supa,
+  renterId: string,
+  placeCount: number,
+  priorAvailability: unknown,
+  now: Date,
+): Promise<{ go: true; availability: AvailabilityWindow[] } | { go: false; reason: string | null }> {
+  const { data: renter } = await db.from('renters').select('user_id, phone_e164').eq('id', renterId).maybeSingle();
+  if (!renter?.user_id) return { go: false, reason: null };
+
+  const today = hcmcDate(now);
+  const [{ blocking }, lapsed, hasPass, freeViewing] = await Promise.all([
+    findOpenRequests(db, renter.user_id, today, now),
+    countLapsedPlans(db, renter.user_id),
+    hasPassCover(db, renter.user_id),
+    freeViewingAvailable(db, renter.phone_e164),
+  ]);
+  if (blocking) return { go: false, reason: oneOpenRequestMessage(blocking.ref) };
+
+  const gate = requestGate({ hasPass, placeCount, joining: false, freeViewingAvailable: freeViewing, lapsedPlans: lapsed });
+  if (!gate.ok) return { go: false, reason: requestGateMessage(gate.reason, PASS_PRICE_USD, PASS_DAYS) };
+
+  // The times still ahead, past the lead the operator needs; then the same
+  // check intake makes, so nothing reaches the log that intake would refuse.
+  const earliest = addDays(today, MIN_LEAD_DAYS);
+  const ahead = (Array.isArray(priorAvailability) ? priorAvailability as AvailabilityWindow[] : [])
+    .filter(w => typeof w?.date === 'string' && w.date >= earliest);
+  const times = validateAvailability(ahead, today);
+  if (!times.ok) return { go: false, reason: 'The times on your last request have gone by, so these need new ones.' };
+
+  return { go: true, availability: times.value! };
+}
+
+/**
  * A new request from listings the renter picked out of a suggestion.
  *
  * A NEW request, not items appended to the old one. The request they picked
@@ -175,13 +265,14 @@ export async function performAction(
  *
  * The listings are screened again with the same gate intake uses. They passed
  * it when they were suggested, but that was a message ago and verification runs
- * every twenty minutes.
+ * every twenty minutes. And the renter is gated as intake gates them
+ * (`reRequestVerdict`).
  */
 async function createReRequest(
   db: Supa,
   adapter: WhatsAppAdapter,
   listingIds: string[],
-  ctx: { renterId: string; requestId?: string; providerMessageId: string },
+  ctx: { renterId: string; requestId?: string; providerMessageId: string; now?: Date },
 ): Promise<ActResult> {
   const { data: found } = await db.from('external_properties').select(CANDIDATE_COLUMNS).in('id', listingIds);
   const { eligible } = screenCandidates(listingIds, (found ?? []) as ShortlistCandidate[]);
@@ -200,13 +291,25 @@ async function createReRequest(
   }
 
   // Carry the availability forward from the request they were picking against,
-  // so they are not asked the same question twice.
-  let availability: unknown = [];
+  // so they are not asked the same question twice - as far as it still holds.
+  let prior: unknown = [];
   if (ctx.requestId) {
-    const { data: prior } = await db
+    const { data } = await db
       .from('viewing_requests').select('availability').eq('id', ctx.requestId).maybeSingle();
-    availability = prior?.availability ?? [];
+    prior = data?.availability ?? [];
   }
+  const verdict = await reRequestVerdict(db, ctx.renterId, eligible.length, prior, ctx.now ?? new Date());
+  if (!verdict.go) {
+    const store = new SupabaseMessageStore(db);
+    const result = await sendFreeForm(store, adapter, {
+      renterId: ctx.renterId,
+      requestId: ctx.requestId,
+      purpose: `AGENT_RE_REQUEST_ON_SITE:${ctx.providerMessageId}`,
+      body: renderRequestOnSite({ reason: verdict.reason ?? undefined, places: eligible.map(pageOf) }),
+    });
+    return { performed: 'RE_REQUEST', messageId: result.message.id, onSite: verdict.reason ?? 'not signed in' };
+  }
+  const availability = verdict.availability;
 
   let request: { id: string; ref: string } | null = null;
   for (let attempt = 0; attempt < 5 && !request; attempt++) {
@@ -238,7 +341,7 @@ async function createReRequest(
 
   const { error: evErr } = await db.from('events').insert(intakeEvents({
     requestId: request.id,
-    availability: availability as { date: string; part: 'MORNING' | 'AFTERNOON' | 'EVENING' }[],
+    availability,
     items: items.map((i: Record<string, unknown>) => ({
       itemId: String(i.id),
       listingId: String(i.listing_id),

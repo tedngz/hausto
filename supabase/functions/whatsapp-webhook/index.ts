@@ -38,16 +38,21 @@ const AGENT_ENABLED = (Deno.env.get('VIEWING_AGENT_ENABLED') || '').trim() === '
 /**
  * Hand a search to viewing-agent-search.
  *
+ * It answers at once (202) and waits for the renter to stop typing in the
+ * background, so this does not hold Meta's delivery open. `triggerMessageId`
+ * is the stored inbound row: the search gathers the burst it belongs to, and
+ * claims it so the burst is answered once.
+ *
  * Fire and forget on failure: the renter's message is already stored and their
  * window already re-opened, and losing Meta's whole delivery batch to a failed
  * agent reply would be a far worse trade than a missed search.
  */
-async function dispatchSearch(renterId: string, query: string, requestId?: string): Promise<void> {
+async function dispatchSearch(renterId: string, triggerMessageId: string, requestId?: string): Promise<void> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/viewing-agent-search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
-      body: JSON.stringify({ renterId, query, requestId, send: true }),
+      body: JSON.stringify({ renterId, triggerMessageId, requestId, send: true }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) console.warn(`[whatsapp-webhook] agent search returned ${res.status}`);
@@ -156,6 +161,9 @@ Deno.serve(async (req) => {
         lockIn: outcome.lockIn,
         link: outcome.link,
         received: outcome.received,
+        searchPick: outcome.searchPick,
+        searching: outcome.searching,
+        firstContact: outcome.firstContact,
       });
 
       if (action.kind === 'NONE') {
@@ -164,7 +172,7 @@ Deno.serve(async (req) => {
         // Dispatched rather than performed here: viewing-agent-search owns the
         // OpenAI call, the budget guard and the usage logging, and two places
         // that can spend money is one too many.
-        await dispatchSearch(outcome.renterId, action.query, outcome.requestId);
+        await dispatchSearch(outcome.renterId, outcome.message.id, outcome.requestId);
       } else {
         const adapter = adapterFromEnv(Deno.env.toObject());
         const result = await performAction(db, adapter, action, {

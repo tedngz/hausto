@@ -116,6 +116,9 @@ Deno.serve(async (req) => {
     lockIn: outcome.lockIn,
     link: outcome.link,
     received: outcome.received,
+    searchPick: outcome.searchPick,
+    searching: outcome.searching,
+    firstContact: outcome.firstContact,
   });
 
   let agent: unknown = { decided: action.kind, reason: action.kind === 'NONE' ? action.reason : undefined };

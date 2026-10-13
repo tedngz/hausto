@@ -66,6 +66,11 @@ function fakeDb(seed: {
       then: (resolve: (r: { data: unknown; error: null }) => unknown) =>
         resolve({ data: rows, error: null }),
       eq: (col: string, val: unknown) => { rows = rows.filter(r => r[col] === val); return api; },
+      // Only `.not(col, 'is', null)`, the form the search-session read uses.
+      not: (col: string, op: string, val: unknown) => {
+        if (op === 'is' && val === null) rows = rows.filter(r => r[col] != null);
+        return api;
+      },
       // Sorted here rather than at read time, because postgrest applies the
       // order before the limit - and the newest-request read is only correct
       // if the fake does too.

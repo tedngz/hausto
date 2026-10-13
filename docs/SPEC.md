@@ -340,6 +340,30 @@ No grants to `anon` or `authenticated`; read it with SQL. The function refuses
 a 31st new listing in any 24 hours for one account - far past anyone flat
 hunting, there so an account cannot be a scraper.
 
+### `renter_searches`
+
+One row per burst of WhatsApp messages the search agent answered or refused
+(2026-10-13, §5 "Search from a cold DM"). Not request state, so not the event
+log: a search makes no request.
+
+```
+id                  uuid pk
+renter_id           uuid not null references renters(id) on delete cascade
+answers_message_id  uuid not null unique references messages(id)  -- newest inbound of the burst
+query               text not null          -- the burst, joined
+counted             boolean default false  -- spent against the limits
+refused             text null              -- NUMBER_LIMIT | ACCOUNT_CREDITS | DAILY_LIMIT | GLOBAL_CAP, or an error
+filters             jsonb null             -- what was searched; the next search refines it
+listing_ids         uuid[] default '{}'    -- shown, in order; what a reply of "2" picks from
+message_id          uuid null references messages(id)  -- the answer
+created_at          timestamptz default now()
+```
+
+Four jobs in one row: the quota (`counted` rows since UTC midnight), the
+claim (the unique `answers_message_id` - two dispatches settling on one burst
+answer it once), the renter's preferences, and the list a number picks from.
+Service role only.
+
 ### `events`
 
 Append-only. The single source of truth for all state. See §3.
@@ -760,6 +784,53 @@ the go at once, all in one WhatsApp chat. In order:
    message was filed on, so a reply to one offer covering two buildings is
    filed on both (`inquiriesAnswered`).
 5. Otherwise a viewing request, by ref or the newest.
+
+**Search from a cold DM** (owner's decision, 2026-10-13; PLAN-v3 "The WhatsApp
+agent"). Anyone may message the number with what they want - a number that has
+never made a request included - and get three listings back, each a link to
+its page on the site. All of it behind `VIEWING_AGENT_ENABLED`.
+
+- **A new number that opens with "hi"** - no request, no code, nothing between
+  us before - gets one greeting saying what to send (`WELCOME`, once per
+  renter). One that opens with a search is searched.
+- **A burst is searched once.** People type a brief as several messages.
+  `viewing-agent-search` answers the webhook at once and waits in the
+  background until the renter has been quiet for `QUIET_MS` (8 s, at most
+  `MAX_SETTLE_MS`, 30 s), then searches every message since the last thing we
+  sent them (the greeting aside) as one brief (`settleBurst`). Each message
+  read as a search dispatches; the first to claim the burst in
+  `renter_searches` answers it and the rest stand down.
+- **Preferences carry.** The model is shown the renter's last filters (up to
+  `PREFERENCES_TTL_DAYS`, 7) and returns the whole set again, so "what about
+  district 7" keeps the budget. Within `SEARCH_SESSION_MINUTES` (60) of
+  results, a message the classifier reads as a question or nothing but that
+  names an area, a size, a budget or a comparison (`looksLikeRefinement`) is
+  searched too; outside it, or for "is there parking?", it is a person's.
+- **A message that names nothing** ("any apartments?") is answered with what
+  to tell us, not three arbitrary places.
+- **Results send them to the page.** "Open it and tap Request viewing" - a
+  viewing is asked for on the site, signed in, with times (invariant 8). A
+  number sent anyway is answered with that place's link (`SEARCH_PICK`); it
+  never makes a request. A number resolves against whichever list went out
+  last: search results, or a request's suggestions.
+- **Limits** (`search-limits.ts`), checked before the model runs, counted per
+  UTC day as chat-ai counts its credits:
+  - a number with no account: `FREE_NUMBER_DAILY_SEARCHES` (3);
+  - a number linked to an account without the Pass: the web chat's
+    `FREE_DAILY_AI_CREDITS` (10), from the same counter - one allowance, two
+    doors; with the Pass, unlimited;
+  - any one number: `NUMBER_DAILY_SEARCH_CAP` (30);
+  - every number together: `GLOBAL_DAILY_SEARCH_CAP` (200). Past it the agent
+    says nothing - an apology to each new number is the same bill.
+
+  A refusal is said once a day per number (keyed on the day) and costs no
+  model call. A search the model or the send failed on is un-counted.
+
+A pick from a request's suggestions (`RE_REQUEST`) still makes a request from
+WhatsApp, but since 2026-10-13 only past the questions intake asks
+(`reRequestVerdict` in `agent-act.ts`): an account behind the number, no
+request already being worked, `requestGate`, and times still offerable. Any no
+sends the picked places' pages instead, with the reason.
 
 `/dev/phone` is backed by the `dev-phone` function, which takes the same inbound
 path Meta's delivery does (`_shared/viewing/routing.ts`, shared by both) and

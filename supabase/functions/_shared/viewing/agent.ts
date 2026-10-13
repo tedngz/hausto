@@ -19,7 +19,7 @@
 //      is the complex-watch replies, which are not the agent's to switch off -
 //      see the top of `decideAction`.
 
-import type { Intent } from './intent.ts';
+import { looksLikeRefinement, type Intent } from './intent.ts';
 import type { LockInPrompt, RequestReceived, WatchOutcome } from './routing.ts';
 import type { WatchProblem } from './watch.ts';
 import type { ConfirmedInquiry } from './concierge.ts';
@@ -34,6 +34,10 @@ export type AgentAction =
   | { kind: 'SELECTION_PROBLEM'; problem: 'NO_OFFER' | 'EXPIRED' | 'OUT_OF_RANGE' }
   /** They described what they are looking for. Search and answer. */
   | { kind: 'SEARCH'; query: string }
+  /** They picked from search results. Send the pages, where viewings are asked for. */
+  | { kind: 'SEARCH_PICK'; listingIds: string[] }
+  /** A new number's first message, and not a search. Say what to send. */
+  | { kind: 'WELCOME' }
   /** They sent a complex-watch code and it is now on. Say so (SPEC §11). */
   | {
     kind: 'WATCH_CONFIRMED';
@@ -80,6 +84,18 @@ export interface AgentInput {
   link?: LinkOutcome;
   /** Set on the handshake of a request still being worked (routing.ts). */
   received?: RequestReceived;
+  /**
+   * A pick from search results, resolved (routing.ts) - set instead of
+   * `selection` when the newest list the renter was shown was a search.
+   */
+  searchPick?: {
+    listingIds?: string[];
+    problem?: 'NO_OFFER' | 'EXPIRED' | 'OUT_OF_RANGE';
+  };
+  /** Search results went to them within SEARCH_SESSION_MINUTES (search-limits.ts). */
+  searching?: boolean;
+  /** Nothing has passed between us before this message, and they have no request. */
+  firstContact?: boolean;
 }
 
 /**
@@ -151,6 +167,14 @@ export function decideAction(input: AgentInput): AgentAction {
   // not here. Two replies to one message is exactly what rule 1 forbids.
   if (input.confirmed) return { kind: 'NONE', reason: 'confirmation handled elsewhere' };
 
+  if (input.intent === 'SELECTION' && input.searchPick) {
+    // Picked from search results. Not a request from here: the page is where
+    // one is made, signed in, with times (invariant 8).
+    if (input.searchPick.listingIds?.length) return { kind: 'SEARCH_PICK', listingIds: input.searchPick.listingIds };
+    if (input.searchPick.problem) return { kind: 'SELECTION_PROBLEM', problem: input.searchPick.problem };
+    return { kind: 'NONE', reason: 'search pick resolved to nothing' };
+  }
+
   if (input.intent === 'SELECTION') {
     if (input.selection?.listingIds?.length) {
       return { kind: 'RE_REQUEST', listingIds: input.selection.listingIds };
@@ -166,6 +190,20 @@ export function decideAction(input: AgentInput): AgentAction {
   if (input.intent === 'SEARCH') {
     return { kind: 'SEARCH', query: input.text };
   }
+
+  // Right after results, "what about district 7?" changes the search - it is
+  // what an operator would do with it anyway. Only what the classifier could
+  // not place, and only within the session: on its own it is a question for a
+  // person, as before.
+  if (
+    input.searching && (input.intent === 'QUESTION' || input.intent === 'UNKNOWN') && looksLikeRefinement(input.text)
+  ) {
+    return { kind: 'SEARCH', query: input.text };
+  }
+
+  // A new number that opened with "hi". Silence is the worst answer to a
+  // first message, and one line on what to send is the cheapest good one.
+  if (input.firstContact && input.intent !== 'DECLINE') return { kind: 'WELCOME' };
 
   // CONFIRM, DECLINE, RESCHEDULE, QUESTION, UNKNOWN. Every one of these is a
   // person's job. QUESTION especially: "what floor is it on" is not a search,

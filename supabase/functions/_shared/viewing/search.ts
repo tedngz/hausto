@@ -1,4 +1,4 @@
-// Follow-up search: a renter's sentence, turned into a search and three
+// WhatsApp search: a renter's sentence, turned into a search and three
 // answers (PLAN-v3, the agent's scope).
 //
 // The agent gets `public-property-search` as a tool - the same contract that
@@ -11,12 +11,16 @@
 // or serve far more than a WhatsApp message can carry. Everything crosses
 // through `validateFilters`, which is pure and closed.
 //
-// Scope discipline from PLAN-v3, worth restating because it is easy to drift:
-// this is the FOLLOW-UP search, for a renter who has already made a request.
-// First-time discovery is explicitly out - the style layer is visual and
-// WhatsApp cannot render a filterable grid.
+// Scope: this began as the FOLLOW-UP search, for a renter who had already made
+// a request. Since 2026-10-13 (owner's decision) it also answers a cold DM -
+// someone who messages the number with what they want and has never made a
+// request. Still three results and links, not a grid: the style layer stays on
+// the site, and the results send them there. What a search costs, and who may
+// spend one, is search-limits.ts.
 
 import { districtLabel } from './place.ts';
+import { CREDITS_USED_REPLY } from '../ai-credits.ts';
+import { FREE_NUMBER_DAILY_SEARCHES, type SearchRefusal } from './search-limits.ts';
 
 /** Exactly the parameters `public-property-search` accepts. Nothing else. */
 export interface SearchFilters {
@@ -208,7 +212,11 @@ export function renderSearchResults(opts: {
   });
 
   lines.push('');
-  lines.push('Reply with a number to request a viewing.');
+  // Not "reply with a number": a viewing is asked for on the site, signed in,
+  // with times picked there (invariant 8), and that is where these go. A
+  // number sent anyway is answered with its link (agent.ts SEARCH_PICK).
+  lines.push(`Open ${shown.length === 1 ? 'it' : 'one'} and tap Request viewing to have us arrange it.`);
+  lines.push('Or tell us what to change - area, budget, bedrooms - and we will look again.');
   if (opts.ref) lines.push(`Ref ${opts.ref}`);
 
   return lines.join('\n');
@@ -229,3 +237,88 @@ Return ONLY a JSON object with any of these keys, omitting any you are unsure ab
 
 Omit a key rather than guessing. An omitted filter broadens the search, which is recoverable; a wrong one returns nothing, which is not.
 Return no prose, no markdown fence - just the JSON object.`;
+
+/** What the model may carry from one search into the next: the filters, not the plumbing. */
+function preferencesOf(previous: Partial<SearchFilters> | null): Record<string, unknown> | null {
+  if (!previous) return null;
+  const { city, district, min_budget, max_budget, rooms, style } = previous;
+  const kept = Object.fromEntries(
+    Object.entries({ city, district, min_budget, max_budget, rooms, style }).filter(([, v]) => v != null),
+  );
+  return Object.keys(kept).length > 0 ? kept : null;
+}
+
+/**
+ * The model's messages for one search. With the renter's last filters, it is
+ * asked for the whole set again rather than a difference, so "what about
+ * district 7" keeps their budget and bedrooms, and "any area" drops the
+ * district. Its answer crosses `validateFilters` like any other.
+ */
+export function extractionMessages(
+  query: string,
+  previous: Partial<SearchFilters> | null,
+): { role: 'system' | 'user'; content: string }[] {
+  const kept = preferencesOf(previous);
+  const system = kept
+    ? `${EXTRACTION_PROMPT}
+
+The renter searched before with these filters: ${JSON.stringify(kept)}
+Return the complete filters for their new message: keep each earlier one unless the message changes it or asks to drop it.`
+    : EXTRACTION_PROMPT;
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: query },
+  ];
+}
+
+/**
+ * A new number's first message, when it is not already a search (agent.ts
+ * WELCOME). Once per number. Says what to send, with an example, because
+ * "hi" is what most people open with and silence is the worst answer to it.
+ */
+export function renderWelcome(): string {
+  return [
+    'Hi, this is Hausto. Tell us what you are looking for - area, bedrooms and budget - and we will send you the best matches we have.',
+    '',
+    'For example: 2 bedrooms in Thao Dien under 20 million.',
+  ].join('\n');
+}
+
+/**
+ * Why a search was not run, or null when the answer is to say nothing.
+ *
+ * Once a day per number at most - the caller keys the send on the day - so a
+ * renter who keeps asking hears it once rather than once a message, and the
+ * refusal never costs more than the search would have.
+ */
+export function renderSearchRefused(reason: SearchRefusal, siteUrl: string): string | null {
+  const browse = `${siteUrl.replace(/^https?:\/\//, '')}/browse`;
+  switch (reason) {
+    case 'NUMBER_LIMIT':
+      return `That is today's ${FREE_NUMBER_DAILY_SEARCHES} free searches on this number. ` +
+        `They come back tomorrow - and every listing is on ${browse} in the meantime.`;
+    case 'ACCOUNT_CREDITS':
+      // The web chat's words: it is the same allowance.
+      return `${CREDITS_USED_REPLY} Every listing is on ${browse} in the meantime.`;
+    case 'DAILY_LIMIT':
+      return 'That is as many searches as we run for one number in a day. ' +
+        `We will pick this up again tomorrow - every listing is on ${browse} in the meantime.`;
+    case 'GLOBAL_CAP':
+      // Everyone's searches for the day are gone, which means something is
+      // hammering the number. An apology to each new one is the same bill.
+      return null;
+  }
+}
+
+/** Did the model find anything to search on? A search on nothing returns three arbitrary places. */
+export function hasAnyFilter(f: SearchFilters): boolean {
+  return [f.city, f.district, f.min_budget, f.max_budget, f.rooms, f.style].some(v => v != null && v !== '');
+}
+
+/** The answer to a message that names nothing to search on - "any apartments?". */
+export function renderNeedMore(): string {
+  return [
+    'Happy to look - tell us a little more: the area, how many bedrooms, and your budget.',
+    'For example: 2 bedrooms in Thao Dien under 20 million.',
+  ].join('\n');
+}

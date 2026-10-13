@@ -113,6 +113,9 @@ function record(itemId: string, submission: Parameters<typeof validateOutcome>[0
   });
 }
 
+/** The day the seeded request was made, while its times were still ahead. */
+const SEED_DAY = new Date('2026-09-12T08:00:00Z');
+
 const inbound = (text: string, id = `wamid.${Math.random()}`) =>
   // deno-lint-ignore no-explicit-any
   handleInbound(db as any, store, { from: PHONE, text, providerMessageId: id, timestamp: new Date().toISOString() });
@@ -531,18 +534,81 @@ describe('the agent switch, end to end', () => {
 
     // deno-lint-ignore no-explicit-any
     const result = await performAction(db as any, adapter, action, {
-      renterId: out.renterId, requestId: out.requestId, providerMessageId: 'wamid.pick',
+      // While the failed request's times are still ahead - the gate checks them.
+      renterId: out.renterId, requestId: out.requestId, providerMessageId: 'wamid.pick', now: SEED_DAY,
     });
 
     expect(result.error).toBeUndefined();
     expect(result.performed).toBe('RE_REQUEST');
+    expect(result.onSite).toBeUndefined();
     // A NEW request, not items bolted onto the failed one.
     expect(db.tables.viewing_requests).toHaveLength(2);
     expect(result.ref).toMatch(/^HV-/);
+    // Carrying the times that still hold.
+    expect(db.tables.viewing_requests[1].availability).toEqual([
+      { date: '2026-09-15', part: 'MORNING' }, { date: '2026-09-15', part: 'AFTERNOON' },
+    ]);
 
     const confirmation = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
     expect(confirmation).toContain(result.ref!);
     expect(confirmation.toLowerCase()).not.toContain('booked');
+  });
+
+  /** Pick from the substitutes with the switch on, and carry it out. */
+  async function pick(text: string, now?: Date) {
+    await offerSubstitutes();
+    const out = await inbound(text);
+    const action = decideAction({
+      enabled: true, intent: out.intent, text,
+      requestId: out.requestId, optedOut: out.optedOut, confirmed: out.confirmed, selection: out.selection,
+    });
+    expect(action.kind).toBe('RE_REQUEST');
+    // deno-lint-ignore no-explicit-any
+    const result = await performAction(db as any, adapter, action, {
+      renterId: out.renterId, requestId: out.requestId, providerMessageId: `wamid.${text}`, now,
+    });
+    const reply = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    return { result, reply };
+  }
+
+  // The gate a reply of "2" used to skip (2026-10-13): what viewing-request-create
+  // asks at submit, asked here too. Every no sends them to the pages instead.
+  it('sends a pick to the site once the times have gone by', async () => {
+    const { result, reply } = await pick('1');
+    expect(result.onSite).toMatch(/gone by/);
+    expect(db.tables.viewing_requests).toHaveLength(1);
+    expect(reply).toContain('Request viewing');
+    expect(reply).toContain('/property/alt-');
+  });
+
+  it('sends a pick to the site when no account is behind the number', async () => {
+    db.tables.renters[0].user_id = null;
+    const { result, reply } = await pick('1', SEED_DAY);
+    expect(result.onSite).toBe('not signed in');
+    expect(db.tables.viewing_requests).toHaveLength(1);
+    expect(reply.startsWith('To have us arrange it')).toBe(true);
+  });
+
+  it('asks for the Pass before arranging two places, as intake does', async () => {
+    const { result, reply } = await pick('1 and 2', SEED_DAY);
+    expect(result.onSite).toMatch(/Without the Pass we arrange one place/);
+    expect(db.tables.viewing_requests).toHaveLength(1);
+    expect(reply).toContain('open each page and tap Request viewing');
+  });
+
+  it('arranges two places for a Pass holder', async () => {
+    db.passHolders.add('user-1');
+    const { result } = await pick('1 and 2', SEED_DAY);
+    expect(result.onSite).toBeUndefined();
+    expect(db.tables.viewing_requests).toHaveLength(2);
+    expect(db.tables.request_items.filter(i => i.request_id === result.newRequestId)).toHaveLength(2);
+  });
+
+  it('asks for the Pass once the free viewing is spent', async () => {
+    db.tables.free_viewings = [{ phone_e164: PHONE, used_at: new Date().toISOString() }];
+    const { result } = await pick('1', SEED_DAY);
+    expect(result.onSite).toMatch(/had your free viewing/);
+    expect(db.tables.viewing_requests).toHaveLength(1);
   });
 
   it('sends exactly one message for one inbound', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyIntent, needsOperator, fold, INTENTS } from './intent.ts';
+import { classifyIntent, needsOperator, fold, INTENTS, looksLikeRefinement } from './intent.ts';
 
 const intentOf = (s: string) => classifyIntent(s).intent;
 
@@ -177,5 +177,22 @@ describe('searching, which must not swallow every question', () => {
     expect(intentOf('2')).toBe('SELECTION');
     expect(intentOf('can we move it to another time')).toBe('RESCHEDULE');
     expect(intentOf('STOP')).toBe('OPT_OUT');
+  });
+});
+
+describe('refining a search (looksLikeRefinement)', () => {
+  it('reads an area, a size, a budget or a comparison', () => {
+    for (const s of [
+      'what about district 7?', 'any in Quận 2?', 'q7', 'D2 instead', 'Thảo Điền?', 'binh thanh',
+      '3 bedrooms', '2br', '2 phòng ngủ', 'a studio', 'under 15tr', 'something cheaper', 'rẻ hơn',
+    ]) {
+      expect(looksLikeRefinement(s), s).toBe(true);
+    }
+  });
+
+  it('does not read a question about a place', () => {
+    for (const s of ['is there parking?', 'can I bring my dog', 'what floor is it on', 'thanks!', 'when can I see it']) {
+      expect(looksLikeRefinement(s), s).toBe(false);
+    }
   });
 });

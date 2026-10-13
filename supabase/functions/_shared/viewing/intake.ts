@@ -462,6 +462,11 @@ export function blocksNewRequest(c: JoinCandidate, today: string): boolean {
   return false;
 }
 
+/** What a renter is told when a new request has to wait behind `ref`. */
+export function oneOpenRequestMessage(ref: string): string {
+  return `We are still working on ${ref}. Once you lock its plan in, or it lapses, you can request more places.`;
+}
+
 /** The request a new one waits behind, or null. The newest, if several. */
 export function pickBlocking(candidates: JoinCandidate[], today: string): JoinCandidate | null {
   return candidates
