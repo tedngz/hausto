@@ -66,7 +66,7 @@ export function ViewingChoice({
               <p className="mt-2 text-xs text-muted-foreground">
                 {hasPass
                   ? 'Your Pass covers every viewing we arrange.'
-                  : `Your first viewing is free. After that, it takes the Pass (${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
+                  : `Your first viewing is free. After that, it takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
               </p>
               <Button className="mt-3 w-full rounded-full" onClick={onArrange}>
                 Request a viewing
