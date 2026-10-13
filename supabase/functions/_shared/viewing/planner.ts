@@ -64,6 +64,8 @@ export interface PlanInput {
   events: DomainEvent[];
   items: PlanItem[];
   availability: { date: string; part: string }[];
+  /** When the renter expects to move in, for the first message to each agent. */
+  moveInDate?: string | null;
   unreadReplies: UnreadReply[];
   /** A drafted answer to the renter's newest waiting reply, if one was attempted. */
   renterDraft?: RenterDraft;
@@ -318,7 +320,7 @@ export function planRequest(p: PlanInput): Proposal[] {
             itemId: item.itemId, channel: 'ZALO',
             message: draftForRealtor({
               unit: item.unit, priceVnd: item.priceVnd, availability: p.availability,
-              rescheduled: reask,
+              moveInDate: p.moveInDate ?? null, rescheduled: reask,
             }),
           },
           rationale: reask

@@ -2,9 +2,10 @@
 //
 // Built as a phone screen that happens to fit on a desktop, not the reverse:
 // a fixed header, one scrolling column of numbered steps, and a footer that
-// stays put so the action is never a scroll away. Two questions, always in the
-// same order - when, and where to reach you - and nothing else: no counters,
-// nothing the renter has to read past to find the button.
+// stays put so the action is never a scroll away. Three questions, always in
+// the same order - when, when you move in, and where to reach you - and
+// nothing else: no counters, nothing the renter has to read past to find the
+// button.
 //
 // **The place is the one the renter opened this from**, so the modal does not
 // show it back to them. Someone who wants three seen taps "Request viewing" on
@@ -63,9 +64,11 @@ import { AvailabilityPicker, MAX_WINDOWS, PART_LABEL, prettyDate } from '@/compo
 import {
   MAX_ITEMS,
   MAX_LAPSED_WITHOUT_PASS,
+  MAX_MOVE_IN_DAYS,
   MIN_LEAD_DAYS,
   requestGate,
   requestGateMessage,
+  validateMoveIn,
   addDays,
   hcmcDate,
   toRenterE164,
@@ -152,6 +155,9 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [picked, setPicked] = useState<AvailabilityWindow[]>([]);
+  // When they expect to move in. Asked on a new request, not when joining:
+  // the open request already has it.
+  const [moveIn, setMoveIn] = useState('');
   // Joining an open request: more times for the place being added, on top
   // of the request's own (intake.ts extendAvailability).
   const [addingTimes, setAddingTimes] = useState(false);
@@ -230,6 +236,9 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
 
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
+  // The server's own rule. A typed date can sit outside the picker's min and max.
+  const moveInCheck = moveIn ? validateMoveIn(moveIn, today) : null;
+  const moveInError = moveInCheck && !moveInCheck.ok ? moveInCheck.error ?? null : null;
 
   /** The joined request's times still ahead, grouped by day, for display. */
   const joinDays = useMemo(() => {
@@ -259,7 +268,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
       body: {
         ...(join
           ? { listingIds, joinRef: join.ref, ...(extraFresh.length ? { addAvailability: extraFresh } : {}) }
-          : { phone, displayName: name, listingIds, availability: picked }),
+          : { phone, displayName: name, listingIds, availability: picked, moveInDate: moveIn }),
         // An offer link carries the availability request it came from; with
         // several places, the first that has one.
         inquiryId: places.map(p => offerInquiryFor(p.listingId)).find(Boolean) ?? null,
@@ -293,11 +302,11 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const close = () => {
     onOpenChange(false);
     setError(null);
-    if (submitted) { setSubmitted(null); setPicked([]); setExtra([]); setAddingTimes(false); }
+    if (submitted) { setSubmitted(null); setPicked([]); setMoveIn(''); setExtra([]); setAddingTimes(false); }
   };
 
   const canSubmit = !busy && usable.length > 0 && !alreadyIn && !waitingOn && !passRequired && !openLoading
-    && (join ? true : picked.length > 0);
+    && (join ? true : picked.length > 0 && !!moveIn && !moveInError);
 
   const priceLine = lockInPriceLine(hasPass);
 
@@ -313,7 +322,9 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
             : `Add to request ${join.ref}`
           : picked.length === 0
             ? 'Pick a time'
-            : usable.length > 1 ? `Request ${usable.length} viewings` : 'Request viewing';
+            : !moveIn || moveInError
+              ? 'Pick a move-in date'
+              : usable.length > 1 ? `Request ${usable.length} viewings` : 'Request viewing';
 
   return (
     <Dialog open={open} onOpenChange={o => (o ? onOpenChange(true) : close())}>
@@ -508,13 +519,27 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                 </Step>
               )}
 
-              {/* ── 2. You ───────────────────────────────────────────── */}
-              {/* Not asked when joining: the answer goes to the WhatsApp thread
-                  the open request already has. */}
+              {/* ── 2. Move-in, 3. You ─────────────────────────────────── */}
+              {/* Not asked when joining: the open request has its move-in
+                  date, and the answer goes to the WhatsApp thread it has. */}
               {!join && !waitingOn && !passRequired && !openLoading && !noneUsable && (
                 <>
                   <Separator />
-                  <Step n={2} title="Where do we reach you?">
+                  <Step
+                    n={2}
+                    title="When do you expect to move in?"
+                    hint="We tell the agent, so they can say whether it is free by then."
+                  >
+                    <Input
+                      id="rv-move-in" type="date" aria-label="Expected move-in date"
+                      className="w-full sm:w-56"
+                      min={today} max={addDays(today, MAX_MOVE_IN_DAYS)}
+                      value={moveIn} onChange={e => setMoveIn(e.target.value)}
+                    />
+                    {moveInError && <p className="mt-1 text-xs text-destructive">{moveInError}</p>}
+                  </Step>
+                  <Separator />
+                  <Step n={3} title="Where do we reach you?">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <Label htmlFor="rv-name" className="text-xs">Your name</Label>

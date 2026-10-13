@@ -213,6 +213,35 @@ export function addDays(isoDate: string, days: number): string {
 
 export { hcmcDate } from './format.ts';
 
+// ── Move-in ─────────────────────────────────────────────────────────────────
+
+/** How far ahead a move-in date may be. Beyond that it is not a search yet. */
+export const MAX_MOVE_IN_DAYS = 180;
+
+/**
+ * When the renter expects to move in, `YYYY-MM-DD`, or null.
+ *
+ * The modal asks for it on every new request: it is the first thing an agent
+ * weighs - a unit free now is no use to someone moving in two months from now,
+ * and one coming free next month may be exactly right. Null is still
+ * accepted, so a request from a page loaded before the field existed is not
+ * refused for lacking it.
+ *
+ * Today is allowed - someone viewing in two days may already be out of their
+ * old place - and the past is not. `today` is passed in, as for availability.
+ */
+export function validateMoveIn(raw: unknown, today: string): Validation<string | null> {
+  if (raw == null || raw === '') return { ok: true, value: null };
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(Date.parse(raw))) {
+    return { ok: false, error: 'Pick a move-in date.' };
+  }
+  if (raw < today) return { ok: false, error: 'Move-in date is in the past.' };
+  if (raw > addDays(today, MAX_MOVE_IN_DAYS)) {
+    return { ok: false, error: 'Move-in date is more than six months away.' };
+  }
+  return { ok: true, value: raw };
+}
+
 // ── Shortlist ───────────────────────────────────────────────────────────────
 
 export function validateShortlist(raw: unknown): Validation<string[]> {
@@ -305,6 +334,8 @@ export interface NewEvent {
 export function intakeEvents(opts: {
   requestId: string;
   availability: AvailabilityWindow[];
+  /** When the renter expects to move in (validateMoveIn). Absent from older requests. */
+  moveInDate?: string | null;
   items: { itemId: string; listingId: string; priceVndAtRequest: number; realtorId: string | null }[];
 }): NewEvent[] {
   return [
@@ -312,7 +343,10 @@ export function intakeEvents(opts: {
       request_id: opts.requestId,
       item_id: null,
       type: 'REQUEST_SUBMITTED',
-      payload: { availability: opts.availability },
+      payload: {
+        availability: opts.availability,
+        ...(opts.moveInDate ? { move_in_date: opts.moveInDate } : {}),
+      },
       actor: 'RENTER',
     },
     ...itemEvents(opts),

@@ -103,4 +103,13 @@ describe('every message to an agent', () => {
   it('leaves the link line out rather than print an empty one', () => {
     expect(nudgeDraft({ unit: { ...unit, url: null } })).not.toContain('Tin đăng');
   });
+
+  it('tells the agent when the renter moves in, day first, only when we know', () => {
+    const availability = [{ date: '2026-10-15', part: 'MORNING' }];
+    expect(draftForRealtor({ unit, priceVnd: 15_000_000, availability, moveInDate: '2026-11-01' }))
+      .toContain('Khách dự kiến vào ở khoảng 01/11.');
+    expect(draftForRealtor({ unit, priceVnd: 15_000_000, availability, moveInDate: null }))
+      .not.toContain('vào ở');
+    expect(draftForRealtor({ unit, priceVnd: 15_000_000, availability })).not.toContain('vào ở');
+  });
 });

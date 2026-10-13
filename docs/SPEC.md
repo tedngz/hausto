@@ -187,8 +187,19 @@ ref             text unique not null      -- short human ref, e.g. HV-4KX2
 renter_id       uuid references renters(id)
 availability    jsonb not null            -- chosen windows, Asia/Ho_Chi_Minh; the current ones (AVAILABILITY_CHANGED, §9)
 inquiry_id      uuid references complex_inquiries  -- made from an offer link (§11)
+move_in_date    date                      -- when the renter expects to move in; null before 2026-10-13
 created_at      timestamptz default now()
 ```
+
+`move_in_date` is asked on every new request, between the times and the
+contact details, and not when places join an open request - that request has
+one. `validateMoveIn` in `intake.ts` holds the rule for the modal and the
+function alike: today to six months out (`MAX_MOVE_IN_DAYS`, shared with
+watches). The function still accepts a request without one, so a page loaded
+before the field existed is not refused. It reaches the agent in the first
+message (`draftForRealtor`: "Khách dự kiến vào ở khoảng 01/11."), because it
+is the first thing an agent weighs, and the operators in the intake alert and
+the console. It is what the renter told us, not state.
 
 ### `request_items`
 
@@ -484,7 +495,7 @@ Event types:
 
 | Type | Level | Payload |
 |---|---|---|
-| `REQUEST_SUBMITTED` | request | `{availability}` |
+| `REQUEST_SUBMITTED` | request | `{availability, move_in_date?}` |
 | `ITEM_ADDED` | item | `{listing_id, price_vnd_at_request}` - at intake, or later when a place joins an open request (§1). Moves `ASSEMBLING` back to `CONTACTING` (§2) |
 | `REALTOR_RESOLVED` | item | `{realtor_id, method}` - `method` ∈ `AGENT_ID`, `PHONE`, `MANUAL` |
 | `REALTOR_CONTACTED` | item | `{channel, draft_id}` - `draft_id` is the `realtor_messages` row sent, or null |

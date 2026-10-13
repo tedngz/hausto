@@ -66,6 +66,8 @@ interface RequestRow {
   id: string;
   ref: string;
   availability: { date: string; part: string }[];
+  /** When the renter expects to move in. Null on requests made before it was asked. */
+  move_in_date: string | null;
   created_at: string;
 }
 
@@ -104,7 +106,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
   const load = useCallback(async () => {
     const [{ data: req }, { data: rows }, { data: evs, error: eErr }, { data: th, error: tErr }, { data: rm }, { data: pr }] =
       await Promise.all([
-        supabase.from('ops_request_queue').select('id, ref, availability, created_at').eq('id', requestId).maybeSingle(),
+        supabase.from('ops_request_queue').select('id, ref, availability, move_in_date, created_at').eq('id', requestId).maybeSingle(),
         supabase.from('ops_request_items_view').select('*').eq('request_id', requestId).order('sort_order'),
         supabase.from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
           .eq('request_id', requestId).order('occurred_at', { ascending: true }),
@@ -158,6 +160,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         {view.availabilityChanges > 0 && (
           <strong>{' '}- changed by the renter{view.availabilityChanges > 1 ? ` ${view.availabilityChanges} times` : ''}; every agent is asked again</strong>
         )}
+        {request.move_in_date && <>. Expects to move in: {request.move_in_date}</>}
       </p>
 
       {/* The one paid step (SPEC §9): who covered a kept plan, or when an
@@ -210,6 +213,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           item={item}
           view={view}
           availability={request.availability ?? []}
+          moveInDate={request.move_in_date ?? null}
           transcript={transcript.filter(m => m.item_id === item.id)}
           owed={owed.get(item.id) ?? null}
           bridge={bridge}
@@ -247,6 +251,7 @@ function ItemCard({
   item,
   view,
   availability,
+  moveInDate,
   transcript,
   owed,
   bridge,
@@ -256,6 +261,7 @@ function ItemCard({
   item: Item;
   view: RequestView;
   availability: { date: string; part: string }[];
+  moveInDate: string | null;
   transcript: RealtorMessage[];
   owed: RealtorDecision | null;
   bridge: boolean;
@@ -368,6 +374,7 @@ function ItemCard({
             unit,
             priceVnd: item.price_vnd_at_request,
             availability,
+            moveInDate,
             rescheduled: reask,
           })}
           label={sendLabel}

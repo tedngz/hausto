@@ -1710,6 +1710,7 @@ export type Database = {
           availability: Json
           created_at: string
           id: string
+          move_in_date: string | null
           ref: string
           renter_id: string
         }
@@ -1717,6 +1718,7 @@ export type Database = {
           availability?: Json
           created_at?: string
           id?: string
+          move_in_date?: string | null
           ref: string
           renter_id: string
         }
@@ -1724,6 +1726,7 @@ export type Database = {
           availability?: Json
           created_at?: string
           id?: string
+          move_in_date?: string | null
           ref?: string
           renter_id?: string
         }
@@ -1860,6 +1863,7 @@ export type Database = {
           created_at: string | null
           id: string | null
           item_count: number | null
+          move_in_date: string | null
           ref: string | null
           unresolved_realtor_count: number | null
         }

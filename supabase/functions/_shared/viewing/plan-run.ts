@@ -64,7 +64,7 @@ export async function runPlanner(
   const result: RunResult = { scanned: 0, proposed: 0, superseded: 0, parsed: 0, drafted: 0, executed: 0 };
   const store = new SupabaseMessageStore(db);
 
-  let query = db.from('viewing_requests').select('id, ref, renter_id, availability, created_at');
+  let query = db.from('viewing_requests').select('id, ref, renter_id, availability, move_in_date, created_at');
   if (opts.requestIds?.length) {
     query = query.in('id', opts.requestIds);
   } else {
@@ -74,7 +74,7 @@ export async function runPlanner(
   }
   const { data: requests } = await query.order('created_at', { ascending: true }).limit(500);
 
-  for (const req of (requests ?? []) as { id: string; ref: string; renter_id: string; availability: unknown }[]) {
+  for (const req of (requests ?? []) as { id: string; ref: string; renter_id: string; availability: unknown; move_in_date: string | null }[]) {
     result.scanned += 1;
     const availability = Array.isArray(req.availability) ? req.availability as { date: string; part: string }[] : [];
 
@@ -175,7 +175,8 @@ export async function runPlanner(
     }
 
     const proposals = planRequest({
-      requestId: req.id, view, events, items, availability, unreadReplies, renterDraft, proposedSlots,
+      requestId: req.id, view, events, items, availability, moveInDate: req.move_in_date ?? null,
+      unreadReplies, renterDraft, proposedSlots,
       now: opts.now.getTime(),
     });
 

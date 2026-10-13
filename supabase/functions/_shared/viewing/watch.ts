@@ -21,7 +21,7 @@
 //
 // Pure. The I/O lives in alerts.ts, routing.ts and the sweep.
 
-import { REF_ALPHABET, screenCandidates, type ShortlistCandidate } from './intake.ts';
+import { MAX_MOVE_IN_DAYS, REF_ALPHABET, screenCandidates, type ShortlistCandidate } from './intake.ts';
 import { formatVnd, hcmcDate } from './format.ts';
 import { MAX_DIGEST_LISTINGS, placeSummary } from './digest.ts';
 import type { AlertSource } from '../viewing-domain.ts';
@@ -38,8 +38,8 @@ export const DEFAULT_WATCH_DAYS = 60;
 export const MAX_WATCH_DAYS = 120;
 export const MOVE_IN_GRACE_DAYS = 14;
 
-/** How far ahead a move-in date may be. Beyond that it is not a search yet. */
-export const MAX_MOVE_IN_DAYS = 180;
+/** How far ahead a move-in date may be - one rule, viewing requests' too. */
+export { MAX_MOVE_IN_DAYS };
 
 /** A reply this long after an alert is about something else. */
 export const ALERT_REPLY_DAYS = 7;
