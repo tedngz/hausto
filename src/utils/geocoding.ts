@@ -1,3 +1,5 @@
+import cityDistrictsData from '../data/cityDistricts.json';
+
 // Ward-level aliases → precise Nominatim queries (checked before district aliases)
 const WARD_ALIASES: Record<string, string> = {
   // HCMC — District 1
@@ -272,12 +274,19 @@ function namesTheQueriedPlace(result: any, query: string): boolean {
   return String(result?.display_name ?? '').toLowerCase().includes(head);
 }
 
+const GEOCODE_BUDGET_MS = 4000;
+
 /**
- * Geocode a location string to coordinates using Nominatim.
+ * Geocode a location string to coordinates using Nominatim, falling back to
+ * the centre of the district it names.
  * Uses Vietnamese district name mappings for precise results.
  */
 export async function geocodeLocation(location: string): Promise<{ lat: number; lng: number } | null> {
   const queryStrings = resolveLocationQuery(location);
+  // The renter is watching a spinner on the address. Up to a dozen sequential
+  // requests to an unreachable or rate-limiting Nominatim took 15s before the
+  // district fallback; past this budget, the district centre is the answer.
+  const deadline = Date.now() + GEOCODE_BUDGET_MS;
 
   for (const q of queryStrings) {
     const encoded = encodeURIComponent(q);
@@ -288,8 +297,10 @@ export async function geocodeLocation(location: string): Promise<{ lat: number; 
     ];
 
     for (const url of urls) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return districtCentre(location);
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: AbortSignal.timeout(remaining) });
         if (!res.ok) continue;
         const data = await res.json();
         if (data && data.length > 0) {
@@ -312,5 +323,47 @@ export async function geocodeLocation(location: string): Promise<{ lat: number; 
     }
   }
 
+  return districtCentre(location);
+}
+
+type DistrictShapes = Record<string, { name: string; rings: number[][][] }[]>;
+
+// One entry per drawn district: its lowercase name and the mean of its outline.
+const DISTRICT_CENTRES = Object.values(cityDistrictsData as DistrictShapes)
+  .flat()
+  .map(({ name, rings }) => {
+    let lat = 0, lng = 0, n = 0;
+    for (const ring of rings) for (const [a, b] of ring) { lat += a; lng += b; n++; }
+    return { key: name.toLowerCase(), lat: lat / n, lng: lng / n };
+  });
+
+/**
+ * The centre of the district a location names, or null. The last resort when
+ * Nominatim cannot place a street - a crawled address that came back garbled,
+ * or Nominatim unreachable - so the map still opens on the right part of town
+ * rather than not at all. Segments are read from the end, where the district
+ * sits, so a street that shares a word with a district does not win.
+ */
+export function districtCentre(location: string): { lat: number; lng: number } | null {
+  const segments = location
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .split(',')
+    .map((s) =>
+      s
+        .replace(/\b(?:quan|q\.?|d)\s*(\d{1,2})\b/g, 'district $1')
+        .replace(/\bdistrict\s*0?(2|9)\b/g, 'thu duc')
+        .trim(),
+    )
+    .reverse();
+
+  for (const segment of segments) {
+    const hit = DISTRICT_CENTRES.find(({ key }) =>
+      new RegExp(`(?:^|[^a-z0-9])${key}(?:$|[^a-z0-9])`).test(segment),
+    );
+    if (hit) return { lat: hit.lat, lng: hit.lng };
+  }
   return null;
 }
