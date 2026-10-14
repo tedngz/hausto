@@ -25,7 +25,7 @@ and dialable brokers.
 
 | Milestone | State | Against its "done when" |
 |---|---|---|
-| S1 supply | Retention built, depth not | 180 active (753 total) against an 800 gate. One new row across all three sources in the last 24 hours; housingsgn's newest is from 2026-09-12. The resurrection sweep, the 20% single-reason ceiling, `delisted_at` and `crawl_runs` telemetry are built. `auto-crawl-v2` is still scheduled; a Supabase support ticket to remove it was filed on 2026-09-28 (item 2). No new sources. |
+| S1 supply | Retention built, depth not | 180 active (753 total) against an 800 gate. One new row across all three sources in the last 24 hours; housingsgn's newest is from 2026-09-12. The resurrection sweep, the 20% single-reason ceiling, `delisted_at` and `crawl_runs` telemetry are built. `auto-crawl-v2` is still scheduled; a Supabase support ticket to remove it was filed on 2026-09-28 (item 2). Two new sources on 2026-10-14 (item 6): rentapartment.vn and vnrenthome.com. |
 | S2 realtor identity | Scaffolding done, acquisition short | `realtors` has 34 rows; 84 of 180 active listings resolve to one, 83 have a dialable number (46%, bar 60%). `extract-phone` runs hourly. `source_agent_id` is captured on nhatot only (15 of 40 active), and `realtor_identities` has no rows, so resolution by agent id has never matched. |
 | S3 normalization | Done | Canonical columns populated; 157 of 180 active rows shortlistable. `vibe` is out of the response, the style filter reads `styles`, the `$730` rule is asserted in CI, and the title/description price cross-check runs every 30 minutes (#117, #118). |
 | S4 intake + handshake | Done, and changed | Intake is `RequestViewingModal`: one button per card, a signed-in user, 1-5 listings, no today or tomorrow (CLAUDE.md invariants 7-8). Since 2026-10-07 a request is the Pass's past one free place per WhatsApp number (`requestGate`, SPEC §9); the plan is then locked in. The `wa.me` handshake is as planned. WhatsApp is on the Cloud API. |
@@ -243,6 +243,9 @@ Retention before acquisition. In order:
    housingsgn mould, then the two or three HCMC expat rental Facebook groups that
    matter - HCMC first because that is where the demand is, not because the other
    cities are out of scope. Chotot is already in - make it produce again rather than re-adding it.
+   **Started 2026-10-14:** rentapartment.vn (1,229 units labelled available)
+   and vnrenthome.com (~2,500 listings) are in the rotation, read from their
+   own feeds newest-available-first at no Firecrawl cost (SPEC §0 "Sources").
 7. ~~Drop Hanoi and Da Nang.~~ **Reversed on 2026-09-11: all three cities stay.**
    The rotation already covers 10 HCMC districts, 7 Hanoi and 3 Da Nang, so
    keeping them is the option that costs nothing - the work was only ever in

@@ -205,7 +205,11 @@ const AdminTools = () => {
   const effectiveFrequency = localFrequency ?? crawlConfig?.frequencyMinutes ?? 240;
   const effectiveMaxListings = localMaxListings ?? crawlConfig?.maxListingsPerRun ?? 10;
   const effectiveMinPrice = localMinPrice ?? crawlConfig?.minPriceVnd ?? 5_000_000;
-  const ALL_MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'];
+  // The scheduled crawler's sources. rentapartment and vnrenthome are read from
+  // the agencies' own feeds, newest available first, and are offered here only:
+  // the one-off crawl forms save through crawl-external-properties' older path,
+  // which neither keys them by the agency's reference nor gates their photos.
+  const ALL_MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome'];
   const effectiveMarketplaces = localMarketplaces ?? crawlConfig?.enabledMarketplaces ?? ALL_MARKETPLACES;
   const isPaused = localPausedOverride ?? crawlConfig?.paused ?? false;
   const crawlConfigStorageError = crawlConfig?.configStorageError;

@@ -8,6 +8,8 @@ import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import { isVideoOrAnimatedUrl, isMapOrDiagramUrl, STORE_TARGET } from '../_shared/vibe-policy.ts';
 import { fetchNhatotMedia, type PropertyVideo } from '../_shared/nhatot.ts';
 import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
+import { agencySourceOf, buildAgencyListing } from '../_shared/agency-sources.ts';
+import { normalizeListingCopy } from '../_shared/listing-language.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -240,6 +242,56 @@ Deno.serve(async (req) => {
 
     const marketplace = detectMarketplace(row.source || '', row.source_url);
     console.log(`[recrawl-external-listing] Recrawling ${id} (${marketplace}) ${row.source_url}`);
+
+    // The agency feeds rebuild from the same structured data the crawler read
+    // (_shared/agency-sources.ts) - no Firecrawl, no extraction model, and the
+    // gallery bound to the listing rather than picked out of page text.
+    const agency = agencySourceOf(row.source || '', row.source_url);
+    if (agency) {
+      const built = await buildAgencyListing(agency, row.source_url);
+      if ('rejected' in built) {
+        return new Response(JSON.stringify({ error: `Source no longer offers this listing: ${built.rejected}` }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const fresh = built.listing;
+      const copy = await normalizeListingCopy({
+        title: fresh.title, description: fresh.description, amenities: fresh.amenities,
+        location: fresh.location, rooms: fresh.rooms, size: fresh.size,
+        fn: 'recrawl-external-listing', sourceUrl: row.source_url,
+      });
+      const images = fresh.images.slice(0, STORE_TARGET);
+      const now = new Date().toISOString();
+      const update: Record<string, unknown> = {
+        title: copy?.title ?? fresh.title,
+        location: fresh.location,
+        price: fresh.price,
+        price_display: fresh.priceDisplay,
+        price_confirmed_at: now,
+        size: fresh.size,
+        rooms: fresh.rooms,
+        description: copy?.description ?? fresh.description.substring(0, 1500),
+        amenities: copy?.amenities ?? fresh.amenities,
+        ...(images.length > 0 ? { images } : {}),
+        contact_name: fresh.sourceProviderName ?? null,
+        ...(fresh.sourceProviderPhone ? { contact_phone: fresh.sourceProviderPhone } : {}),
+        ...(typeof fresh.latitude === 'number' ? { latitude: fresh.latitude, longitude: fresh.longitude } : {}),
+        raw_data: { ...(row.raw_data || {}), original_image_urls: images, recrawled_at: now },
+        vibe_status: 'pending',
+        vibe_analysis: {},
+        highlights: [],
+        last_verified_at: now,
+        last_verification_status: 'alive',
+        last_verification_reason: null,
+        verification_failures: 0,
+        is_active: true,
+        updated_at: now,
+      };
+      const { error: agencyErr } = await admin.from('external_properties').update(update).eq('id', id);
+      if (agencyErr) throw agencyErr;
+      return new Response(JSON.stringify({
+        success: true, id, marketplace: agency, images_found: fresh.images.length, images_saved: images.length,
+        updated_fields: Object.keys(update),
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     // Fetch HTML — prefer Firecrawl for protected sites
     let html = '', markdown = '';

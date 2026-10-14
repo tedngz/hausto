@@ -15,6 +15,9 @@ import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo
 import { looksVietnamese, normalizeListingCopy } from '../_shared/listing-language.ts';
 import { normalizeLocationForEnglishDisplay } from '../_shared/location-language.ts';
 import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
+import {
+  buildAgencyListing, discoverAgencyListings, extractAgencyListingId, isAgencyFeedSource,
+} from '../_shared/agency-sources.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -32,6 +35,13 @@ const MAX_DETAIL_PAGES = 10; // Max individual listings to scrape
 // found it known, and stopped. 89-126 links a page, one looked at.
 const MAX_SEARCH_CANDIDATES = 60;
 const DETAIL_SCRAPE_TIMEOUT = 15000; // 15s per detail page
+
+/** `.in()` filters go in the URL; keep each under the gateway's limit. */
+function inChunks<T>(items: T[], size = 40): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 // ─── Data Safety Helpers ─────────────────────────────────────────
 function toSafeArray(value: unknown): string[] {
@@ -131,6 +141,7 @@ function extractListingId(url: string, marketplace: string): string | null {
       const match = url.match(/\/properties\/([^/?#]+)/i);
       if (match) return `hs${match[1]}`;
     }
+    if (isAgencyFeedSource(marketplace)) return extractAgencyListingId(marketplace, url);
   } catch { /* ignore */ }
   return null;
 }
@@ -776,7 +787,15 @@ async function savePropertiesToDB(
       // with promo cards. The source URL is checked too: the extraction step
       // rewrites these into tidy single-unit English titles, but the slug keeps
       // the giveaway. Applies in raw mode as well.
-      if (isBatchInventoryListing(property.sourceUrl, property.title, property.description)) {
+      //
+      // Not to the agency-feed sources. Their pages describe one unit each, and
+      // the multi-unit case is caught structurally when the listing is built
+      // (_shared/rentapartment.ts `multi_unit_ad`). The text test misfires on
+      // agency English: "Vinhomes Golden River Apartments for Rent 2BR" is one
+      // flat, and every vnrenthome description links "apartments for rent in
+      // District 1".
+      if (!isAgencyFeedSource(marketplace)
+        && isBatchInventoryListing(property.sourceUrl, property.title, property.description)) {
         filtered++;
         console.log(`[directSave] Filtered batch-inventory ad: ${String(property.title).substring(0, 60)}`);
         await logCrawlerRejection(supabase, property.sourceUrl || '', marketplace, 'batch_inventory_ad', property.images || []);
@@ -1069,7 +1088,7 @@ interface ExternalProperty {
   description: string;
   highlights: string[];
   amenities: string[];
-  source: 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn';
+  source: Marketplace;
   sourceUrl: string;
   sourceProviderName?: string;
   sourceProviderPhone?: string;
@@ -1085,8 +1104,10 @@ interface ExternalProperty {
   raw_data?: { images: string[]; source_url: string; scraped_at: string };
 }
 
+type Marketplace = 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn' | 'rentapartment' | 'vnrenthome';
+
 interface SearchParams {
-  marketplace: 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn';
+  marketplace: Marketplace;
   query: string;
   location?: string;
   minPrice?: number;
@@ -1839,7 +1860,7 @@ RESPOND WITH VALID JSON ONLY:
       description: p.description || '',
       highlights: [],
       amenities: Array.isArray(p.amenities) ? p.amenities : [],
-      source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
+      source: marketplace as Marketplace,
       sourceUrl,
       sourceProviderName: p.contactName,
       sourceProviderPhone: p.contactPhone,
@@ -1929,7 +1950,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         description: p.description || '',
         highlights: [],
         amenities: Array.isArray(p.amenities) ? p.amenities : [],
-        source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
+        source: marketplace as Marketplace,
         sourceUrl: p.sourceUrl || '',
         sourceProviderName: p.contactName,
         sourceProviderPhone: p.contactPhone,
@@ -2006,7 +2027,7 @@ function buildRawProperty(
     description: detailMarkdown.substring(0, 1000),
     highlights: [],
     amenities: [],
-    source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
+    source: marketplace as Marketplace,
     sourceUrl,
     sourceProviderName: undefined,
     sourceProviderPhone: undefined,
@@ -2090,7 +2111,11 @@ Deno.serve(async (req) => {
     let allCardHtml = '';   // every page's markup, for the card-image check
     let firstPageSuccess = false;
 
-    for (let page = 1; page <= effectivePagesToScrape; page++) {
+    // The agency-feed sources have no search page to scrape: their own feed
+    // lists stock newest first with availability, and is read below instead.
+    const agencySource = isAgencyFeedSource(marketplace) ? marketplace : null;
+
+    for (let page = 1; !agencySource && page <= effectivePagesToScrape; page++) {
       const searchUrl = buildSearchUrl({ marketplace, query, location }, page);
       console.log(`[Phase 1] Scraping search page ${page}/${effectivePagesToScrape}: ${searchUrl}`);
 
@@ -2163,18 +2188,37 @@ Deno.serve(async (req) => {
     // ── Phase 2: Extract listing URLs and scrape detail pages ──
     // Every listing on the page; effectiveMaxResults caps the NEW ones below,
     // once the ones already in the index are known.
-    const allListingLinks = await extractListingUrls(
-      allMarkdown,
-      allLinks,
-      marketplace,
-      MAX_SEARCH_CANDIDATES,
-      rawMode,
-    );
+    let allListingLinks: ListingLink[];
+    if (agencySource) {
+      // Already in crawl order - available before uncertain, newest first
+      // (_shared/agency-feeds.ts `prioritise`) - and the order survives the
+      // dedup below, so a run's cap takes the newest units still on offer.
+      try {
+        const candidates = await discoverAgencyListings(agencySource, crawlLocation || location);
+        allListingLinks = candidates.map(c => ({ url: c.url, title: c.title, price: c.price }));
+      } catch (e) {
+        console.error(`[Phase 1] ${marketplace} feed unavailable:`, e);
+        return new Response(JSON.stringify({ success: false, properties: [], error: `Marketplace unavailable: ${marketplace}` }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } else {
+      allListingLinks = await extractListingUrls(
+        allMarkdown,
+        allLinks,
+        marketplace,
+        MAX_SEARCH_CANDIDATES,
+        rawMode,
+      );
+    }
 
     // Drop agency portfolio ads before the detail pages are scraped - their
     // slugs and search-result titles already say what they are, so there is no
-    // reason to spend a Firecrawl credit and a vision pass finding out.
-    const notBatchAds = allListingLinks.filter(l => !isBatchInventoryListing(l.url, (l as any).title));
+    // reason to spend a Firecrawl credit and a vision pass finding out. (Not the
+    // agency-feed sources: see savePropertiesToDB.)
+    const notBatchAds = agencySource
+      ? allListingLinks
+      : allListingLinks.filter(l => !isBatchInventoryListing(l.url, (l as any).title));
     const batchAdsSkipped = allListingLinks.length - notBatchAds.length;
     if (batchAdsSkipped > 0) {
       console.log(`[Pre-scrape] Skipped ${batchAdsSkipped} batch-inventory ad(s)`);
@@ -2207,24 +2251,29 @@ Deno.serve(async (req) => {
       const canonicalIds = listingLinks.map(l => extractListingId(l.url, marketplace)).filter(Boolean) as string[];
       const normalizedUrls = listingLinks.map(l => normalizeSourceUrl(l.url));
 
-      let existingIds = new Set<string>();
-      let existingUrls = new Set<string>();
+      const existingIds = new Set<string>();
+      const existingUrls = new Set<string>();
 
-      if (canonicalIds.length > 0) {
+      // In chunks: PostgREST carries `.in()` in the query string, and an
+      // agency feed's 100 URLs make a ~10 KB one - past what the gateway
+      // reliably takes. A failed lookup returns no rows, which would make
+      // every listing we hold look new and send it back through the vision
+      // gate.
+      for (const ids of inChunks(canonicalIds)) {
         const { data: byId } = await supabaseDedup
           .from('external_properties')
           .select('external_id')
           .eq('source', marketplace)
-          .in('external_id', canonicalIds);
-        if (byId) existingIds = new Set(byId.map(r => r.external_id));
+          .in('external_id', ids);
+        for (const r of byId ?? []) existingIds.add(r.external_id);
       }
-      if (normalizedUrls.length > 0) {
+      for (const urls of inChunks(normalizedUrls)) {
         const { data: byUrl } = await supabaseDedup
           .from('external_properties')
           .select('source_url')
           .eq('source', marketplace)
-          .in('source_url', normalizedUrls);
-        if (byUrl) existingUrls = new Set(byUrl.map(r => r.source_url));
+          .in('source_url', urls);
+        for (const r of byUrl ?? []) existingUrls.add(r.source_url);
       }
 
       // Split into new vs existing
@@ -2254,19 +2303,19 @@ Deno.serve(async (req) => {
         const refreshUrls = existingLinks.map(l => normalizeSourceUrl(l.url));
         const refreshIds = existingLinks.map(l => extractListingId(l.url, marketplace)).filter(Boolean) as string[];
         
-        if (refreshIds.length > 0) {
+        for (const ids of inChunks(refreshIds)) {
           await supabaseDedup
             .from('external_properties')
             .update({ last_verified_at: now, updated_at: now })
             .eq('source', marketplace)
-            .in('external_id', refreshIds);
+            .in('external_id', ids);
         }
-        if (refreshUrls.length > 0) {
+        for (const urls of inChunks(refreshUrls)) {
           await supabaseDedup
             .from('external_properties')
             .update({ last_verified_at: now, updated_at: now })
             .eq('source', marketplace)
-            .in('source_url', refreshUrls);
+            .in('source_url', urls);
         }
         console.log(`[Pre-dedup] Refreshed ${existingLinks.length} existing listings`);
       }
@@ -2321,8 +2370,61 @@ Deno.serve(async (req) => {
               ...built,
               images,
               highlights: [],
-              source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
+              source: marketplace as Marketplace,
               sourceUrl: listing.url,
+              vibe: undefined,
+              vibe_analysis: undefined,
+            } as ExternalProperty;
+          }
+
+          // The agency-feed sources are built from their own structured data
+          // (_shared/agency-sources.ts): plain fetches, no Firecrawl credit and
+          // no extraction model. What they cannot settle - a rented unit, a
+          // sale, an ad quoting several units - comes back as a reason.
+          if (agencySource) {
+            const built = await buildAgencyListing(agencySource, listing.url);
+            if ('rejected' in built) {
+              console.log(`[Phase 2] ${marketplace} ${globalIdx + 1}/${newLinks.length} not stored (${built.rejected}): ${listing.url}`);
+              await logCrawlerRejection(supabaseDedup, normalizeSourceUrl(listing.url), marketplace, built.rejected, []);
+              return null;
+            }
+            const agencyListing = built.listing;
+            const images = agencyListing.images.map(toFullSizeImageUrl).filter(isValidPropertyImageUrl).slice(0, 12);
+
+            // Agency copy is long-form SEO prose with the agency's sign-off in
+            // it. The same writing step nhatot gets turns it into the house
+            // style - an evocative title, two or three sentences - and keeps
+            // the original if it fails.
+            const copy = rawMode ? null : await normalizeListingCopy({
+              title: agencyListing.title,
+              description: agencyListing.description,
+              amenities: agencyListing.amenities,
+              location: agencyListing.location,
+              rooms: agencyListing.rooms,
+              size: agencyListing.size,
+              fn: 'scrape-marketplace',
+              sourceUrl: listing.url,
+            });
+
+            console.log(`[Phase 2] ${marketplace} ${globalIdx + 1}/${newLinks.length}: ${images.length} image(s), ${agencyListing.rooms || 'rooms unknown'}, ${agencyListing.priceDisplay}, ${agencyListing.availability}`);
+            return {
+              id: `external-${marketplace}-${Date.now()}-${globalIdx}`,
+              title: copy?.title ?? agencyListing.title,
+              location: agencyListing.location,
+              price: agencyListing.price,
+              priceDisplay: agencyListing.priceDisplay,
+              size: agencyListing.size,
+              rooms: agencyListing.rooms,
+              images,
+              description: copy?.description ?? agencyListing.description.substring(0, 1500),
+              highlights: [],
+              amenities: copy?.amenities ?? agencyListing.amenities,
+              source: marketplace as Marketplace,
+              sourceUrl: listing.url,
+              sourceProviderName: agencyListing.sourceProviderName,
+              sourceProviderPhone: agencyListing.sourceProviderPhone,
+              latitude: agencyListing.latitude,
+              longitude: agencyListing.longitude,
               vibe: undefined,
               vibe_analysis: undefined,
             } as ExternalProperty;
@@ -2405,7 +2507,9 @@ Deno.serve(async (req) => {
     // display floor as "too_few_images:1" - 894 times, while the run reported
     // success. Its listings now come from the ad payload in Phase 2, and a
     // nhatot page that gets here has genuinely nothing to offer.
-    const searchPageFallbackSources = ['housingsgn', 'nhatot'];
+    // The agency-feed sources never get here with anything worth extracting:
+    // a feed that yielded nothing new is a quiet run, not a failed page.
+    const searchPageFallbackSources = ['housingsgn', 'nhatot', 'rentapartment', 'vnrenthome'];
     if (!rawMode && properties.length < 2 && !searchPageFallbackSources.includes(marketplace)) {
       console.log(`[Fallback] Only ${properties.length} from detail pages, falling back to search page extraction`);
       

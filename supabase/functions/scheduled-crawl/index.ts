@@ -3,6 +3,7 @@ import { ANALYZE_COUNT } from '../_shared/vibe-policy.ts';
 import { assessRun, BLIND_STREAK, blindStreak } from '../_shared/crawl-telemetry.ts';
 import { sameBodyHash } from '../_shared/qstash-body-hash.ts';
 import { firecrawlCreditsLeft, planRun, upstashCounter } from '../_shared/firecrawl-budget.ts';
+import { isAgencyFeedSource } from '../_shared/agency-feeds.ts';
 
 // The Supabase edge runtime's own global, which Deno's types do not declare.
 // Type-only: erased at compile time, so it changes nothing that runs.
@@ -33,6 +34,8 @@ const DAILY_COUNT_KEY = 'crawl:daily_count';
 //
 //   batdongsan, housingsgn   1 Firecrawl fetch per listing (scrapeDetailPage)
 //   nhatot                   0 - the chotot ad payload replaces the fetch
+//   rentapartment,           0 - and no search page either: both are read
+//   vnrenthome                   from the agency's own feed (_shared/agency-feeds.ts)
 //
 // Both still cost one search-page fetch per RUN, and one vision pass per
 // listing. The vision pass is not worth rationing: 1447 calls over 14 days came
@@ -53,6 +56,8 @@ const MAX_DAILY_LISTINGS: Record<string, number> = {
   batdongsan: 20,
   housingsgn: 20,
   nhatot: 20,
+  rentapartment: 20,
+  vnrenthome: 20,
 };
 const DEFAULT_MAX_DAILY_LISTINGS = 20;
 
@@ -238,19 +243,24 @@ interface CrawlConfig {
   minPriceVnd: number;
   /** Which source platforms the rotation crawls; subset of MARKETPLACES */
   enabledMarketplaces: string[];
+  /** Every source that existed when the config was last saved. A source added
+   *  since is not in it, and starts enabled (see getConfig). */
+  knownMarketplaces?: string[];
   configStorageError?: string;
 }
 
 // Sizing, because these two numbers are not independent and the arithmetic is
 // not obvious from either one:
 //
-// A run crawls exactly ONE location+marketplace combo, and there are 20
-// locations x 3 marketplaces = 60 of them. pg_cron fires every 30 minutes, so
-// 48 runs a day means any given combo comes back around only every ~30 hours.
-// The rotation, not `frequencyMinutes`, is what paces a source.
+// A run crawls exactly ONE location+marketplace combo, and there are 10
+// locations x 5 marketplaces = 50 of them (60 before Hanoi and Da Nang were
+// dropped and rentapartment and vnrenthome added, 2026-10-14). pg_cron fires
+// every 30 minutes, so 48 runs a day means any given combo comes back around
+// only every ~25 hours. The rotation, not `frequencyMinutes`, is what paces a
+// source.
 //
-// So frequencyMinutes only decides whether a due combo gets SKIPPED. Above ~30h
-// it starts skipping runs outright (it was 2880, i.e. 48h); below ~30h it
+// So frequencyMinutes only decides whether a due combo gets SKIPPED. Above ~25h
+// it starts skipping runs outright (it was 2880, i.e. 48h); below ~25h it
 // changes nothing, because the rotation is already slower than that. 1440 sits
 // under the rotation period without pretending to be a real cadence, and taking
 // it to the 30-minute floor would buy nothing.
@@ -264,7 +274,7 @@ const DEFAULT_CONFIG: CrawlConfig = {
   frequencyMinutes: 1440,
   maxListingsPerRun: 10,
   minPriceVnd: 5_000_000,
-  enabledMarketplaces: ['batdongsan', 'nhatot', 'housingsgn'],
+  enabledMarketplaces: ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome'],
 };
 
 // Redis helpers
@@ -328,7 +338,20 @@ async function getConfig(): Promise<CrawlConfig> {
   if (lastRedisError) {
     return { ...DEFAULT_CONFIG, paused: true, configStorageError: lastRedisError };
   }
-  return stored ? { ...DEFAULT_CONFIG, ...stored } : DEFAULT_CONFIG;
+  if (!stored) return DEFAULT_CONFIG;
+  const config: CrawlConfig = { ...DEFAULT_CONFIG, ...stored };
+  // A saved `enabledMarketplaces` lists the sources an admin ticked, out of
+  // the ones that existed then - so a source added later would never run until
+  // someone found it and ticked it. One the saved config has never seen is
+  // enabled instead; unticking it in admin tools saves it as known, and that
+  // choice then sticks. Configs saved before `knownMarketplaces` existed knew
+  // the original three.
+  const known = new Set(stored.knownMarketplaces ?? LEGACY_MARKETPLACES);
+  const unseen = MARKETPLACES.filter((m) => !known.has(m));
+  if (Array.isArray(stored.enabledMarketplaces) && unseen.length > 0) {
+    config.enabledMarketplaces = [...new Set([...stored.enabledMarketplaces, ...unseen])];
+  }
+  return config;
 }
 
 // Track last crawl time per location+marketplace in Redis
@@ -375,7 +398,9 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'ho_chi_minh', location: 'Thủ Đức' },
 ];
 
-const MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'] as const;
+const MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome'] as const;
+// The sources a config saved before `knownMarketplaces` was recorded knew about.
+const LEGACY_MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'];
 
 const MIN_PRICE_VND = 5_000_000;
 const MAX_PRICE_VND = 200_000_000;
@@ -714,6 +739,7 @@ Deno.serve(async (req) => {
       if (newConfig.enabledMarketplaces.length === 0) {
         newConfig.enabledMarketplaces = DEFAULT_CONFIG.enabledMarketplaces;
       }
+      newConfig.knownMarketplaces = [...MARKETPLACES];
       const saved = await redisSet(CONFIG_KEY, newConfig);
       if (!saved) {
         return new Response(JSON.stringify({ success: false, error: 'Crawl config storage is unavailable', config: currentConfig, storageError: lastRedisError }), {
@@ -997,10 +1023,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Pick oldest unseen project+marketplace combo
+      // Pick oldest unseen project+marketplace combo. The agency feeds are
+      // left out: they are read whole, newest first, and cannot be searched
+      // by building name, so a project run on one would just repeat the
+      // district rotation.
       const lastSeen = await Promise.all(
         candidates.flatMap(p =>
-          MARKETPLACES.map(async mp => {
+          MARKETPLACES.filter(mp => !isAgencyFeedSource(mp)).map(async mp => {
             const norm = p.project.toLowerCase().replace(/[^a-z0-9]/g, '_');
             const key = `${RAW_PROJ_PREFIX}:${norm}:${mp}`;
             const v = await redisGet(key);

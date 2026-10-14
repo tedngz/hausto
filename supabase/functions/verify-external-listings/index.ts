@@ -3,6 +3,7 @@ import { assessVerification } from '../_shared/crawl-telemetry.ts';
 import { fetchNhatotAd, buildNhatotListing, type NhatotAd } from '../_shared/nhatot.ts';
 import { normalizeListingCopy } from '../_shared/listing-language.ts';
 import { repricedCopy } from '../_shared/repriced-copy.ts';
+import { AGENCY_FEED_SOURCES, agencySourceOf, verifyAgencyListing } from '../_shared/agency-sources.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,7 +42,7 @@ const BATDONGSAN_DAILY_CHECKS = 4;
 // on offer at this price", which is the only version ops can act on. `ad` is
 // the payload it was read from, kept so a re-price can rewrite the description
 // without a second fetch (_shared/repriced-copy.ts).
-type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePrice?: number; ad?: NhatotAd };
+type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePrice?: number; liveDisplay?: string; ad?: NhatotAd };
 
 // Sources whose price can be re-read during verification, and which are
 // therefore subject to the freshness decay below. nhatot's ad payload carries
@@ -49,7 +50,16 @@ type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePri
 // which costs a Firecrawl fetch per listing and is not built. They keep
 // price_confirmed_at NULL and are deliberately exempt - decaying listings whose
 // price we have no way to check would delete supply to no purpose.
-const PRICE_CONFIRMING_SOURCES = new Set(['nhatot']);
+//
+// The agency feeds read their rent back for free - rentapartment from its REST
+// record, vnrenthome from its JSON-LD (_shared/agency-sources.ts) - so they are
+// held to the same standard.
+const PRICE_CONFIRMING_SOURCES = new Set(['nhatot', ...AGENCY_FEED_SOURCES]);
+
+// Dead results that are the source itself saying the unit is gone, as opposed
+// to a page that failed to load or matched a keyword. Only these earn
+// `delisted_at` (see the dead branch below).
+const SOURCE_SAYS_GONE = new Set(['gateway_not_found', 'source_rented', 'source_not_found']);
 
 // How far a price may move before it is a different offer rather than rounding.
 const PRICE_DRIFT_TOLERANCE = 0.02;
@@ -357,6 +367,10 @@ async function decayUnconfirmedListings(supabase: any, summary: { decayed: numbe
 }
 
 async function verifyListing(source: string, url: string, externalId?: string): Promise<DeadResult> {
+  // An agency the feed marks rented is dead on the source's own word, and a
+  // live one hands back its current rent.
+  const agency = agencySourceOf(source, url);
+  if (agency) return await verifyAgencyListing(agency, url);
   const kind = detectSource(source, url);
   // housingsgn property codes look like "CAL0223" - when the external_id is
   // one, a live page must contain it (guards against soft-404 pages).
@@ -517,7 +531,7 @@ Deno.serve(async (req) => {
             // already changed - that is the mismatch `price_vnd_at_request` in
             // SPEC exists to catch, and it should not have to.
             update.price = result.livePrice;
-            update.price_display = `${result.livePrice.toLocaleString()} VND`;
+            update.price_display = result.liveDisplay ?? `${result.livePrice.toLocaleString()} VND`;
             if (result.ad) {
               const copy = await repricedCopy(result.ad, item.source_url, item.title, normalizeListingCopy);
               if (copy) Object.assign(update, copy);
@@ -551,7 +565,7 @@ Deno.serve(async (req) => {
           // matched a keyword is not - that is what `deactivated_at` records,
           // and on nhatot it is routinely wrong, since expired ads come back
           // under the same id when the seller reposts.
-          if (PRICE_CONFIRMING_SOURCES.has(item.source) && result.reason === 'gateway_not_found') {
+          if (PRICE_CONFIRMING_SOURCES.has(item.source) && SOURCE_SAYS_GONE.has(result.reason ?? '')) {
             update.delisted_at = now;
             summary.delisted++;
           }
