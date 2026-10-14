@@ -87,11 +87,13 @@ export function parseVnrenthomeIndex(html: string): FeedCandidate[] {
     const badge = card.match(/bg-status-(\d+)[^>]*>\s*([^<]*?)\s*</i);
     const price = card.match(/text-orange-600[^>]*>\s*([\d.,]+\s*(?:USD|VND|₫))/i);
     const title = s.tag.match(/\btitle="([^"]+)"/i)?.[1];
+    const amount = parseAmount(price?.[1]);
     out.push({
       url: s.url,
       title: title ? decodeEntities(title) : undefined,
       price: price?.[1],
       availability: availabilityOfBadge(badge?.[1], badge?.[2] ?? ''),
+      priceVnd: amount !== null ? rentToVnd(amount, /VND|₫/i.test(price?.[1] ?? '') ? 'VND' : 'USD')?.price : undefined,
     });
   });
   return out;

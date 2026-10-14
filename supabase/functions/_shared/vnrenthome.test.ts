@@ -98,11 +98,11 @@ describe('listing URLs', () => {
 describe('the index', () => {
   it('reads each card in page order with its availability and price', () => {
     const cards = parseVnrenthomeIndex(INDEX);
-    expect(cards.map((c) => [extractVnrenthomeId(c.url), c.availability, c.price])).toEqual([
-      ['vr3763', 'UNCONFIRMED', '1,136 USD'],
-      ['vr3757', 'AVAILABLE_SOON', '800 USD'],
-      ['vr3756', 'AVAILABLE_NOW', '3,500 USD'],
-      ['vr3755', 'AVAILABLE_NOW', '2,083 USD'],
+    expect(cards.map((c) => [extractVnrenthomeId(c.url), c.availability, c.price, c.priceVnd])).toEqual([
+      ['vr3763', 'UNCONFIRMED', '1,136 USD', 28_400_000],
+      ['vr3757', 'AVAILABLE_SOON', '800 USD', 20_000_000],
+      ['vr3756', 'AVAILABLE_NOW', '3,500 USD', 87_500_000],
+      ['vr3755', 'AVAILABLE_NOW', '2,083 USD', 52_075_000],
     ]);
   });
 });

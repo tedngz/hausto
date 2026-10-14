@@ -51,6 +51,9 @@ export interface FeedCandidate {
   availability: Availability;
   /** When the agency published it, if the feed says. ISO 8601. */
   postedAt?: string;
+  /** The monthly rent in dong, where the feed or card shows it. Lets a run
+   *  drop units outside the crawl's price band before they take a slot. */
+  priceVnd?: number;
 }
 
 /**

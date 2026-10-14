@@ -36,6 +36,32 @@ const MAX_DETAIL_PAGES = 10; // Max individual listings to scrape
 const MAX_SEARCH_CANDIDATES = 60;
 const DETAIL_SCRAPE_TIMEOUT = 15000; // 15s per detail page
 
+// How long a listing the crawler refused (crawler_rejections) is left alone
+// on the agency feeds. Long enough that a refusal does not cost a slot every
+// run; short enough that an agency's fix - more photos, a corrected rent - is
+// picked up.
+const REFUSAL_MEMORY_DAYS = 14;
+
+/** Which of these URLs this source refused recently, as normalised URLs. */
+async function recentlyRefused(source: string, urls: string[]): Promise<Set<string>> {
+  const refused = new Set<string>();
+  if (urls.length === 0) return refused;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const since = new Date(Date.now() - REFUSAL_MEMORY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  for (const chunk of inChunks(urls.map(normalizeSourceUrl))) {
+    const { data, error } = await supabase
+      .from('crawler_rejections')
+      .select('source_url')
+      .eq('source', source)
+      .gte('rejected_at', since)
+      .in('source_url', chunk);
+    // Not knowing costs a wasted slot, not a lost listing: carry on.
+    if (error) console.warn('[Phase 1] crawler_rejections lookup failed:', error.message);
+    for (const r of data ?? []) refused.add(r.source_url);
+  }
+  return refused;
+}
+
 /** `.in()` filters go in the URL; keep each under the gateway's limit. */
 function inChunks<T>(items: T[], size = 40): T[][] {
   const out: T[][] = [];
@@ -2195,7 +2221,19 @@ Deno.serve(async (req) => {
       // dedup below, so a run's cap takes the newest units still on offer.
       try {
         const candidates = await discoverAgencyListings(agencySource, crawlLocation || location);
-        allListingLinks = candidates.map(c => ({ url: c.url, title: c.title, price: c.price }));
+        // A listing outside the price band, or one refused recently, is
+        // never stored - so it stays "new" and would take one of the run's
+        // few slots on every run. The newest units in a district are often
+        // cheap studios under the crawl's floor; left in, they starved the
+        // run (2026-10-14, Quận 1: three slots, two below 15M, one
+        // multi-unit, nothing saved). Both feeds show the rent up front.
+        const floor = Number(minPrice) || MIN_PRICE_VND;
+        const ceiling = Number(maxPrice) || MAX_PRICE_VND;
+        const inBand = candidates.filter(c => c.priceVnd === undefined || (c.priceVnd >= floor && c.priceVnd <= ceiling));
+        const refused = await recentlyRefused(marketplace, inBand.map(c => c.url));
+        const open = inBand.filter(c => !refused.has(normalizeSourceUrl(c.url)));
+        console.log(`[Phase 1] ${marketplace}: ${candidates.length} candidate(s), ${candidates.length - inBand.length} outside ${floor.toLocaleString()}-${ceiling.toLocaleString()} VND, ${inBand.length - open.length} refused in the last ${REFUSAL_MEMORY_DAYS} days`);
+        allListingLinks = open.map(c => ({ url: c.url, title: c.title, price: c.price }));
       } catch (e) {
         console.error(`[Phase 1] ${marketplace} feed unavailable:`, e);
         return new Response(JSON.stringify({ success: false, properties: [], error: `Marketplace unavailable: ${marketplace}` }), {
