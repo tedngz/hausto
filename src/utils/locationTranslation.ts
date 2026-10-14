@@ -3,29 +3,42 @@
  * Keeps the original Vietnamese version for geocoding (which works better with Vietnamese).
  */
 
-// Vietnamese → English term mappings
-const TERM_TRANSLATIONS: [RegExp, string][] = [
-  // Administrative divisions
-  [/\bThành phố\b/gi, 'City'],
-  [/\bQuận\b/gi, 'District'],
-  [/\bHuyện\b/gi, 'District'],
-  [/\bPhường\b/gi, 'Ward'],
-  [/\bXã\b/gi, 'Commune'],
-  [/\bThị trấn\b/gi, 'Town'],
-  [/\bThị xã\b/gi, 'Township'],
-  // Street types
-  [/\bĐường\b/gi, 'Street'],
-  [/\bPhố\b/gi, 'Street'],
-  [/\bHẻm\b/gi, 'Alley'],
-  [/\bNgõ\b/gi, 'Alley'],
-  [/\bNgách\b/gi, 'Lane'],
-  [/\bĐại lộ\b/gi, 'Boulevard'],
-  // Directional
-  [/\bBắc\b/gi, 'North'],
-  [/\bNam\b/gi, 'South'],
-  [/\bĐông\b/gi, 'East'],
-  [/\bTây\b/gi, 'West'],
+// Administrative divisions. A term only counts where a label stands: opening a
+// comma segment, or straight after a ward number ("Phường 10 Quận 3"). These
+// words are also parts of street names - Huyền Quang, Bà Huyện Thanh Quan - and
+// matching them anywhere read those as "District Quang" and "Ba District Thanh
+// Quan". Mirrors `_shared/location-language.ts`, which labels what is stored.
+const ADMINISTRATIVE_TERMS: [RegExp, string][] = [
+  [/(^|\d\s+)Thành phố(?=\s)/giu, '$1City'],
+  [/(^|\d\s+)Quận(?=\s)/giu, '$1District'],
+  [/(^|\d\s+)Huyện(?=\s)/giu, '$1District'],
+  [/(^|\d\s+)Phường(?=\s)/giu, '$1Ward'],
+  [/(^|\d\s+)Xã(?=\s)/giu, '$1Commune'],
+  [/(^|\d\s+)Thị trấn(?=\s)/giu, '$1Town'],
+  [/(^|\d\s+)Thị xã(?=\s)/giu, '$1Township'],
 ];
+
+// A segment that names a street is a street, whatever its first word.
+const STREET_WORDS = /(^|\s)(đường|phố|hẻm|ngõ|ngách|street|alley|road)(\s|$)/iu;
+
+// Street types. Directions (Bắc, Nam, Đông, Tây) are left alone: they are
+// parts of names far more often than not - Nam Kỳ Khởi Nghĩa is not "South Ky
+// Khoi Nghia".
+const TERM_TRANSLATIONS: [RegExp, string][] = [
+  [/(^|\s)Đường(?=\s)/giu, '$1Street'],
+  [/(^|\s)Phố(?=\s)/giu, '$1Street'],
+  [/(^|\s)Hẻm(?=\s)/giu, '$1Alley'],
+  [/(^|\s)Ngõ(?=\s)/giu, '$1Alley'],
+  [/(^|\s)Ngách(?=\s)/giu, '$1Lane'],
+  [/(^|\s)Đại lộ(?=\s)/giu, '$1Boulevard'],
+];
+
+function translateAdministrativeTerms(segment: string): string {
+  let s = segment.trim();
+  if (STREET_WORDS.test(s)) return s;
+  for (const [pattern, replacement] of ADMINISTRATIVE_TERMS) s = s.replace(pattern, replacement);
+  return s;
+}
 
 // Well-known city name translations
 const CITY_TRANSLATIONS: Record<string, string> = {
@@ -133,7 +146,8 @@ export function translateLocationToEnglish(location: string): string {
     result = result.replace(regex, en);
   }
 
-  // 4. Replace Vietnamese administrative terms
+  // 4. Replace Vietnamese administrative labels, then street types
+  result = result.split(',').map(translateAdministrativeTerms).join(', ');
   for (const [regex, replacement] of TERM_TRANSLATIONS) {
     result = result.replace(regex, replacement);
   }

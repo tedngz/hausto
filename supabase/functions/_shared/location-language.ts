@@ -11,14 +11,29 @@ const CITY_PATTERNS: [RegExp, string][] = [
   [/đà nẵng/giu, 'Da Nang'],
 ];
 
+// A term only counts where an administrative label stands: opening a comma
+// segment, or straight after a ward number ("Phường 10 Quận 3"). These words
+// are also parts of street names - Huyền Quang, Bà Huyện Thanh Quan - and
+// matching them anywhere turned those into "District Quang Street" and
+// "Ba District Thanh Quan".
 const ADMINISTRATIVE_TERMS: [RegExp, string][] = [
-  [/\bphường\b/giu, 'Ward'],
-  [/\bquận\b/giu, 'District'],
-  [/\bhuyện\b/giu, 'District'],
-  [/\bxã\b/giu, 'Commune'],
-  [/\bthị trấn\b/giu, 'Town'],
-  [/\bthị xã\b/giu, 'Township'],
+  [/(^|\d\s+)phường(?=\s)/giu, '$1Ward'],
+  [/(^|\d\s+)quận(?=\s)/giu, '$1District'],
+  [/(^|\d\s+)huyện(?=\s)/giu, '$1District'],
+  [/(^|\d\s+)xã(?=\s)/giu, '$1Commune'],
+  [/(^|\d\s+)thị trấn(?=\s)/giu, '$1Town'],
+  [/(^|\d\s+)thị xã(?=\s)/giu, '$1Township'],
 ];
+
+// A segment that names a street is a street, whatever its first word.
+const STREET_WORDS = /(^|\s)(đường|phố|hẻm|ngõ|ngách|street|alley|road)(\s|$)/iu;
+
+function translateAdministrativeTerms(segment: string): string {
+  let s = segment.trim();
+  if (STREET_WORDS.test(s)) return s;
+  for (const [pattern, replacement] of ADMINISTRATIVE_TERMS) s = s.replace(pattern, replacement);
+  return s;
+}
 
 function romanise(value: string): string {
   return value
@@ -34,7 +49,7 @@ export function normalizeLocationForEnglishDisplay(location: string | null | und
 
   let result = location.trim();
   for (const [pattern, replacement] of CITY_PATTERNS) result = result.replace(pattern, replacement);
-  for (const [pattern, replacement] of ADMINISTRATIVE_TERMS) result = result.replace(pattern, replacement);
+  result = result.split(',').map(translateAdministrativeTerms).join(', ');
 
   return romanise(result).replace(/\s+/g, ' ').replace(/\s*,\s*/g, ', ').trim();
 }
