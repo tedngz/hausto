@@ -79,7 +79,13 @@ const RECORD_FIELDS = [
   ...META_KEYS.map((k) => `property_meta.${k}`),
 ].join(',');
 
-const FEED_FIELDS = ['id', 'date_gmt', 'link', 'title', 'property_label'].join(',');
+// The rent and the unit table ride along so a run can skip, before building
+// anything, what it would refuse anyway: below the crawl's price floor, or a
+// multi-unit ad.
+const FEED_FIELDS = [
+  'id', 'date_gmt', 'link', 'title', 'property_label',
+  'property_meta.fave_property_price', 'property_meta.fave_multi_units',
+].join(',');
 
 // deno-lint-ignore no-explicit-any
 export type RentapartmentRecord = Record<string, any>;
@@ -123,17 +129,27 @@ export function rentapartmentFeedUrl(location?: string, page = 1, perPage = 100)
   return `${API}/properties?${params}`;
 }
 
-/** Feed rows as crawl candidates. Every row is already "Available" - the feed asks for nothing else. */
+/**
+ * Feed rows as crawl candidates. Every row is already "Available" - the feed
+ * asks for nothing else. Multi-unit ads are dropped here: they would be
+ * refused once built, and a refused listing is never stored, so it would
+ * stay "new" and take a slot on every run.
+ */
 export function candidatesFromFeed(rows: RentapartmentRecord[]): FeedCandidate[] {
   return prioritise(
     (Array.isArray(rows) ? rows : [])
       .filter((r) => typeof r?.link === 'string' && isRentapartmentListingUrl(r.link))
-      .map((r) => ({
-        url: r.link,
-        title: typeof r.title?.rendered === 'string' ? decodeEntities(r.title.rendered) : undefined,
-        availability: labelsOf(r).includes(LABEL_RENTED) ? 'RENTED' : 'AVAILABLE_NOW',
-        postedAt: typeof r.date_gmt === 'string' ? `${r.date_gmt}Z` : undefined,
-      })),
+      .filter((r) => multiUnitPrices(r).length <= 1)
+      .map((r) => {
+        const amount = parseAmount(meta(r, 'fave_property_price'));
+        return {
+          url: r.link,
+          title: typeof r.title?.rendered === 'string' ? decodeEntities(r.title.rendered) : undefined,
+          availability: labelsOf(r).includes(LABEL_RENTED) ? 'RENTED' : 'AVAILABLE_NOW',
+          postedAt: typeof r.date_gmt === 'string' ? `${r.date_gmt}Z` : undefined,
+          priceVnd: amount !== null ? rentToVnd(amount)?.price : undefined,
+        } satisfies FeedCandidate;
+      }),
   );
 }
 

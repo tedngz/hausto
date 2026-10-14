@@ -99,6 +99,18 @@ describe('the feed', () => {
     ]);
     expect(candidates[0].title).toBe('Indochine 3-Bedroom On XI Riverview Palace - ID: 2247');
   });
+
+  it("carries each row's rent, and drops multi-unit ads before they take a slot", () => {
+    const candidates = candidatesFromFeed([
+      { link: XI_RIVERVIEW.link, date_gmt: '2026-09-15T08:05:09', property_label: [LABEL_AVAILABLE], property_meta: { fave_property_price: ['3900'] } },
+      { link: TRAN_CAO_VAN.link, date_gmt: '2026-09-21T09:13:31', property_label: [LABEL_AVAILABLE], property_meta: TRAN_CAO_VAN.property_meta },
+      { link: 'https://rentapartment.vn/nice-studio-on-le-thi-rieng-street-id-2216/', date_gmt: '2026-06-29T05:57:51', property_label: [LABEL_AVAILABLE] },
+    ]);
+    expect(candidates.map((c) => [c.url, c.priceVnd])).toEqual([
+      [XI_RIVERVIEW.link, 97_500_000],
+      ['https://rentapartment.vn/nice-studio-on-le-thi-rieng-street-id-2216/', undefined],
+    ]);
+  });
 });
 
 describe('building a listing', () => {
