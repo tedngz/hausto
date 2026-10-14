@@ -74,6 +74,12 @@ describe('planning a run against what is left', () => {
     expect(planRun('nhatot', 0, 3)).toEqual({ run: false, maxResults: 0 });
   });
 
+  it('never holds back the agency feeds, which spend no Firecrawl credit', () => {
+    expect(planRun('rentapartment', 0, 3)).toEqual({ run: true, maxResults: 3 });
+    expect(planRun('vnrenthome', 0, 10)).toEqual({ run: true, maxResults: 10 });
+    expect(planRun('vnrenthome', 50, 0)).toEqual({ run: false, maxResults: 0 });
+  });
+
   it('keeps the schedule inside the ceiling at 3 a run', () => {
     // 10 Ho Chi Minh City districts x 3 sources, each every 48 hours: 5 runs a
     // source a day. Worst case, every search page through Firecrawl and every

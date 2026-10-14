@@ -50,6 +50,20 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
     };
   }
   
+  if (url.includes('rentapartment')) {
+    return {
+      name: 'Rentapartment',
+      logo: '/logos/rentapartment-logo.svg'
+    };
+  }
+
+  if (url.includes('vnrenthome')) {
+    return {
+      name: 'Vietnam Rent Home',
+      logo: '/logos/vnrenthome-logo.svg'
+    };
+  }
+
   if (url.includes('housingsgn') || url === 'housingsgn') {
     return {
       name: 'Housing SGN',

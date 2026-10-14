@@ -88,6 +88,11 @@ export async function firecrawlCreditsLeft(counter: Counter, now: Date = new Dat
  *  come from the chotot ad payload instead and cost nothing. */
 const DETAIL_COSTS_A_CREDIT = new Set(['batdongsan', 'housingsgn']);
 
+/** Sources that never call Firecrawl at all: rentapartment and vnrenthome are
+ *  read from their own feeds with plain fetches (_shared/agency-feeds.ts), so
+ *  a spent Firecrawl day is no reason to stop them. */
+const NEVER_USES_FIRECRAWL = new Set(['rentapartment', 'vnrenthome']);
+
 /**
  * How many new listings a run may open, given the credits left today: one for
  * the search page (counted even where a direct fetch usually works, since it
@@ -96,7 +101,9 @@ const DETAIL_COSTS_A_CREDIT = new Set(['batdongsan', 'housingsgn']);
  * is not worth starting.
  */
 export function planRun(source: string, creditsLeft: number, wanted: number): { run: boolean; maxResults: number } {
-  if (creditsLeft < 1 || wanted < 1) return { run: false, maxResults: 0 };
+  if (wanted < 1) return { run: false, maxResults: 0 };
+  if (NEVER_USES_FIRECRAWL.has(source)) return { run: true, maxResults: wanted };
+  if (creditsLeft < 1) return { run: false, maxResults: 0 };
   if (!DETAIL_COSTS_A_CREDIT.has(source)) return { run: true, maxResults: wanted };
   const affordable = Math.min(wanted, creditsLeft - 1);
   return affordable >= 1 ? { run: true, maxResults: affordable } : { run: false, maxResults: 0 };
