@@ -1,8 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ANALYZE_COUNT } from '../_shared/vibe-policy.ts';
-import { assessRun, BLIND_STREAK, blindStreak } from '../_shared/crawl-telemetry.ts';
+import { assessRun, BLIND_STREAK, blindStreak, type RunAssessment } from '../_shared/crawl-telemetry.ts';
 import { sameBodyHash } from '../_shared/qstash-body-hash.ts';
-import { firecrawlCreditsLeft, planRun, upstashCounter } from '../_shared/firecrawl-budget.ts';
+import { FIRECRAWL_DAILY_CREDITS, firecrawlCreditsLeft, planRun, upstashCounter } from '../_shared/firecrawl-budget.ts';
 import { isAgencyFeedSource } from '../_shared/agency-feeds.ts';
 
 // The Supabase edge runtime's own global, which Deno's types do not declare.
@@ -26,6 +26,9 @@ const QSTASH_NEXT_SIGNING_KEY = Deno.env.get('QSTASH_NEXT_SIGNING_KEY');
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/scheduled-crawl`;
 
 const CONFIG_KEY = 'crawl:config';
+// How often pg_cron calls this function (the `auto-crawl-v3` job). Reported to
+// the admin page, which uses it to say how long one rotation takes.
+const CRON_MINUTES = 30;
 const DAILY_COUNT_KEY = 'crawl:daily_count';
 
 // The daily cap is a Firecrawl guard, so it belongs per source: what it is
@@ -648,6 +651,193 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
   }
 }
 
+// ===== One crawl of one target, measured =====
+//
+// Shared by the rotation and by an admin's on-demand crawl (`crawl-target`), so
+// both go through scrape-marketplace's own save - its image floor, interior
+// gate and vibe queue - and both leave the same row in `crawl_runs`, judged the
+// same way. The admin page used to crawl through crawl-external-properties,
+// which wrote listings live with none of those gates and no telemetry.
+
+interface RunHandle { id: string | null; startedAt: string }
+
+// Opened before the scrape so a run that times out or dies still leaves a row -
+// the runs that vanish are exactly the ones worth seeing (PLAN-v3 S1.1).
+async function openRun(supabase: any, source: string, location: string): Promise<RunHandle> {
+  const startedAt = new Date().toISOString();
+  try {
+    const { data } = await supabase
+      .from('crawl_runs')
+      .insert({ source, location, started_at: startedAt })
+      .select('id')
+      .single();
+    return { id: data?.id ?? null, startedAt };
+  } catch (e) {
+    // Telemetry must never cost a crawl. A run we cannot measure is still a
+    // run worth doing.
+    console.warn('[scheduled-crawl] crawl_runs insert failed:', e);
+    return { id: null, startedAt };
+  }
+}
+
+// scrape-marketplace saves as it goes (directSave), so even a call that times
+// out here may have stored listings. Null when it did not answer in time.
+async function scrapeTarget(params: {
+  marketplace: string;
+  location: string;
+  query: string;
+  maxResults: number;
+  minPrice: number;
+}): Promise<any | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 140000);
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        marketplace: params.marketplace,
+        query: params.query,
+        location: params.location,
+        crawlLocation: params.location,
+        includeVibeAnalysis: false,
+        maxResults: params.maxResults,
+        pages: 1,
+        directSave: true,
+        minPrice: params.minPrice,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const result = await res.json();
+      console.log(`[scheduled-crawl] Scrape+save completed:`, JSON.stringify(result));
+      return result;
+    }
+    console.error(`[scheduled-crawl] Scrape failed: ${res.status}`, await res.text());
+    return null;
+  } catch {
+    console.warn(`[scheduled-crawl] Scrape call timed out for ${params.location}/${params.marketplace}, but directSave may have persisted partial results`);
+    return null;
+  }
+}
+
+interface ScrapeCounts {
+  newListings: number;
+  updatedListings: number;
+  duplicatesSkipped: number;
+  filtered: number;
+}
+
+function countsOf(scrapeResult: any): ScrapeCounts {
+  // Listings the search page showed that the index already holds are
+  // duplicates as much as the ones the saver dedupes, and they are most of
+  // any page. Uncounted, a page full of them read as an empty page.
+  const knownOnPage = scrapeResult?.knownOnPage || 0;
+  return {
+    newListings: scrapeResult?.newListings || 0,
+    updatedListings: scrapeResult?.updatedListings || 0,
+    duplicatesSkipped: (scrapeResult?.duplicatesSkipped || 0) + knownOnPage,
+    filtered: scrapeResult?.filtered || 0,
+  };
+}
+
+// Close the telemetry row and judge the run.
+//
+// The reason breakdown comes from `crawler_rejections`, which already records
+// one row per rejected candidate with its reason. Reading it back by (source,
+// rejected_at >= startedAt) rather than threading a counter through
+// scrape-marketplace keeps a 2,700-line function untouched. The cost is that a
+// second concurrent run of the SAME source in the same window would have its
+// rejections counted here too - rare, and it can only inflate a share that is
+// already being flagged, never hide one.
+async function closeRun(
+  supabase: any,
+  run: RunHandle,
+  source: string,
+  location: string,
+  counts: ScrapeCounts,
+  scrapeSucceeded: boolean,
+): Promise<RunAssessment & { attempted: number }> {
+  let reasons: Record<string, number> = {};
+  try {
+    const { data: rejections } = await supabase
+      .from('crawler_rejections')
+      .select('reason')
+      .eq('source', source)
+      .gte('rejected_at', run.startedAt)
+      .limit(1000);
+    for (const r of (rejections ?? []) as { reason: string }[]) {
+      const key = r.reason ?? 'unknown';
+      reasons[key] = (reasons[key] ?? 0) + 1;
+    }
+  } catch (e) {
+    console.warn('[scheduled-crawl] rejection readback failed:', e);
+    reasons = {};
+  }
+
+  // `attempted` is derived rather than reported, so the parts always sum to
+  // the whole: every candidate handed to the saver either landed, updated,
+  // deduped or was filtered.
+  const attempted = counts.newListings + counts.updatedListings + counts.duplicatesSkipped + counts.filtered;
+  const assessment = assessRun({
+    attempted,
+    written: counts.newListings,
+    updated: counts.updatedListings,
+    duplicates: counts.duplicatesSkipped,
+    rejected: counts.filtered,
+    reasons,
+  });
+
+  if (run.id) {
+    try {
+      await supabase.from('crawl_runs').update({
+        finished_at: new Date().toISOString(),
+        attempted,
+        written: counts.newListings,
+        updated: counts.updatedListings,
+        duplicates: counts.duplicatesSkipped,
+        rejected: counts.filtered,
+        reasons,
+        healthy: assessment.healthy,
+        verdict: assessment.verdict,
+        error: scrapeSucceeded ? null : 'scrape did not report success',
+      }).eq('id', run.id);
+    } catch (e) {
+      console.warn('[scheduled-crawl] crawl_runs update failed:', e);
+    }
+  }
+
+  // The line that was missing for 35 days. An unhealthy run is logged at
+  // error level even though the HTTP response is a 200, because the response
+  // is read by a cron that cannot act on it and the log is read by a person
+  // who can.
+  if (!assessment.healthy) {
+    console.error(`[scheduled-crawl] UNHEALTHY ${source}/${location}: ${assessment.verdict} - ${assessment.message}`);
+  }
+
+  // One empty page is a quiet district; many in a row is a source we have
+  // stopped seeing, which no single run's verdict can say (blindStreak).
+  try {
+    const { data: recent } = await supabase
+      .from('crawl_runs')
+      .select('attempted')
+      .eq('source', source)
+      .not('finished_at', 'is', null)
+      .order('started_at', { ascending: false })
+      .limit(BLIND_STREAK);
+    const blind = blindStreak(source, (recent ?? []) as { attempted: number | null }[]);
+    if (blind) console.error(`[scheduled-crawl] UNHEALTHY ${blind}`);
+  } catch (e) {
+    console.warn('[scheduled-crawl] blind-streak readback failed:', e);
+  }
+
+  return { ...assessment, attempted };
+}
+
 Deno.serve(async (req) => {
   console.log(`[scheduled-crawl] Request received: ${req.method} at ${new Date().toISOString()}`);
 
@@ -1112,6 +1302,122 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ===== What the admin page needs to show the rotation as it really is =====
+    // The districts and sources come from here rather than from the page, so a
+    // district or source added to this file shows up there without a second
+    // edit. Today's spend is per source (MAX_DAILY_LISTINGS) and Firecrawl's
+    // is shared (_shared/firecrawl-budget.ts).
+    if (body.action === 'status') {
+      const config = await getConfig();
+      const today = new Date().toISOString().slice(0, 10);
+      const spend = await Promise.all(MARKETPLACES.map(async (source) => ({
+        source,
+        used: Number((await redisGet(`${DAILY_COUNT_KEY}:${today}:${source}`)) || 0),
+        cap: dailyCapFor(source),
+        agencyFeed: isAgencyFeedSource(source),
+      })));
+      const firecrawlLeft = await firecrawlCreditsLeft(upstashCounter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN));
+      return new Response(JSON.stringify({
+        success: true,
+        config,
+        locations: CRAWL_LOCATIONS.map((l) => l.location),
+        marketplaces: MARKETPLACES,
+        spend,
+        firecrawl: { left: firecrawlLeft, daily: FIRECRAWL_DAILY_CREDITS },
+        cronMinutes: CRON_MINUTES,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ===== One crawl an admin asked for =====
+    // A district from the rotation, or a building searched by name inside a
+    // district. It runs even while the schedule is paused - the pause is for
+    // the schedule - and saves through exactly the path the rotation does,
+    // under the same Firecrawl ceiling. It is not counted against the
+    // rotation's per-source daily caps; the Firecrawl ceiling is what costs
+    // money, and it still applies.
+    if (body.action === 'crawl-target') {
+      const targetToken = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+      if (targetToken !== SUPABASE_SERVICE_ROLE_KEY && !(await isAdminUser(supabase, targetToken))) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const fail = (error: string) => new Response(JSON.stringify({ success: false, error }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+
+      const marketplace = String(body.marketplace || '');
+      if (!(MARKETPLACES as readonly string[]).includes(marketplace)) return fail(`Unknown source: ${marketplace}`);
+      const project = typeof body.project === 'string' ? body.project.trim().slice(0, 80) : '';
+      const location = String(body.location || '').trim().slice(0, 60);
+      if (project) {
+        // The agency feeds are read whole, newest first, and cannot be
+        // searched by building name.
+        if (isAgencyFeedSource(marketplace)) return fail(`${marketplace} cannot be searched by building`);
+        if (!location) return fail('A building search needs its district');
+      } else if (!CRAWL_LOCATIONS.some((l) => l.location === location)) {
+        return fail(`Not a rotation district: ${location}`);
+      }
+
+      const config = await getConfig();
+      const wanted = Math.max(1, Math.min(10, Number(body.maxResults) || config.maxListingsPerRun));
+      const creditsLeft = await firecrawlCreditsLeft(upstashCounter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN));
+      const plan = planRun(marketplace, creditsLeft, wanted);
+      if (!plan.run) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Firecrawl budget: ${creditsLeft} credit(s) left today, not enough for ${marketplace}`,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const label = project ? `${project} · ${location}` : location;
+      // A district crawled by hand counts as crawled, so the rotation does not
+      // repeat it straight after.
+      if (!project) await setLastCrawlTime(location, marketplace);
+      const run = await openRun(supabase, marketplace, label);
+      const scrapeResult = await scrapeTarget({
+        marketplace,
+        location,
+        query: project || 'cho thuê căn hộ chung cư nhà ở',
+        maxResults: plan.maxResults,
+        minPrice: config.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd,
+      });
+      const counts = countsOf(scrapeResult);
+      const assessment = await closeRun(supabase, run, marketplace, label, counts, !!scrapeResult?.success);
+
+      if (counts.newListings > 0 || counts.updatedListings > 0) {
+        try {
+          await supabase.functions.invoke('property-discovery-cache', { body: { action: 'invalidate' } });
+        } catch (e) {
+          console.error('[scheduled-crawl] Failed to invalidate cache:', e);
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        summary: {
+          target: label,
+          marketplace,
+          maxResults: plan.maxResults,
+          ...counts,
+          attempted: assessment.attempted,
+          scrapeCompleted: !!scrapeResult?.success,
+          healthy: assessment.healthy,
+          verdict: assessment.verdict,
+          verdictMessage: assessment.message,
+        },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+
+    // Everything below is the rotation, which the cron starts with no action.
+    // An action this deployment does not know - a page newer than the
+    // function, say - is refused rather than taken as a request to crawl.
+    if (body.action !== undefined) {
+      return new Response(JSON.stringify({ success: false, error: `Unknown action: ${String(body.action)}` }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const config = await getConfig();
 
@@ -1250,78 +1556,20 @@ Deno.serve(async (req) => {
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
 
-    // Per-source, per-run telemetry (PLAN-v3 S1.1). Opened before the scrape so
-    // a run that times out or dies still leaves a row - the runs that vanish
-    // are exactly the ones worth seeing.
-    const runStartedAt = new Date().toISOString();
-    let crawlRunId: string | null = null;
-    try {
-      const { data: runRow } = await supabase
-        .from('crawl_runs')
-        .insert({
-          source: bestTarget.marketplace,
-          location: bestTarget.location,
-          started_at: runStartedAt,
-        })
-        .select('id')
-        .single();
-      crawlRunId = runRow?.id ?? null;
-    } catch (e) {
-      // Telemetry must never cost a crawl. A run we cannot measure is still a
-      // run worth doing.
-      console.warn('[scheduled-crawl] crawl_runs insert failed:', e);
-    }
+    const run = await openRun(supabase, bestTarget.marketplace, bestTarget.location);
 
-    // Step 2: Call scrape-marketplace with directSave mode
-    // scrape-marketplace saves properties directly to DB, so even if this call times out,
-    // properties already saved are not lost.
-    let scrapeResult: any = null;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 140000);
+    // Step 2: scrape-marketplace saves through its own gates (directSave), so
+    // even if this call times out, properties already saved are not lost.
+    const scrapeResult = await scrapeTarget({
+      marketplace: bestTarget.marketplace,
+      location: bestTarget.location,
+      query: 'cho thuê căn hộ chung cư nhà ở',
+      maxResults: effectiveMax,
+      minPrice: config.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd,
+    });
 
-      const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          marketplace: bestTarget.marketplace,
-          query: 'cho thuê căn hộ chung cư nhà ở',
-          location: bestTarget.location,
-          crawlLocation: bestTarget.location,
-          includeVibeAnalysis: false,
-          maxResults: effectiveMax,
-          pages: 1,
-          directSave: true,
-          minPrice: config.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (scrapeResponse.ok) {
-        scrapeResult = await scrapeResponse.json();
-        console.log(`[scheduled-crawl] Scrape+save completed:`, JSON.stringify(scrapeResult));
-      } else {
-        const errorText = await scrapeResponse.text();
-        console.error(`[scheduled-crawl] Scrape failed: ${scrapeResponse.status}`, errorText);
-      }
-    } catch (abortErr) {
-      // Even on timeout, scrape-marketplace may have already saved some properties via directSave
-      console.warn(`[scheduled-crawl] Scrape call timed out for ${bestTarget.location}/${bestTarget.marketplace}, but directSave may have persisted partial results`);
-    }
-
-    const newListings = scrapeResult?.newListings || 0;
-    const updatedListings = scrapeResult?.updatedListings || 0;
-    // Listings the search page showed that the index already holds are
-    // duplicates as much as the ones the saver dedupes, and they are most of
-    // any page. Uncounted, a page full of them read as an empty page.
-    const knownOnPage = scrapeResult?.knownOnPage || 0;
-    const duplicatesSkipped = (scrapeResult?.duplicatesSkipped || 0) + knownOnPage;
-    const filtered = scrapeResult?.filtered || 0;
+    const counts = countsOf(scrapeResult);
+    const { newListings, updatedListings, duplicatesSkipped, filtered } = counts;
     let vibeAnalyzed = 0;
 
     // Update daily listing counter
@@ -1434,91 +1682,10 @@ Deno.serve(async (req) => {
 
     const duration = Date.now() - startTime;
 
-    // ── Close the telemetry row, and judge the run ────────────────────────
-    //
-    // The reason breakdown comes from `crawler_rejections`, which already
-    // records one row per rejected candidate with its reason. Reading it back
-    // by (source, rejected_at >= runStartedAt) rather than threading a counter
-    // through scrape-marketplace keeps a 2,400-line function untouched. The
-    // cost is that a second concurrent run of the SAME source in the same
-    // window would have its rejections counted here too - the cron picks one
-    // target per run so that is rare, and it can only inflate a share that is
-    // already being flagged, never hide one.
-    let reasons: Record<string, number> = {};
-    try {
-      const { data: rejections } = await supabase
-        .from('crawler_rejections')
-        .select('reason')
-        .eq('source', bestTarget.marketplace)
-        .gte('rejected_at', runStartedAt)
-        .limit(1000);
-      for (const r of (rejections ?? []) as { reason: string }[]) {
-        const key = r.reason ?? 'unknown';
-        reasons[key] = (reasons[key] ?? 0) + 1;
-      }
-    } catch (e) {
-      console.warn('[scheduled-crawl] rejection readback failed:', e);
-      reasons = {};
-    }
-
-    // `attempted` is derived rather than reported, so the parts always sum to
-    // the whole: every candidate handed to the saver either landed, updated,
-    // deduped or was filtered.
-    const attempted = newListings + updatedListings + duplicatesSkipped + filtered;
-    const assessment = assessRun({
-      attempted,
-      written: newListings,
-      updated: updatedListings,
-      duplicates: duplicatesSkipped,
-      rejected: filtered,
-      reasons,
-    });
-
-    if (crawlRunId) {
-      try {
-        await supabase.from('crawl_runs').update({
-          finished_at: new Date().toISOString(),
-          attempted,
-          written: newListings,
-          updated: updatedListings,
-          duplicates: duplicatesSkipped,
-          rejected: filtered,
-          reasons,
-          healthy: assessment.healthy,
-          verdict: assessment.verdict,
-          error: scrapeResult?.success ? null : 'scrape did not report success',
-        }).eq('id', crawlRunId);
-      } catch (e) {
-        console.warn('[scheduled-crawl] crawl_runs update failed:', e);
-      }
-    }
-
-    // The line that was missing for 35 days. An unhealthy run is logged at
-    // error level even though the HTTP response is a 200, because the response
-    // is read by a cron that cannot act on it and the log is read by a person
-    // who can.
-    if (!assessment.healthy) {
-      console.error(
-        `[scheduled-crawl] UNHEALTHY ${bestTarget.marketplace}/${bestTarget.location}: ` +
-        `${assessment.verdict} - ${assessment.message}`,
-      );
-    }
-
-    // One empty page is a quiet district; many in a row is a source we have
-    // stopped seeing, which no single run's verdict can say (blindStreak).
-    try {
-      const { data: recent } = await supabase
-        .from('crawl_runs')
-        .select('attempted')
-        .eq('source', bestTarget.marketplace)
-        .not('finished_at', 'is', null)
-        .order('started_at', { ascending: false })
-        .limit(BLIND_STREAK);
-      const blind = blindStreak(bestTarget.marketplace, (recent ?? []) as { attempted: number | null }[]);
-      if (blind) console.error(`[scheduled-crawl] UNHEALTHY ${blind}`);
-    } catch (e) {
-      console.warn('[scheduled-crawl] blind-streak readback failed:', e);
-    }
+    const assessment = await closeRun(
+      supabase, run, bestTarget.marketplace, bestTarget.location, counts, !!scrapeResult?.success,
+    );
+    const attempted = assessment.attempted;
 
     const summary = {
       duration: `${duration}ms`,
