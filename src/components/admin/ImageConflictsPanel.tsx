@@ -11,7 +11,9 @@ import { CheckCircle2, ExternalLink, ImageOff, Loader2, XCircle } from 'lucide-r
 // Ops review queue for suspected bait / stolen-photo listings: the nightly
 // dedupe flags listings that share photo fingerprints with another listing
 // but claim a different location or room count. Flagged listings are quietly
-// downranked in public search until resolved here.
+// downranked in public search until resolved here. "Legit" stamps
+// image_conflict_dismissed_at, which the dedupe reads, so it holds across
+// nightly runs; only a listing posted later with the same photos re-flags it.
 
 type ConflictRow = {
   id: string;
@@ -31,11 +33,10 @@ export const ImageConflictsPanel = () => {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['admin-image-conflicts'],
     queryFn: async () => {
-      // image_location_conflict is newer than the generated Supabase types
-      const { data, error } = await (supabase
+      const { data, error } = await supabase
         .from('external_properties')
         .select('id, title, location, rooms, price_vnd, source, images')
-        .eq('is_active', true) as any)
+        .eq('is_active', true)
         .eq('image_location_conflict', true)
         .order('location')
         .limit(50);
@@ -62,11 +63,11 @@ export const ImageConflictsPanel = () => {
   const dismiss = async (row: ConflictRow) => {
     setBusy(row.id);
     const { error } = await supabase.from('external_properties')
-      .update({ image_location_conflict: false } as any)
+      .update({ image_location_conflict: false, image_conflict_dismissed_at: new Date().toISOString() })
       .eq('id', row.id);
     setBusy(null);
     if (error) toast.error(`Failed: ${error.message}`);
-    else { toast.success('Flag dismissed (nightly dedupe may re-flag if photos still overlap)'); refetch(); }
+    else { toast.success('Marked legit - stays cleared unless a newer listing reuses these photos'); refetch(); }
   };
 
   return (
@@ -79,8 +80,8 @@ export const ImageConflictsPanel = () => {
         </CardTitle>
         <CardDescription>
           Same photos as another listing but a different claimed location or room count.
-          Downranked in public search until removed. The nightly dedupe (02:10) recomputes every flag, so
-          "Legit" clears one only until then if the photos still overlap.
+          Downranked in public search until removed. "Legit" sticks: the nightly dedupe (02:10) flags the
+          listing again only if one posted after the "Legit" reuses its photos.
         </CardDescription>
       </CardHeader>
       <CardContent>
