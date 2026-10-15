@@ -31,6 +31,20 @@ const CONFIG_KEY = 'crawl:config';
 const CRON_MINUTES = 30;
 const DAILY_COUNT_KEY = 'crawl:daily_count';
 
+// The runtime kills this worker 150s after the request arrived, with no catch
+// block, no finally and no log line - the caller just gets a 504 (one landed at
+// exactly +150.0s on 2026-10-15 16:05:12). Anything still pending then is lost,
+// and QStash answers the 504 by retrying, which starts a fresh rotation run.
+// So a run answers by ANSWER_BY_MS, and everything after the scrape fits into
+// what is left rather than assuming it has time.
+const WALL_CLOCK_MS = 150_000;
+const ANSWER_BY_MS = WALL_CLOCK_MS - 10_000;
+// What closeRun needs after the scrape: three small queries.
+const CLOSE_RESERVE_MS = 8_000;
+// One inline vibe analysis took 18-26s in the 2026-10-15 logs. Starting one
+// with less left than this is how a run outlived the wall clock.
+const INLINE_VIBE_MS = 40_000;
+
 // The daily cap is a Firecrawl guard, so it belongs per source: what it is
 // really rationing is one detail-page fetch per listing, and not every source
 // spends one.
@@ -681,17 +695,20 @@ async function openRun(supabase: any, source: string, location: string): Promise
 }
 
 // scrape-marketplace saves as it goes (directSave), so even a call that times
-// out here may have stored listings. Null when it did not answer in time.
+// out here may have stored listings. `result` is null when it did not answer
+// in time; `error` says why the run should not count as a clean one.
 async function scrapeTarget(params: {
   marketplace: string;
   location: string;
   query: string;
   maxResults: number;
   minPrice: number;
-}): Promise<any | null> {
+  timeoutMs: number;
+}): Promise<{ result: any | null; error: string | null }> {
+  const timeoutMs = Math.max(10_000, Math.min(140_000, params.timeoutMs));
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 140000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
       method: 'POST',
       headers: {
@@ -715,13 +732,13 @@ async function scrapeTarget(params: {
     if (res.ok) {
       const result = await res.json();
       console.log(`[scheduled-crawl] Scrape+save completed:`, JSON.stringify(result));
-      return result;
+      return { result, error: result?.success ? null : 'scrape did not report success' };
     }
     console.error(`[scheduled-crawl] Scrape failed: ${res.status}`, await res.text());
-    return null;
+    return { result: null, error: `scrape failed: HTTP ${res.status}` };
   } catch {
     console.warn(`[scheduled-crawl] Scrape call timed out for ${params.location}/${params.marketplace}, but directSave may have persisted partial results`);
-    return null;
+    return { result: null, error: `scrape timed out after ${Math.round(timeoutMs / 1000)}s` };
   }
 }
 
@@ -760,7 +777,7 @@ async function closeRun(
   source: string,
   location: string,
   counts: ScrapeCounts,
-  scrapeSucceeded: boolean,
+  error: string | null,
 ): Promise<RunAssessment & { attempted: number }> {
   let reasons: Record<string, number> = {};
   try {
@@ -804,7 +821,7 @@ async function closeRun(
         reasons,
         healthy: assessment.healthy,
         verdict: assessment.verdict,
-        error: scrapeSucceeded ? null : 'scrape did not report success',
+        error,
       }).eq('id', run.id);
     } catch (e) {
       console.warn('[scheduled-crawl] crawl_runs update failed:', e);
@@ -1375,15 +1392,17 @@ Deno.serve(async (req) => {
       // repeat it straight after.
       if (!project) await setLastCrawlTime(location, marketplace);
       const run = await openRun(supabase, marketplace, label);
-      const scrapeResult = await scrapeTarget({
+      const scrape = await scrapeTarget({
         marketplace,
         location,
         query: project || 'cho thuê căn hộ chung cư nhà ở',
         maxResults: plan.maxResults,
         minPrice: config.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd,
+        timeoutMs: startTime + ANSWER_BY_MS - CLOSE_RESERVE_MS - Date.now(),
       });
+      const scrapeResult = scrape.result;
       const counts = countsOf(scrapeResult);
-      const assessment = await closeRun(supabase, run, marketplace, label, counts, !!scrapeResult?.success);
+      const assessment = await closeRun(supabase, run, marketplace, label, counts, scrape.error);
 
       if (counts.newListings > 0 || counts.updatedListings > 0) {
         try {
@@ -1560,17 +1579,31 @@ Deno.serve(async (req) => {
 
     // Step 2: scrape-marketplace saves through its own gates (directSave), so
     // even if this call times out, properties already saved are not lost.
-    const scrapeResult = await scrapeTarget({
+    const answerBy = startTime + ANSWER_BY_MS;
+    const msLeft = () => answerBy - Date.now();
+    const scrape = await scrapeTarget({
       marketplace: bestTarget.marketplace,
       location: bestTarget.location,
       query: 'cho thuê căn hộ chung cư nhà ở',
       maxResults: effectiveMax,
       minPrice: config.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd,
+      timeoutMs: msLeft() - CLOSE_RESERVE_MS,
     });
+    const scrapeResult = scrape.result;
 
     const counts = countsOf(scrapeResult);
     const { newListings, updatedListings, duplicatesSkipped, filtered } = counts;
     let vibeAnalyzed = 0;
+
+    // Close the run as soon as the scrape is in. It measures the scrape, and
+    // everything below is follow-up work that can run long: closing it last
+    // is what left 17 of 22 agency-feed runs open on 2026-10-08..15, killed by
+    // the wall clock while waiting on backfill-image-highlights after a scrape
+    // that had already saved its listings.
+    const assessment = await closeRun(
+      supabase, run, bestTarget.marketplace, bestTarget.location, counts, scrape.error,
+    );
+    const attempted = assessment.attempted;
 
     // Update daily listing counter
     if (newListings > 0) {
@@ -1593,10 +1626,13 @@ Deno.serve(async (req) => {
       console.warn('[scheduled-crawl] Failed to chain vibe backfill via QStash — will attempt inline analysis');
     }
 
-    // Step 4: If we have time remaining, do inline vibe analysis for ALL properties missing highlights
-    if (OPENAI_API_KEY && scrapeResult?.success) {
-      const remainingTime = 150000 - (Date.now() - startTime);
-      if (remainingTime > 30000) {
+    // Step 4: Only when the chain could not be published, do inline vibe
+    // analysis for properties missing highlights. With the chain in place this
+    // ran anyway, ten seconds ahead of the chained backfill and over the same
+    // rows, so the two analysed one listing twice (16:04:38 and 16:04:49 on
+    // 2026-10-15) - and the inline copy is what outlived the wall clock.
+    if (OPENAI_API_KEY && scrapeResult?.success && !backfillChained) {
+      if (msLeft() > INLINE_VIBE_MS) {
         // Fetch more properties to find all that need analysis
         const { data: needsVibe } = await supabase
           .from('external_properties')
@@ -1625,7 +1661,7 @@ Deno.serve(async (req) => {
             });
 
           for (const prop of toAnalyze) {
-            if (Date.now() - startTime > 140000) break; // Leave 10s buffer
+            if (msLeft() < INLINE_VIBE_MS) break;
             try {
               const success = await runVibeAnalysis(supabase, prop.id, prop);
               if (success) vibeAnalyzed++;
@@ -1645,8 +1681,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Trigger backfill-image-highlights for any properties missing image-level highlights
-    if (newListings > 0 || vibeAnalyzed > 0) {
+    // Trigger backfill-image-highlights for any properties missing image-level
+    // highlights - bounded by the time left. It works through up to 20
+    // listings at ~3s per image and waits out the OpenAI rate limit, so it
+    // routinely needs minutes, and awaiting it whole is what killed the run.
+    // It saves listing by listing, and the next run and the vibe queue pick up
+    // whatever it had not reached, so being cut short loses nothing.
+    if ((newListings > 0 || vibeAnalyzed > 0) && msLeft() > 15_000) {
       try {
         const backfillResp = await fetch(`${SUPABASE_URL}/functions/v1/backfill-image-highlights`, {
           method: 'POST',
@@ -1656,6 +1697,7 @@ Deno.serve(async (req) => {
             'apikey': SUPABASE_SERVICE_ROLE_KEY,
           },
           body: JSON.stringify({ limit: 20 }),
+          signal: AbortSignal.timeout(msLeft() - 5_000),
         });
         if (backfillResp.ok) {
           const backfillData = await backfillResp.json();
@@ -1664,7 +1706,11 @@ Deno.serve(async (req) => {
           console.error(`[scheduled-crawl] Backfill image highlights failed: ${backfillResp.status}`);
         }
       } catch (e) {
-        console.error('[scheduled-crawl] Failed to trigger backfill-image-highlights:', e);
+        if (e instanceof DOMException && e.name === 'TimeoutError') {
+          console.log('[scheduled-crawl] Backfill image highlights still running at the time limit - left to finish or resume next run');
+        } else {
+          console.error('[scheduled-crawl] Failed to trigger backfill-image-highlights:', e);
+        }
       }
     }
 
@@ -1681,11 +1727,6 @@ Deno.serve(async (req) => {
     }
 
     const duration = Date.now() - startTime;
-
-    const assessment = await closeRun(
-      supabase, run, bestTarget.marketplace, bestTarget.location, counts, !!scrapeResult?.success,
-    );
-    const attempted = assessment.attempted;
 
     const summary = {
       duration: `${duration}ms`,
