@@ -17,11 +17,50 @@ export type MatchListing = {
 const HAMMING_MAX = 6;
 const IMAGE_MATCHES_REQUIRED = 2; // shared photos needed to call it the same unit
 
-function hammingHex(a: string, b: string): number {
-  let x = BigInt('0x' + a) ^ BigInt('0x' + b);
+// The pair scan compares every hashed listing with every other, about nine
+// hash pairs each, so this is the job's hot loop. It used to parse both hex
+// strings into BigInts and count bits one shift at a time on every
+// comparison; past ~400 hashed listings that blew the edge runtime's CPU
+// budget ("CPU Time exceeded", 546 every night from about 2026-10-08), and no
+// flag, merge or relist was recomputed for a week. A 64-bit dHash is now
+// parsed once into two 32-bit halves and compared with a constant-time
+// popcount. Hashes that are not 16 hex digits keep the exact BigInt path.
+
+type ParsedHash = { hi: number; lo: number } | { big: bigint };
+
+const parsed = new Map<string, ParsedHash>();
+
+function parseHash(h: string): ParsedHash {
+  let v = parsed.get(h);
+  if (!v) {
+    v = /^[0-9a-f]{16}$/i.test(h)
+      ? { hi: parseInt(h.slice(0, 8), 16) >>> 0, lo: parseInt(h.slice(8), 16) >>> 0 }
+      : { big: BigInt('0x' + h) };
+    parsed.set(h, v);
+  }
+  return v;
+}
+
+function popcount32(x: number): number {
+  x -= (x >>> 1) & 0x55555555;
+  x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+  return (Math.imul((x + (x >>> 4)) & 0x0f0f0f0f, 0x01010101) >>> 24);
+}
+
+function bigPopcount(x: bigint): number {
   let count = 0;
   while (x) { count += Number(x & 1n); x >>= 1n; }
   return count;
+}
+
+function toBig(h: ParsedHash): bigint {
+  return 'big' in h ? h.big : (BigInt(h.hi) << 32n) | BigInt(h.lo);
+}
+
+export function hammingHex(a: string, b: string): number {
+  const pa = parseHash(a), pb = parseHash(b);
+  if ('hi' in pa && 'hi' in pb) return popcount32(pa.hi ^ pb.hi) + popcount32(pa.lo ^ pb.lo);
+  return bigPopcount(toBig(pa) ^ toBig(pb));
 }
 
 export function imageOverlap(a: MatchListing, b: MatchListing): number {
@@ -29,7 +68,9 @@ export function imageOverlap(a: MatchListing, b: MatchListing): number {
   if (ha.length === 0 || hb.length === 0) return 0;
   let matches = 0;
   for (const x of ha) {
-    if (hb.some((y) => hammingHex(x, y) <= HAMMING_MAX)) matches++;
+    for (const y of hb) {
+      if (hammingHex(x, y) <= HAMMING_MAX) { matches++; break; }
+    }
   }
   return matches;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { looseLocationKey, projectKey, samePlace, scanImagePairs, type MatchListing } from './match.ts';
+import { hammingHex, looseLocationKey, projectKey, samePlace, scanImagePairs, type MatchListing } from './match.ts';
 
 // Three photos, shared by every listing below unless a test says otherwise.
 const PHOTOS = ['f0f0f0f0f0f0f0f0', '0f0f0f0f0f0f0f0f', 'ff00ff00ff00ff00'];
@@ -127,5 +127,48 @@ describe('scanImagePairs', () => {
       const same = listing('Vinhomes Central Park', { district_code: 'BINH_THANH', created_at: '2026-10-15T03:00:00.000Z' });
       expect(scanImagePairs([a, same]).conflictIds.has(a.id)).toBe(false);
     });
+  });
+});
+
+// The old comparison, kept here as the reference the fast one must equal.
+function referenceHamming(a: string, b: string): number {
+  let x = BigInt('0x' + a) ^ BigInt('0x' + b);
+  let count = 0;
+  while (x) { count += Number(x & 1n); x >>= 1n; }
+  return count;
+}
+
+const randomHex = (digits: number) =>
+  Array.from({ length: digits }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+
+describe('hammingHex', () => {
+  it('equals the BigInt bit count for 64-bit dHashes', () => {
+    const edge = ['0000000000000000', 'ffffffffffffffff', '8000000000000001', '7fffffff80000000'];
+    for (const a of edge) for (const b of edge) expect(hammingHex(a, b)).toBe(referenceHamming(a, b));
+    for (let i = 0; i < 2000; i++) {
+      const a = randomHex(16), b = randomHex(16);
+      expect(hammingHex(a, b)).toBe(referenceHamming(a, b));
+    }
+  });
+
+  it('falls back to the exact path for hashes of another length', () => {
+    expect(hammingHex('ff', '0f')).toBe(4);
+    expect(hammingHex('ffffffffffffffffff', '000000000000000000')).toBe(72);
+    expect(hammingHex('FFFFFFFFFFFFFFFF', 'ffffffffffffffff')).toBe(0);
+  });
+});
+
+describe('scanImagePairs at production volume', () => {
+  // 2026-10-15: 772 listings in the window, 403 hashed at ~3 each. The BigInt
+  // version took the edge worker past its CPU budget on this.
+  it('scans 800 listings, 450 hashed, well inside the CPU budget', () => {
+    const all: MatchListing[] = Array.from({ length: 800 }, (_, i) => ({
+      id: String(i), location: `Building ${i % 50}, District 1`, city: 'ho_chi_minh', district_code: 'Q1',
+      rooms: '1 Bedroom', created_at: '2026-10-01T00:00:00Z', image_conflict_dismissed_at: null,
+      image_hashes: i < 450 ? [randomHex(16), randomHex(16), randomHex(16)] : null,
+    }));
+    const t = performance.now();
+    scanImagePairs(all);
+    expect(performance.now() - t).toBeLessThan(1000);
   });
 });
