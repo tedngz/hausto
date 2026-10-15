@@ -662,6 +662,7 @@ export type Database = {
           external_id: string
           highlights: string[] | null
           id: string
+          image_conflict_dismissed_at: string | null
           image_hashes: string[] | null
           image_location_conflict: boolean
           images: string[] | null
@@ -716,6 +717,7 @@ export type Database = {
           external_id: string
           highlights?: string[] | null
           id?: string
+          image_conflict_dismissed_at?: string | null
           image_hashes?: string[] | null
           image_location_conflict?: boolean
           images?: string[] | null
@@ -770,6 +772,7 @@ export type Database = {
           external_id?: string
           highlights?: string[] | null
           id?: string
+          image_conflict_dismissed_at?: string | null
           image_hashes?: string[] | null
           image_location_conflict?: boolean
           images?: string[] | null

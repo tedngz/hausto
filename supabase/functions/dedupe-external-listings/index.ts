@@ -7,6 +7,7 @@
 // Groups get a row in listing_groups; members get canonical_group_id set.
 // Runs nightly via pg_cron; safe to re-run (idempotent rebuild).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.4';
+import { isGenericLocationKey, normalizeRooms, projectKey, scanImagePairs } from './match.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,59 +32,13 @@ type Listing = {
   deactivated_at: string | null;
   image_hashes: string[] | null;
   canonical_group_id: string | null;
+  district_code: string | null;
+  image_conflict_dismissed_at: string | null;
 };
 
 // How far back a dead listing still counts as evidence of the unit's identity.
 // Beyond this it stops informing relists and drops out of the clustering pull.
 const HISTORY_WINDOW_DAYS = 365;
-
-// Two image dHashes match when their Hamming distance is small (survives
-// recompression and resizing of the same source photo).
-const HAMMING_MAX = 6;
-const IMAGE_MATCHES_REQUIRED = 2; // shared photos needed to call it the same unit
-
-function hammingHex(a: string, b: string): number {
-  let x = BigInt('0x' + a) ^ BigInt('0x' + b);
-  let count = 0;
-  while (x) { count += Number(x & 1n); x >>= 1n; }
-  return count;
-}
-
-function imageOverlap(a: Listing, b: Listing): number {
-  const ha = a.image_hashes || [], hb = b.image_hashes || [];
-  if (ha.length === 0 || hb.length === 0) return 0;
-  let matches = 0;
-  for (const x of ha) {
-    if (hb.some((y) => hammingHex(x, y) <= HAMMING_MAX)) matches++;
-  }
-  return matches;
-}
-
-const stripDiacritics = (s: string) =>
-  s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
-
-// Project key: the first comma-segment of the location, which for VN rental
-// listings is almost always the building/complex name ("Feliz en Vista, ...").
-function projectKey(location: string): string {
-  const seg = (location || '').split(',')[0] || '';
-  return stripDiacritics(seg).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-// The project key is only trustworthy when that first segment is a building
-// name. VN listings just as often lead with a street address, ward, or district
-// ("334 To Hien Thanh", "Quan 7", "Duong Vo Thi Sau"), and bucketing on those
-// merges genuinely different apartments that happen to share a street and a
-// price band. Such keys are excluded from the text-heuristic pass; only shared
-// image fingerprints — much stronger evidence — can group them.
-const GENERIC_KEY_RE =
-  /^(?:\d|so\s+\d|quan\b|phuong\b|duong\b|pho\b|ngo\b|hem\b|xa\b|dai lo\b|tp\b|thanh pho\b|khu pho\b)/;
-
-function isGenericLocationKey(pk: string): boolean {
-  if (!pk) return true;
-  if (GENERIC_KEY_RE.test(pk)) return true;
-  if (/\bstreet$/.test(pk)) return true;
-  return false;
-}
 
 function parseSizeSqm(size: string | null): number | null {
   if (!size) return null;
@@ -91,13 +46,6 @@ function parseSizeSqm(size: string | null): number | null {
   if (!m) return null;
   const n = parseFloat(m[1].replace(',', '.'));
   return Number.isFinite(n) && n > 5 && n < 2000 ? n : null;
-}
-
-function normalizeRooms(rooms: string | null): string {
-  const r = (rooms || '').toLowerCase();
-  if (r.includes('studio')) return 'studio';
-  const m = r.match(/(\d+)/);
-  return m ? `${m[1]}br` : 'unknown';
 }
 
 function sameUnit(a: Listing, b: Listing, sizeA: number | null, sizeB: number | null): boolean {
@@ -124,7 +72,7 @@ Deno.serve(async (req) => {
   const summary = {
     listings: 0, active_listings: 0, buckets: 0, groups: 0, grouped_listings: 0,
     image_merges: 0, image_conflicts: 0, groups_reused: 0, groups_created: 0, relists: 0,
-    generic_keys_skipped: 0,
+    generic_keys_skipped: 0, dismissed_conflicts_skipped: 0,
   };
 
   try {
@@ -136,7 +84,7 @@ Deno.serve(async (req) => {
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, location, city, rooms, price, size, last_verified_at, crawled_at, created_at, is_active, deactivated_at, image_hashes, canonical_group_id')
+        .select('id, title, location, city, rooms, price, size, last_verified_at, crawled_at, created_at, is_active, deactivated_at, image_hashes, canonical_group_id, district_code, image_conflict_dismissed_at')
         .or(`is_active.eq.true,deactivated_at.gte.${historyCutoff}`)
         .range(from, from + 999);
       if (error) throw error;
@@ -177,33 +125,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Image-fingerprint pass: agents repost the landlord's photo set, so
-    // shared photos identify the same unit regardless of listing text.
-    // Policy: same photos but materially different claimed location (or
-    // different room count) is bait or stolen photos - flag both listings
-    // for ops review, never merge them.
-    const conflictIds = new Set<string>();
-    for (let i = 0; i < all.length; i++) {
-      const a = all[i];
-      if (!a.image_hashes || a.image_hashes.length === 0) continue;
-      for (let j = i + 1; j < all.length; j++) {
-        const b = all[j];
-        if (!b.image_hashes || b.image_hashes.length === 0) continue;
-        const needed = Math.min(IMAGE_MATCHES_REQUIRED, a.image_hashes.length, b.image_hashes.length);
-        if (imageOverlap(a, b) < needed) continue;
-        const sameCity = (a.city || '') === (b.city || '');
-        const sameProject = projectKey(a.location) === projectKey(b.location);
-        const sameRooms = normalizeRooms(a.rooms) === normalizeRooms(b.rooms);
-        if (sameCity && sameProject && sameRooms) {
-          union(i, j);
-          summary.image_merges++;
-        } else {
-          conflictIds.add(a.id);
-          conflictIds.add(b.id);
-        }
-      }
-    }
+    // Image-fingerprint pass (match.ts): shared photos at the same place
+    // merge; at a different place they flag both listings, unless ops already
+    // marked one legit against the listings it was compared with then.
+    const { merges, conflictIds, dismissedSkips } = scanImagePairs(all);
+    for (const [i, j] of merges) union(i, j);
+    summary.image_merges = merges.length;
     summary.image_conflicts = conflictIds.size;
+    summary.dismissed_conflicts_skipped = dismissedSkips;
 
     const groupOf = new Map<string, string[]>(); // representative listing id -> member ids
     const clusters = new Map<number, number[]>();
@@ -223,7 +152,9 @@ Deno.serve(async (req) => {
       groupOf.set(members[0].id, members.map((m) => m.id));
     }
 
-    // Conflict flags are recomputed each run
+    // Conflict flags are recomputed each run. A "Legit" survives because it
+    // lives in image_conflict_dismissed_at, which scanImagePairs reads, not in
+    // the flag this resets.
     await supabase.from('external_properties')
       .update({ image_location_conflict: false })
       .eq('image_location_conflict', true);
