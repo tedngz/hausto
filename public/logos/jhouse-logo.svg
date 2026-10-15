@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 65" width="200" height="65">
+  <style>
+    .text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 300; fill: #808080; }
+    .accent { fill: #0f766e; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  </style>
+  <text x="0" y="44" font-size="34" letter-spacing="2" class="text"><tspan class="accent">J.</tspan>HOUSE</text>
+</svg>

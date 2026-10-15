@@ -64,6 +64,13 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
     };
   }
 
+  if (url.includes('jhouse')) {
+    return {
+      name: 'J.House',
+      logo: '/logos/jhouse-logo.svg'
+    };
+  }
+
   if (url.includes('housingsgn') || url === 'housingsgn') {
     return {
       name: 'Housing SGN',

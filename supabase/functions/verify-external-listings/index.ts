@@ -52,8 +52,8 @@ type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePri
 // price we have no way to check would delete supply to no purpose.
 //
 // The agency feeds read their rent back for free - rentapartment from its REST
-// record, vnrenthome from its JSON-LD (_shared/agency-sources.ts) - so they are
-// held to the same standard.
+// record, vnrenthome from its JSON-LD, jhouse from its CRM's unit record
+// (_shared/agency-sources.ts) - so they are held to the same standard.
 const PRICE_CONFIRMING_SOURCES = new Set(['nhatot', ...AGENCY_FEED_SOURCES]);
 
 // Dead results that are the source itself saying the unit is gone, as opposed

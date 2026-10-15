@@ -78,6 +78,7 @@ describe('planning a run against what is left', () => {
     expect(planRun('rentapartment', 0, 3)).toEqual({ run: true, maxResults: 3 });
     expect(planRun('vnrenthome', 0, 10)).toEqual({ run: true, maxResults: 10 });
     expect(planRun('vnrenthome', 50, 0)).toEqual({ run: false, maxResults: 0 });
+    expect(planRun('jhouse', 0, 10)).toEqual({ run: true, maxResults: 10 });
   });
 
   it('keeps the schedule inside the ceiling at 3 a run', () => {

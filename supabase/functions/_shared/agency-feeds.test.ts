@@ -106,9 +106,11 @@ describe('page text', () => {
 });
 
 describe('source names', () => {
-  it('knows both agencies, by source or by URL', () => {
+  it('knows every agency, by source or by URL', () => {
     expect(isAgencyFeedSource('rentapartment')).toBe(true);
     expect(isAgencyFeedSource('vnrenthome')).toBe(true);
+    expect(isAgencyFeedSource('jhouse')).toBe(true);
+    expect(agencySourceOf('', 'https://jhouse.vn/property/rome-apartment-thao-dien-1-bedroom-a603')).toBe('jhouse');
     expect(isAgencyFeedSource('housingsgn')).toBe(false);
     expect(agencySourceOf('', 'https://vnrenthome.com/v3763/x.html')).toBe('vnrenthome');
     expect(agencySourceOf('rentapartment')).toBe('rentapartment');
