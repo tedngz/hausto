@@ -1,0 +1,14 @@
+-- Let admins read the bait flag, so "Suspected bait listings" can list it.
+--
+-- external_properties has no table-level SELECT for anon or authenticated
+-- (20260708165420 revoked it and granted readable columns one by one).
+-- image_location_conflict, set nightly by dedupe-external-listings, was only
+-- ever granted UPDATE. The admin panel filters on it, a query naming a column
+-- the role cannot read is refused whole with a 403, and the panel read that
+-- as "No flagged listings" - so flagged listings were downranked in search
+-- with no one able to see or clear them. Found 2026-10-15 with 4 flagged.
+--
+-- authenticated only: admins sign in as that role, and RLS already limits rows.
+-- The flag says nothing about an agent. GRANT is idempotent, so a replay is
+-- harmless.
+GRANT SELECT (image_location_conflict) ON public.external_properties TO authenticated;
