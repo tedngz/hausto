@@ -4,6 +4,7 @@ import { assessRun, BLIND_STREAK, blindStreak, type RunAssessment } from '../_sh
 import { sameBodyHash } from '../_shared/qstash-body-hash.ts';
 import { FIRECRAWL_DAILY_CREDITS, firecrawlCreditsLeft, planRun, upstashCounter } from '../_shared/firecrawl-budget.ts';
 import { isAgencyFeedSource } from '../_shared/agency-feeds.ts';
+import { cronEveryMinutes } from '../_shared/crawl-cadence.ts';
 
 // The Supabase edge runtime's own global, which Deno's types do not declare.
 // Type-only: erased at compile time, so it changes nothing that runs.
@@ -26,9 +27,14 @@ const QSTASH_NEXT_SIGNING_KEY = Deno.env.get('QSTASH_NEXT_SIGNING_KEY');
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/scheduled-crawl`;
 
 const CONFIG_KEY = 'crawl:config';
-// How often pg_cron calls this function (the `auto-crawl-v3` job). Reported to
-// the admin page, which uses it to say how long one rotation takes.
+// How often pg_cron calls this function (the `auto-crawl-v3` job, jobid 13).
+// It need not be the only trigger: every caller that sends no `action` starts a
+// rotation run, so `status` reports this job alongside the QStash schedules it
+// lists live, and the admin page sums them to say how long one rotation takes.
+// On 2026-10-15 a QStash schedule fired beside this job on every tick, and the
+// rotation ran twice as fast as a page counting only pg_cron said.
 const CRON_MINUTES = 30;
+const PG_CRON_JOB = 'auto-crawl-v3';
 const DAILY_COUNT_KEY = 'crawl:daily_count';
 
 // The runtime kills this worker 150s after the request arrived, with no catch
@@ -202,6 +208,50 @@ function selfInvokeFallback(payload: Record<string, unknown>, delaySec = 5): boo
   }
 }
 
+// ===== What starts a rotation run =====
+// pg_cron's job lives in the database and is described by the constants above.
+// QStash schedules are listed live: one was made in the Upstash console with
+// nothing in the repo recording it, and only the API can say it is there.
+interface RotationTrigger {
+  kind: 'pg_cron' | 'qstash';
+  name: string;
+  cron: string;
+  /** Minutes between runs, or null when the schedule fires unevenly. */
+  everyMinutes: number | null;
+  createdAt?: string;
+}
+
+async function rotationTriggers(): Promise<{ triggers: RotationTrigger[]; error?: string }> {
+  const triggers: RotationTrigger[] = [
+    { kind: 'pg_cron', name: PG_CRON_JOB, cron: `*/${CRON_MINUTES} * * * *`, everyMinutes: CRON_MINUTES },
+  ];
+  if (!QSTASH_TOKEN) return { triggers, error: 'QSTASH_TOKEN not set' };
+  try {
+    const res = await fetch('https://qstash.upstash.io/v2/schedules', {
+      headers: { 'Authorization': `Bearer ${QSTASH_TOKEN}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return { triggers, error: `QStash answered HTTP ${res.status}` };
+    const schedules = await res.json() as {
+      scheduleId: string; cron: string; destination: string; createdAt?: number; isPaused?: boolean;
+    }[];
+    for (const s of schedules) {
+      // The account may hold schedules for other functions; only ours count.
+      if (s.isPaused || s.destination?.replace(/\/+$/, '') !== FUNCTION_URL) continue;
+      triggers.push({
+        kind: 'qstash',
+        name: s.scheduleId,
+        cron: s.cron,
+        everyMinutes: cronEveryMinutes(s.cron),
+        createdAt: s.createdAt ? new Date(s.createdAt).toISOString() : undefined,
+      });
+    }
+    return { triggers };
+  } catch (e) {
+    return { triggers, error: `QStash schedules unreadable: ${(e as Error).message}` };
+  }
+}
+
 async function qstashPublish(payload: Record<string, unknown>, delaySec = 5): Promise<boolean> {
   if (!QSTASH_TOKEN) {
     console.log('[scheduled-crawl] QSTASH_TOKEN not set, using self-invoke fallback');
@@ -275,7 +325,10 @@ interface CrawlConfig {
 // 2026-10-14 as Hanoi and Da Nang were dropped, jhouse 2026-10-15). pg_cron
 // fires every 30 minutes, so 48 runs a day means any given combo comes back
 // around only every ~30 hours. The rotation, not `frequencyMinutes`, is what
-// paces a source.
+// paces a source. That assumes pg_cron is the only trigger: each QStash schedule
+// aimed here adds its own runs (see CRON_MINUTES), and with one beside it the
+// rotation is ~15h, which a 24h cooldown overshoots. The admin page does this
+// sum from `status` and warns when the cooldown is longer than the rotation.
 //
 // So frequencyMinutes only decides whether a due combo gets SKIPPED. Above ~30h
 // it starts skipping runs outright (it was 2880, i.e. 48h); below ~30h it
@@ -897,7 +950,10 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    console.log('[scheduled-crawl] Authorized via QStash signature');
+    // A delivery from a QStash schedule carries its id, which is what traces a
+    // run back to a schedule in the Upstash console.
+    const scheduleId = req.headers.get('upstash-schedule-id');
+    console.log(`[scheduled-crawl] Authorized via QStash signature${scheduleId ? ` (schedule ${scheduleId})` : ''}`);
   } else if (cronSecret && await isValidCronSecret(supabase, cronSecret)) {
     console.log('[scheduled-crawl] Authorized via cron secret');
   } else if (authToken && authToken === SUPABASE_SERVICE_ROLE_KEY) {
@@ -1333,7 +1389,10 @@ Deno.serve(async (req) => {
         cap: dailyCapFor(source),
         agencyFeed: isAgencyFeedSource(source),
       })));
-      const firecrawlLeft = await firecrawlCreditsLeft(upstashCounter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN));
+      const [firecrawlLeft, rotation] = await Promise.all([
+        firecrawlCreditsLeft(upstashCounter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN)),
+        rotationTriggers(),
+      ]);
       return new Response(JSON.stringify({
         success: true,
         config,
@@ -1342,6 +1401,8 @@ Deno.serve(async (req) => {
         spend,
         firecrawl: { left: firecrawlLeft, daily: FIRECRAWL_DAILY_CREDITS },
         cronMinutes: CRON_MINUTES,
+        triggers: rotation.triggers,
+        triggersError: rotation.error,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

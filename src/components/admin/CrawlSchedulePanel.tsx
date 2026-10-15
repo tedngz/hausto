@@ -6,6 +6,10 @@
 // index grows, and because a setting here can quietly stop it: a cooldown longer
 // than one rotation leaves the crawler idle for the difference, and the cron
 // still reports success on every skipped call.
+//
+// The rotation's pace is every trigger summed, not pg_cron's alone: a QStash
+// schedule was found firing beside `auto-crawl-v3` on 2026-10-15, and a page
+// counting only the cron called a 15-hour rotation 30 hours.
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -19,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import {
-  AGENCY_FEEDS, formatMinutes, formatVndM, rotationMinutes, runDied, timeAgo,
+  AGENCY_FEEDS, formatMinutes, formatVndM, rotationMinutes, rotationTriggers, runDied, runsPerHour, timeAgo,
   useCrawlRuns, useCrawlStatus, VERDICT_LABEL,
 } from '@/lib/crawlAdmin';
 
@@ -68,6 +72,9 @@ export const CrawlSchedulePanel = () => {
   const cycle = rotationMinutes(status, effSources);
   const idlePerCycle = effFrequency - cycle;
   const combos = status.locations.length * effSources.length;
+  const triggers = rotationTriggers(status);
+  const perHour = runsPerHour(status);
+  const perHourLabel = `${Math.round(perHour * 10) / 10} run${perHour === 1 ? '' : 's'} an hour`;
 
   const lastFinished = (runs ?? []).find((r) => r.finished_at);
   const latest = runs?.[0];
@@ -148,9 +155,11 @@ export const CrawlSchedulePanel = () => {
               {storageError && <Badge variant="outline" className="text-xs">Config storage unavailable</Badge>}
             </CardTitle>
             <CardDescription className="mt-1 text-xs md:text-sm">
-              Every {status.cronMinutes} min the cron crawls the most overdue of {combos} combos
-              ({status.locations.length} HCMC districts x {effSources.length} sources). New listings stay hidden
-              until the vibe queue passes them.
+              {triggers.length === 1
+                ? <>Every {status.cronMinutes} min the cron crawls</>
+                : <>{triggers.length} schedules each crawl ({perHourLabel})</>}{' '}
+              the most overdue of {combos} combos ({status.locations.length} HCMC districts x {effSources.length}{' '}
+              sources). New listings stay hidden until the vibe queue passes them.
             </CardDescription>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -190,7 +199,7 @@ export const CrawlSchedulePanel = () => {
           <Stat
             label="One full rotation"
             value={formatMinutes(cycle)}
-            hint={`${combos} combos x ${status.cronMinutes} min`}
+            hint={`${combos} combos at ${perHourLabel}`}
           />
           <Stat
             label="Firecrawl today"
@@ -205,6 +214,19 @@ export const CrawlSchedulePanel = () => {
           />
         </div>
 
+        {triggers.length > 1 && (
+          <Warning>
+            {triggers.length} schedules start the rotation:{' '}
+            {triggers.map((t) => `${t.kind === 'pg_cron' ? 'pg_cron' : 'QStash'} ${t.name} (${t.cron})`).join(', ')}.
+            Each tick crawls one combo per schedule, about a second apart. pg_cron is the documented one; a QStash
+            schedule is removed in the Upstash console, and the rotation above updates on its own.
+          </Warning>
+        )}
+        {status.triggersError && (
+          <p className="text-xs text-muted-foreground">
+            QStash schedules could not be listed ({status.triggersError}), so the rotation counts pg_cron only.
+          </p>
+        )}
         {idlePerCycle > 0 && (
           <Warning>
             The cooldown ({formatMinutes(effFrequency)}) is longer than one rotation ({formatMinutes(cycle)}), so after
