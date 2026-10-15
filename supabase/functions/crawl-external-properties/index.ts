@@ -426,7 +426,24 @@ Deno.serve(async (req) => {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-  console.log(`[crawl-external-properties] Authenticated user: ${claimsData.claims.sub}`);
+  // Retired from the admin page on 2026-10-15: on-demand crawls now go through
+  // scheduled-crawl's `crawl-target`, which saves through scrape-marketplace's
+  // gates. This path writes listings live with none of them (no image floor,
+  // no interior gate, no vibe queue), so it answers admins only - it used to
+  // answer any signed-in account, which let a renter spend Firecrawl and
+  // OpenAI budget and put ungated listings on browse.
+  const { data: adminRole } = await createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', claimsData.claims.sub)
+    .eq('role', 'admin')
+    .maybeSingle();
+  if (!adminRole) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  console.log(`[crawl-external-properties] Authenticated admin: ${claimsData.claims.sub}`);
 
   const body: CrawlRequest = await req.json();
     const { 

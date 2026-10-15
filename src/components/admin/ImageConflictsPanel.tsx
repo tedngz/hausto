@@ -18,7 +18,7 @@ type ConflictRow = {
   title: string;
   location: string;
   rooms: string | null;
-  price: number | null;
+  price_vnd: number | null;
   source: string;
   source_url: string | null;
   images: string[] | null;
@@ -34,7 +34,7 @@ export const ImageConflictsPanel = () => {
       // image_location_conflict is newer than the generated Supabase types
       const { data, error } = await (supabase
         .from('external_properties')
-        .select('id, title, location, rooms, price, source, images')
+        .select('id, title, location, rooms, price_vnd, source, images')
         .eq('is_active', true) as any)
         .eq('image_location_conflict', true)
         .order('location')
@@ -79,7 +79,8 @@ export const ImageConflictsPanel = () => {
         </CardTitle>
         <CardDescription>
           Same photos as another listing but a different claimed location or room count.
-          Downranked in public search until reviewed here.
+          Downranked in public search until removed. The nightly dedupe (02:10) recomputes every flag, so
+          "Legit" clears one only until then if the photos still overlap.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -97,7 +98,7 @@ export const ImageConflictsPanel = () => {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium line-clamp-1">{r.title}</p>
                   <p className="text-xs text-muted-foreground line-clamp-1">
-                    {r.location} · {r.rooms || '?'} · {r.price ? `${(Number(r.price) / 1e6).toFixed(1)}M VND` : '?'} · {r.source}
+                    {r.location} · {r.rooms || '?'} · {r.price_vnd ? `${(Number(r.price_vnd) / 1e6).toFixed(1)}M ₫` : '?'} · {r.source}
                   </p>
                 </div>
                 {r.source_url && (

@@ -3,20 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw, Pause, Play, Settings2, Eye, MapPin, Image as ImageIcon, ExternalLink, ChevronDown } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search, ShieldAlert, Activity, RefreshCw, Play, Settings2, ExternalLink, ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject } from "@/data/hcmcApartmentProjects";
 import { RealtorApplicationsPanel } from "@/components/admin/RealtorApplicationsPanel";
 import { FastTrackQueuePanel } from "@/components/admin/FastTrackQueuePanel";
 import { RequestsOverview } from "@/components/admin/RequestsOverview";
@@ -24,6 +19,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ConciergeRequestsPanel } from "@/components/admin/ConciergeRequestsPanel";
 import { ImageConflictsPanel } from "@/components/admin/ImageConflictsPanel";
+import { CrawlSchedulePanel } from "@/components/admin/CrawlSchedulePanel";
+import { CrawlActivityPanel } from "@/components/admin/CrawlActivityPanel";
+import { CrawlNowPanel } from "@/components/admin/CrawlNowPanel";
+import { CrawlerRejectionsPanel } from "@/components/admin/CrawlerRejectionsPanel";
 import { OpenAIUsagePanel } from "@/components/admin/OpenAIUsagePanel";
 import { withAdminSources } from "@/lib/adminListingSources";
 
@@ -85,17 +84,6 @@ const AdminTools = () => {
   const [testQuery, setTestQuery] = useState("Modern cozy apartment with natural light and workspace");
   const [testResults, setTestResults] = useState<any>(null);
 
-  // Crawl state
-  const [isCrawling, setIsCrawling] = useState(false);
-  const [crawlCity, setCrawlCity] = useState<'ho_chi_minh' | 'hanoi' | 'da_nang'>('ho_chi_minh');
-  const [crawlMarketplaces, setCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: true });
-  const [crawlForceRefresh, setCrawlForceRefresh] = useState(false);
-  const [crawlRunVibe, setCrawlRunVibe] = useState(true);
-  const [crawlResults, setCrawlResults] = useState<any>(null);
-  const [crawlMaxListings, setCrawlMaxListings] = useState(10);
-  const [crawlProgress, setCrawlProgress] = useState<{ current: number; total: number; location: string } | null>(null);
-  const [isManualCrawlTriggering, setIsManualCrawlTriggering] = useState(false);
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isBatchReanalyzing, setIsBatchReanalyzing] = useState(false);
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
@@ -125,40 +113,10 @@ const AdminTools = () => {
 
   // isAdmin is declared below; effect reads it via closure and re-runs when it flips true
 
-  // Project-targeted crawl state
-  const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
-  const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
-  const [projectCrawlMinPriceM, setProjectCrawlMinPriceM] = useState<number>(10); // millions VND/month (minimum)
-  const [projectCrawlMaxListings, setProjectCrawlMaxListings] = useState<number>(10);
-  const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: true });
-  const [projectCrawlRunVibe, setProjectCrawlRunVibe] = useState(true);
-  const [isProjectCrawling, setIsProjectCrawling] = useState(false);
-  const [projectCrawlProgress, setProjectCrawlProgress] = useState<{ current: number; total: number; project: string } | null>(null);
-  const [projectCrawlResults, setProjectCrawlResults] = useState<any>(null);
-
   // Verify external listings state
   const [isVerifyingListings, setIsVerifyingListings] = useState(false);
   const [verifyListingsResult, setVerifyListingsResult] = useState<{ checked: number; alive: number; deactivated: number; dead_increment: number; errors: number } | null>(null);
   const [reExtractingId, setReExtractingId] = useState<string | null>(null);
-
-  // State for expanded crawl run
-  const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
-  const [expandedRunProperties, setExpandedRunProperties] = useState<any[]>([]);
-  const [expandedRunPropertyIds, setExpandedRunPropertyIds] = useState<string[]>([]);
-  const [isLoadingRunProperties, setIsLoadingRunProperties] = useState(false);
-
-  // Fetch crawl schedule config from Redis via scheduled-crawl function
-  const { data: crawlConfig, refetch: refetchConfig } = useQuery({
-    queryKey: ['crawl-config'],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('scheduled-crawl', {
-        body: { action: 'get-config' },
-      });
-      if (error) throw error;
-      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number; minPriceVnd?: number; enabledMarketplaces?: string[]; configStorageError?: string } | null;
-    },
-    refetchInterval: 10000,
-  });
 
   // Vibe queue depth (jobs not yet completed)
   const { data: vibeQueueStats, refetch: refetchVibeQueue } = useQuery({
@@ -180,296 +138,7 @@ const AdminTools = () => {
     refetchInterval: 15000,
   });
 
-  // Recent crawler rejections
-  const { data: rejections, refetch: refetchRejections } = useQuery({
-    queryKey: ['crawler-rejections'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('crawler_rejections')
-        .select('id, source, source_url, reason, sample_images, rejected_at')
-        .order('rejected_at', { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      return data || [];
-    },
-    refetchInterval: 60000,
-  });
-
-  const [localFrequency, setLocalFrequency] = useState<number | null>(null);
-  const [localMaxListings, setLocalMaxListings] = useState<number | null>(null);
-  const [localMinPrice, setLocalMinPrice] = useState<number | null>(null);
-  const [localMarketplaces, setLocalMarketplaces] = useState<string[] | null>(null);
-  const [localPausedOverride, setLocalPausedOverride] = useState<boolean | null>(null);
-
-  // Sync local state when config loads
-  const effectiveFrequency = localFrequency ?? crawlConfig?.frequencyMinutes ?? 240;
-  const effectiveMaxListings = localMaxListings ?? crawlConfig?.maxListingsPerRun ?? 10;
-  const effectiveMinPrice = localMinPrice ?? crawlConfig?.minPriceVnd ?? 5_000_000;
-  // The scheduled crawler's sources. rentapartment, vnrenthome and jhouse are
-  // read from the agencies' own feeds, newest available first, and are offered
-  // here only: the one-off crawl forms save through crawl-external-properties'
-  // older path, which neither keys them by the agency's reference nor gates
-  // their photos.
-  const ALL_MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome', 'jhouse'];
-  const effectiveMarketplaces = localMarketplaces ?? crawlConfig?.enabledMarketplaces ?? ALL_MARKETPLACES;
-  const isPaused = localPausedOverride ?? crawlConfig?.paused ?? false;
-  const crawlConfigStorageError = crawlConfig?.configStorageError;
-
-  const handleTogglePause = useCallback(async () => {
-    setIsSavingConfig(true);
-    const nextPaused = !isPaused;
-    setLocalPausedOverride(nextPaused);
-    try {
-      const { data, error } = await supabase.functions.invoke('scheduled-crawl', {
-        body: { action: 'set-config', paused: nextPaused },
-      });
-      if (error) throw error;
-      if (data?.success === false) throw new Error(data?.storageError || data?.error || 'Config was not saved');
-      toast.success(data?.config?.paused ? 'Auto-crawl paused' : 'Auto-crawl resumed');
-      await refetchConfig();
-      setLocalPausedOverride(null);
-    } catch (err: any) {
-      setLocalPausedOverride(crawlConfig?.paused ?? false);
-      toast.error('Failed to update config', { description: err.message });
-    } finally {
-      setIsSavingConfig(false);
-    }
-  }, [crawlConfig?.paused, isPaused, refetchConfig]);
-
-  const handleSaveConfig = useCallback(async () => {
-    setIsSavingConfig(true);
-    try {
-      const { error } = await supabase.functions.invoke('scheduled-crawl', {
-        body: {
-          action: 'set-config',
-          frequencyMinutes: effectiveFrequency,
-          maxListingsPerRun: effectiveMaxListings,
-          minPriceVnd: effectiveMinPrice,
-          enabledMarketplaces: effectiveMarketplaces,
-        },
-      });
-      if (error) throw error;
-      toast.success('Crawl settings saved');
-      setLocalFrequency(null);
-      setLocalMaxListings(null);
-      setLocalMinPrice(null);
-      setLocalMarketplaces(null);
-      refetchConfig();
-    } catch (err: any) {
-      toast.error('Failed to save settings', { description: err.message });
-    } finally {
-      setIsSavingConfig(false);
-    }
-  }, [effectiveFrequency, effectiveMaxListings, effectiveMinPrice, effectiveMarketplaces, refetchConfig]);
-
-  const hasUnsavedChanges = (localFrequency !== null && localFrequency !== crawlConfig?.frequencyMinutes) ||
-    (localMaxListings !== null && localMaxListings !== crawlConfig?.maxListingsPerRun) ||
-    (localMinPrice !== null && localMinPrice !== (crawlConfig?.minPriceVnd ?? 5_000_000)) ||
-    (localMarketplaces !== null && JSON.stringify([...localMarketplaces].sort()) !== JSON.stringify([...(crawlConfig?.enabledMarketplaces ?? ALL_MARKETPLACES)].sort()));
-
-  const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
-    queryKey: ['crawl-activity'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('external_properties')
-        .select('id, city, source, location_normalized, crawled_at, title, price, is_active')
-        .order('crawled_at', { ascending: false })
-        .limit(200);
-      
-      if (error) throw error;
-      if (!data || data.length === 0) return [];
-
-      const runs: Array<{
-        timestamp: string;
-        city: string;
-        source: string;
-        location: string;
-        count: number;
-        propertyIds: string[];
-      }> = [];
-
-      const extractDistrict = (loc: string | null): string => {
-        if (!loc) return 'unknown';
-        // location_normalized often strips diacritics + spaces (e.g. "qun 4", "huyn binh chanh")
-        // Tokens come either as comma-separated parts or as a single run-on string.
-        // Strategy: scan for a "district keyword + value" pair anywhere in the text.
-        const text = loc.toLowerCase();
-
-        // 1. Numbered HCM districts: "qun 4", "quan 4", "q.4", "d4", "district 4"
-        const numbered = text.match(/\b(?:qu[aâậ]?n|quan|q\.?|district|d)\s*(\d{1,2})\b/);
-        if (numbered) return `Quận ${numbered[1]}`;
-
-        // 2. Named districts/huyện: capture keyword + 1–3 following words (until next admin keyword or end)
-        const named = text.match(
-          /\b(qu[aâậ]?n|quan|huy[eệ]?n|huyen)\s+([a-zà-ỹ]+(?:\s+[a-zà-ỹ]+){0,2}?)(?=\s+(?:phng|phuong|phuờng|tp|thanh pho|th[aàả]nh ph[oốồ]|$|,))/
-        );
-        if (named) {
-          const kw = /huy/.test(named[1]) ? 'Huyện' : 'Quận';
-          const name = named[2].replace(/\b\w/g, (c) => c.toUpperCase());
-          return `${kw} ${name}`;
-        }
-
-        // 3. Thủ Đức city
-        if (/\bth[uủ]\s*[dđ][uưứ]?c\b/.test(text)) return 'Thủ Đức';
-
-        // 4. Fallback: second-to-last comma segment
-        const parts = loc.split(',').map((p) => p.trim()).filter(Boolean);
-        if (parts.length >= 2) return parts[parts.length - 2];
-        return parts[0] || 'unknown';
-      };
-
-      let currentRun: (typeof runs[0] & { districts: Set<string> }) | null = null;
-
-      for (const prop of data) {
-        const crawlTime = new Date(prop.crawled_at!).getTime();
-        const district = extractDistrict(prop.location_normalized);
-        
-        if (
-          !currentRun ||
-          Math.abs(crawlTime - new Date(currentRun.timestamp).getTime()) > 5 * 60 * 1000 ||
-          currentRun.source !== prop.source ||
-          currentRun.city !== prop.city
-        ) {
-          currentRun = {
-            timestamp: prop.crawled_at!,
-            city: prop.city || 'unknown',
-            source: prop.source || 'unknown',
-            location: '',
-            count: 0,
-            propertyIds: [],
-            districts: new Set<string>(),
-          };
-          runs.push(currentRun);
-        }
-        
-        currentRun.count++;
-        currentRun.propertyIds.push(prop.id);
-        if (district && district !== 'unknown') currentRun.districts.add(district);
-        currentRun.location = Array.from(currentRun.districts).slice(0, 3).join(', ');
-      }
-
-      return runs.slice(0, 10);
-    },
-    refetchInterval: 60000,
-  });
-
-  // Fetch crawl coverage stats
-  const { data: crawlStats } = useQuery({
-    queryKey: ['crawl-stats'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('external_properties')
-        .select('city, source, is_active')
-        .eq('is_active', true);
-      
-      if (error) throw error;
-      
-      const stats = {
-        total: data?.length || 0,
-        byCitySource: {} as Record<string, number>,
-      };
-
-      for (const prop of data || []) {
-        const key = `${prop.city}/${prop.source}`;
-        stats.byCitySource[key] = (stats.byCitySource[key] || 0) + 1;
-      }
-
-      return stats;
-    },
-    refetchInterval: 60000,
-  });
-
-  // Fetch per-district crawl coverage
-  const { data: districtCoverage } = useQuery({
-    queryKey: ['district-coverage'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('external_properties')
-        .select('location_normalized, city, source, crawled_at')
-        .order('crawled_at', { ascending: false });
-      
-      if (error) throw error;
-
-      // Build a map of location_normalized -> latest crawl info
-      const coverageMap = new Map<string, { city: string; lastCrawled: string; sources: Set<string>; count: number }>();
-      
-      for (const row of data || []) {
-        const key = row.location_normalized || '';
-        if (!key) continue;
-        const existing = coverageMap.get(key);
-        if (!existing) {
-          coverageMap.set(key, {
-            city: row.city || 'other',
-            lastCrawled: row.crawled_at || '',
-            sources: new Set([row.source]),
-            count: 1,
-          });
-        } else {
-          existing.sources.add(row.source);
-          existing.count++;
-          if (row.crawled_at && row.crawled_at > existing.lastCrawled) {
-            existing.lastCrawled = row.crawled_at;
-          }
-        }
-      }
-
-      return coverageMap;
-    },
-    refetchInterval: 60000,
-  });
-
   const [previewProperty, setPreviewProperty] = useState<any>(null);
-
-  const fetchExpandedRunProperties = async (propertyIds: string[], showLoading = false) => {
-    if (showLoading) setIsLoadingRunProperties(true);
-    try {
-      const { data, error } = await supabase
-        .from('external_properties')
-        .select('id, title, location, price, images, vibe, vibe_analysis, vibe_status, highlights, amenities, source, city, crawled_at, is_active, size, rooms')
-        .in('id', propertyIds);
-      if (error) throw error;
-      const rows = await withAdminSources(data || []);
-      let enriched = rows;
-      if (rows.length > 0) {
-        const { data: contacts } = await supabase.rpc('get_external_property_contacts', {
-          _property_ids: rows.map((r: any) => r.id),
-        });
-        const cmap = new Map<string, any>((contacts || []).map((c: any) => [c.id, c]));
-        enriched = rows.map((r: any) => ({
-          ...r,
-          contact_name: cmap.get(r.id)?.contact_name ?? null,
-          contact_phone: cmap.get(r.id)?.contact_phone ?? null,
-        }));
-      }
-      setExpandedRunProperties(enriched);
-    } catch {
-      if (showLoading) setExpandedRunProperties([]);
-    } finally {
-      if (showLoading) setIsLoadingRunProperties(false);
-    }
-  };
-
-  const handleExpandRun = async (idx: number, propertyIds: string[]) => {
-    if (expandedRunIdx === idx) {
-      setExpandedRunIdx(null);
-      setExpandedRunProperties([]);
-      setExpandedRunPropertyIds([]);
-      return;
-    }
-    setExpandedRunIdx(idx);
-    setExpandedRunPropertyIds(propertyIds);
-    await fetchExpandedRunProperties(propertyIds, true);
-  };
-
-  // Auto-refresh expanded run properties every 30s so badges (e.g. ✓/✗ vibe) reflect backfill progress live
-  useEffect(() => {
-    if (expandedRunIdx === null || expandedRunPropertyIds.length === 0) return;
-    const interval = setInterval(() => {
-      fetchExpandedRunProperties(expandedRunPropertyIds, false);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [expandedRunIdx, expandedRunPropertyIds]);
-
 
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
     queryKey: ['is-admin', user?.id],
@@ -648,173 +317,6 @@ const AdminTools = () => {
       setIsTesting(false);
     }
   };
-  const handleCrawlListings = async () => {
-    setIsCrawling(true);
-    setCrawlResults(null);
-    setCrawlProgress(null);
-
-    try {
-      const selectedMarketplaces = Object.entries(crawlMarketplaces)
-        .filter(([, v]) => v)
-        .map(([k]) => k);
-
-      if (selectedMarketplaces.length === 0) {
-        toast.error("Select at least one marketplace");
-        setIsCrawling(false);
-        return;
-      }
-
-      toast.info("Starting listing crawl...", {
-        description: `City: ${crawlCity}, Marketplaces: ${selectedMarketplaces.join(', ')}`
-      });
-
-      // Aggregate results across all location calls
-      const allResults: any[] = [];
-      const totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
-      let remainingLocations: string[] | undefined = undefined;
-      let locationIndex = 0;
-      let totalLocations = 0;
-
-      // First call with no specific locations (let the server use defaults for the city)
-      let locationsToSend: string[] = [];
-
-      do {
-        const { data, error } = await supabase.functions.invoke('crawl-external-properties', {
-          body: {
-            city: crawlCity,
-            locations: locationsToSend,
-            marketplaces: selectedMarketplaces,
-            forceRefresh: crawlForceRefresh,
-            storeInDatabase: true,
-            runVibeAnalysis: crawlRunVibe,
-            maxListingsPerLocation: crawlMaxListings,
-          }
-        });
-
-        if (error) throw error;
-
-        const summary = data?.summary || {};
-        remainingLocations = summary.remainingLocations || [];
-        
-        if (totalLocations === 0) {
-          totalLocations = 1 + remainingLocations.length;
-        }
-        locationIndex++;
-
-        setCrawlProgress({ current: locationIndex, total: totalLocations, location: summary.locationProcessed || '?' });
-
-        // Accumulate
-        if (data?.results) allResults.push(...data.results);
-        totals.totalFound += summary.totalFound || 0;
-        totals.totalNew += summary.totalNew || 0;
-        totals.totalUpdated += summary.totalUpdated || 0;
-        totals.totalDuplicatesSkipped += summary.totalDuplicatesSkipped || 0;
-        totals.totalVibeAnalyzed += summary.totalVibeAnalyzed || 0;
-        totals.totalSkipped += summary.totalSkipped || 0;
-        totals.totalErrors += summary.totalErrors || 0;
-        totals.totalStored += summary.totalStored || 0;
-
-        // Next iteration: send remaining locations so the server picks the first one
-        locationsToSend = remainingLocations;
-      } while (remainingLocations && remainingLocations.length > 0);
-
-      setCrawlResults({ ...totals, results: allResults });
-      setCrawlProgress(null);
-      toast.success("Crawl complete!", {
-        description: `New: ${totals.totalNew}, Updated: ${totals.totalUpdated}, Duplicates skipped: ${totals.totalDuplicatesSkipped}`
-      });
-    } catch (error: any) {
-      console.error('Crawl error:', error);
-      toast.error("Crawl failed", { description: error.message });
-    } finally {
-      setIsCrawling(false);
-      setCrawlProgress(null);
-    }
-  };
-
-  const handleProjectCrawl = async () => {
-    const selected = HCMC_APARTMENT_PROJECTS.filter(p => selectedProjectKeys.has(`${p.district}|${p.name}`));
-    if (selected.length === 0) {
-      toast.error("Select at least one project to crawl");
-      return;
-    }
-    const selectedMarketplaces = (Object.entries(projectCrawlMarketplaces) as [('batdongsan' | 'nhatot' | 'housingsgn'), boolean][])
-      .filter(([, v]) => v).map(([k]) => k);
-    if (selectedMarketplaces.length === 0) {
-      toast.error("Select at least one marketplace");
-      return;
-    }
-
-    setIsProjectCrawling(true);
-    setProjectCrawlResults(null);
-    setProjectCrawlProgress(null);
-
-    const totalProjects = selected.length;
-    const allResults: any[] = [];
-    const totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
-    let projectsToSend: ApartmentProject[] = selected;
-    let projectIndex = 0;
-    const minPriceVnd = projectCrawlMinPriceM * 1_000_000;
-
-    try {
-      toast.info("Starting project-targeted crawl…", { description: `${totalProjects} project(s), min ${projectCrawlMinPriceM}M VND/mo` });
-
-      do {
-        const currentProject = projectsToSend[0];
-        const { data, error } = await supabase.functions.invoke('crawl-external-properties', {
-          body: {
-            projects: projectsToSend.map(p => ({ name: p.name, district: p.district, aliases: p.aliases })),
-            marketplaces: selectedMarketplaces,
-            forceRefresh: true,
-            storeInDatabase: true,
-            runVibeAnalysis: projectCrawlRunVibe,
-            maxListingsPerLocation: projectCrawlMaxListings,
-            minPriceVnd,
-          },
-        });
-
-        if (error) throw error;
-
-        const summary = data?.summary || {};
-        const remaining: { name: string; district?: string; aliases?: string[] }[] = summary.remainingProjects || [];
-
-        projectIndex++;
-        setProjectCrawlProgress({ current: projectIndex, total: totalProjects, project: currentProject.name });
-
-        if (data?.results) allResults.push(...data.results);
-        totals.totalFound += summary.totalFound || 0;
-        totals.totalNew += summary.totalNew || 0;
-        totals.totalUpdated += summary.totalUpdated || 0;
-        totals.totalDuplicatesSkipped += summary.totalDuplicatesSkipped || 0;
-        totals.totalVibeAnalyzed += summary.totalVibeAnalyzed || 0;
-        totals.totalSkipped += summary.totalSkipped || 0;
-        totals.totalErrors += summary.totalErrors || 0;
-        totals.totalStored += summary.totalStored || 0;
-
-        projectsToSend = remaining
-          .map(r => HCMC_APARTMENT_PROJECTS.find(p => p.name === r.name && p.district === r.district))
-          .filter((p): p is ApartmentProject => !!p);
-      } while (projectsToSend.length > 0);
-
-      setProjectCrawlResults({ ...totals, results: allResults });
-      toast.success("Project crawl complete", {
-        description: `${totals.totalNew} new · ${totals.totalUpdated} updated · ${totals.totalStored} stored`,
-      });
-
-      try {
-        await supabase.functions.invoke('property-discovery-cache', { body: { action: 'invalidate' } });
-      } catch (e) {
-        console.warn('Cache invalidation failed', e);
-      }
-    } catch (error: any) {
-      console.error('Project crawl error:', error);
-      toast.error("Project crawl failed", { description: error.message });
-    } finally {
-      setIsProjectCrawling(false);
-      setProjectCrawlProgress(null);
-    }
-  };
-
   const handleBatchReanalyzeImageHighlights = async () => {
     setIsBatchReanalyzing(true);
     setBatchReanalyzeResults(null);
@@ -1026,419 +528,13 @@ const AdminTools = () => {
         </TabsContent>
 
         <TabsContent value="listings" className="mt-4 space-y-4 md:space-y-6">
+          {/* Ordered by how often each is touched (2026-10-15): the schedule
+              first, then what it did, then the review queue it feeds. One-off
+              crawls and verification below; maintenance folded away. */}
+          <CrawlSchedulePanel />
+          <CrawlActivityPanel onPreview={setPreviewProperty} />
           <ImageConflictsPanel />
-
-        {/* Crawl External Listings - moved to top */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Crawl External Listings
-            </CardTitle>
-            <CardDescription>
-              Crawl marketplace listings from batdongsan.com.vn and nhatot.vn, store them in the database with vibe analysis.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>City</Label>
-                <select
-                  value={crawlCity}
-                  onChange={(e) => setCrawlCity(e.target.value as 'ho_chi_minh' | 'hanoi' | 'da_nang')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="ho_chi_minh">Ho Chi Minh City</option>
-                  <option value="hanoi">Hanoi</option>
-                  <option value="da_nang">Da Nang</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Marketplaces</Label>
-                <div className="flex flex-col gap-2 pt-1">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={crawlMarketplaces.batdongsan}
-                      onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, batdongsan: e.target.checked }))}
-                      className="rounded"
-                    />
-                    batdongsan.com.vn
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={crawlMarketplaces.nhatot}
-                      onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, nhatot: e.target.checked }))}
-                      className="rounded"
-                    />
-                    nhatot.vn
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={crawlMarketplaces.housingsgn}
-                      onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, housingsgn: e.target.checked }))}
-                      className="rounded"
-                    />
-                    housingsgn.com
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-              <div className="flex items-center gap-2">
-                <Switch checked={crawlForceRefresh} onCheckedChange={setCrawlForceRefresh} id="force-refresh" />
-                <Label htmlFor="force-refresh" className="text-sm">Force refresh (skip cache)</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={crawlRunVibe} onCheckedChange={setCrawlRunVibe} id="run-vibe" />
-                <Label htmlFor="run-vibe" className="text-sm">Run vibe analysis</Label>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm">Max listings per location</Label>
-                <span className="text-sm font-bold text-primary">{crawlMaxListings}</span>
-              </div>
-              <Slider
-                value={[crawlMaxListings]}
-                onValueChange={(v) => setCrawlMaxListings(v[0])}
-                min={1}
-                max={10}
-                step={1}
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">Controls how many individual listing pages are scraped per location/marketplace combo.</p>
-            </div>
-
-            <Button
-              onClick={handleCrawlListings}
-              disabled={isCrawling}
-              size="lg"
-              className="w-full"
-            >
-              {isCrawling ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {crawlProgress 
-                    ? `Crawling ${crawlProgress.location} (${crawlProgress.current}/${crawlProgress.total})...`
-                    : 'Starting Crawl...'
-                  }
-                </>
-              ) : (
-                <>
-                  <Globe className="mr-2 h-4 w-4" />
-                  Start Crawl
-                </>
-              )}
-            </Button>
-
-            {crawlResults && (
-              <div className="p-4 bg-muted rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold">Crawl Results</p>
-                  <Badge>{crawlResults.duration}</Badge>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Found</p>
-                    <p className="text-2xl font-bold">{crawlResults.totalFound}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">New</p>
-                    <p className="text-2xl font-bold text-primary">{crawlResults.totalNew || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Updated</p>
-                    <p className="text-2xl font-bold text-accent-foreground">{crawlResults.totalUpdated || 0}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Duplicates Skipped</p>
-                    <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalDuplicatesSkipped || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Vibe Analyzed</p>
-                    <p className="text-2xl font-bold">{crawlResults.totalVibeAnalyzed}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Cache Skipped</p>
-                    <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalSkipped}</p>
-                  </div>
-                </div>
-
-                {crawlResults.results && crawlResults.results.length > 0 && (
-                  <div className="space-y-1 pt-2 border-t">
-                    <p className="text-xs font-semibold text-muted-foreground">Details:</p>
-                    {crawlResults.results.map((r: any, idx: number) => (
-                      <div key={idx} className="text-xs flex items-center justify-between p-1.5 bg-background rounded">
-                        <span>{r.location} / {r.marketplace}</span>
-                        <div className="flex gap-2">
-                          {r.skipped ? (
-                            <Badge variant="secondary" className="text-xs">Skipped</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs">
-                              {r.propertiesFound} found, {r.propertiesStored} stored
-                            </Badge>
-                          )}
-                          {r.error && <Badge variant="destructive" className="text-xs">Error</Badge>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
-              <p><strong>Note:</strong> Crawling uses Firecrawl + GPT-4o-mini for scraping and extraction. Each location/marketplace combo takes ~30-60s.</p>
-              <p><strong>Cache:</strong> Results are cached for 6 hours unless force refresh is enabled.</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Project-Targeted Crawl */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              Project-Targeted Crawl (HCMC)
-            </CardTitle>
-            <CardDescription>
-              Crawl Batdongsan / Nhatot for listings in specific apartment projects, capped by max monthly rent.
-              Results are post-filtered by project name + aliases so only on-target listings are stored.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Min price (M VND/month)</Label>
-                <div className="flex items-center gap-2">
-                  <Slider value={[projectCrawlMinPriceM]} onValueChange={(v) => setProjectCrawlMinPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
-                  <span className="text-sm font-mono w-16 text-right">{projectCrawlMinPriceM}M</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Max listings / project</Label>
-                <div className="flex items-center gap-2">
-                  <Slider value={[projectCrawlMaxListings]} onValueChange={(v) => setProjectCrawlMaxListings(v[0])} min={3} max={30} step={1} className="flex-1" />
-                  <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxListings}</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Marketplaces</Label>
-                <div className="flex flex-wrap items-center gap-4 pt-1">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={projectCrawlMarketplaces.batdongsan} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, batdongsan: !!c }))} />
-                    Batdongsan
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={projectCrawlMarketplaces.nhatot} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, nhatot: !!c }))} />
-                    Nhatot
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={projectCrawlMarketplaces.housingsgn} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, housingsgn: !!c }))} />
-                    Housingsgn
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Switch checked={projectCrawlRunVibe} onCheckedChange={setProjectCrawlRunVibe} />
-                    Vibe
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label>Projects ({selectedProjectKeys.size} selected)</Label>
-                <Button size="sm" variant="ghost" onClick={() => setSelectedProjectKeys(new Set())} disabled={selectedProjectKeys.size === 0}>Clear</Button>
-              </div>
-              <Input placeholder="Filter projects (e.g. Vinhomes, Celadon, Thao Dien)…" value={projectCrawlSearch} onChange={(e) => setProjectCrawlSearch(e.target.value)} />
-              <div className="max-h-80 overflow-y-auto border rounded-md p-3 space-y-3">
-                {Object.entries(groupProjectsByDistrict()).map(([district, list]) => {
-                  const q = projectCrawlSearch.toLowerCase().trim();
-                  const visible = list.filter(p => !q || p.name.toLowerCase().includes(q) || (p.aliases || []).some(a => a.toLowerCase().includes(q)) || p.district.toLowerCase().includes(q));
-                  if (visible.length === 0) return null;
-                  const visibleKeys = visible.map(p => `${p.district}|${p.name}`);
-                  const allSelected = visibleKeys.every(k => selectedProjectKeys.has(k));
-                  return (
-                    <div key={district} className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-semibold uppercase text-muted-foreground">{district}</div>
-                        <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => {
-                          setSelectedProjectKeys(prev => {
-                            const next = new Set(prev);
-                            if (allSelected) visibleKeys.forEach(k => next.delete(k));
-                            else visibleKeys.forEach(k => next.add(k));
-                            return next;
-                          });
-                        }}>{allSelected ? 'Unselect all' : 'Select all'}</Button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
-                        {visible.map(p => {
-                          const key = `${p.district}|${p.name}`;
-                          const checked = selectedProjectKeys.has(key);
-                          return (
-                            <label key={key} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/50 cursor-pointer">
-                              <Checkbox checked={checked} onCheckedChange={(c) => {
-                                setSelectedProjectKeys(prev => {
-                                  const next = new Set(prev);
-                                  if (c) next.add(key); else next.delete(key);
-                                  return next;
-                                });
-                              }} />
-                              <span className="truncate">{p.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <Button onClick={handleProjectCrawl} disabled={isProjectCrawling || selectedProjectKeys.size === 0}>
-              {isProjectCrawling ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Crawling projects…</>) : (<><Search className="h-4 w-4 mr-2" /> Start project crawl ({selectedProjectKeys.size})</>)}
-            </Button>
-
-            {projectCrawlProgress && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Project {projectCrawlProgress.current} of {projectCrawlProgress.total}</span>
-                  <span className="text-muted-foreground truncate ml-2">{projectCrawlProgress.project}</span>
-                </div>
-                <Progress value={(projectCrawlProgress.current / projectCrawlProgress.total) * 100} />
-              </div>
-            )}
-
-            {projectCrawlResults && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Found</div><div className="font-semibold">{projectCrawlResults.totalFound}</div></div>
-                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">New</div><div className="font-semibold text-primary">{projectCrawlResults.totalNew}</div></div>
-                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Updated</div><div className="font-semibold">{projectCrawlResults.totalUpdated}</div></div>
-                  <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Stored</div><div className="font-semibold">{projectCrawlResults.totalStored}</div></div>
-                </div>
-                {Array.isArray(projectCrawlResults.results) && projectCrawlResults.results.length > 0 && (
-                  <div className="border rounded">
-                    <div className="px-3 py-2 text-xs font-semibold bg-muted/40 border-b grid grid-cols-12 gap-2">
-                      <div className="col-span-5">Project · district</div>
-                      <div className="col-span-2">Marketplace</div>
-                      <div className="col-span-1 text-right">Found</div>
-                      <div className="col-span-1 text-right">New</div>
-                      <div className="col-span-1 text-right">Upd</div>
-                      <div className="col-span-2 text-right">Status</div>
-                    </div>
-                    <div className="max-h-64 overflow-auto divide-y text-xs">
-                      {projectCrawlResults.results.map((r: any, idx: number) => (
-                        <div key={idx} className="px-3 py-2 grid grid-cols-12 gap-2 items-center">
-                          <div className="col-span-5 truncate font-medium">{r.location}</div>
-                          <div className="col-span-2 text-muted-foreground">{r.marketplace}</div>
-                          <div className="col-span-1 text-right">{r.propertiesFound}</div>
-                          <div className="col-span-1 text-right text-primary">{r.newListings}</div>
-                          <div className="col-span-1 text-right">{r.updatedListings}</div>
-                          <div className="col-span-2 text-right text-muted-foreground truncate">
-                            {r.skipped ? 'cached' : r.error ? `❌ ${r.error}` : `${r.propertiesStored} stored`}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Raw Marketplace Harvest — uses Firecrawl credits, skips OpenAI */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              Raw Marketplace Harvest
-            </CardTitle>
-            <CardDescription>
-              Burn Firecrawl credits to scrape marketplaces and store raw listings (hidden, no OpenAI cost).
-              Each click runs ONE batch and auto-chains the next batch via QStash every ~5s until Firecrawl is out of credits.
-              Listings stay <code>is_active=false</code> until you run vibe analysis later.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                onClick={async () => {
-                  try {
-                    const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest' } });
-                    if (error) throw error;
-                    const s = data?.summary;
-                    const newN = s?.newListings || 0;
-                    const updN = s?.updatedListings || 0;
-                    toast.success('Raw harvest (districts) — batch started', {
-                      description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
-                    });
-                  } catch (err: any) {
-                    toast.error('Raw harvest failed', { description: err.message });
-                  }
-                }}
-              >
-                <Sparkles className="h-4 w-4 mr-1" />
-                Start Raw Harvest (Districts)
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={async () => {
-                  try {
-                    const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest-projects' } });
-                    if (error) throw error;
-                    const s = data?.summary;
-                    const newN = s?.newListings || 0;
-                    const updN = s?.updatedListings || 0;
-                    toast.success('Raw harvest (HCMC projects) — batch started', {
-                      description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
-                    });
-                  } catch (err: any) {
-                    toast.error('Raw harvest (projects) failed', { description: err.message });
-                  }
-                }}
-              >
-                <Sparkles className="h-4 w-4 mr-1" />
-                Start Raw Harvest (HCMC Projects)
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-status' } });
-                    if (error) throw error;
-                    const s = data?.session;
-                    const p = data?.projectsSession;
-                    toast.message('Raw harvest session', {
-                      description: [
-                        s ? `Districts: ${s.runs} runs · +${s.newListings} new · last ${s.lastTarget || '-'}${s.outOfCredits ? ' · OOC' : ''}` : 'Districts: none yet',
-                        p ? `Projects: ${p.runs} runs · +${p.newListings} new · last ${p.lastTarget || '-'}${p.outOfCredits ? ' · OOC' : ''}` : 'Projects: none yet',
-                      ].join(' | '),
-                    });
-                  } catch (err: any) {
-                    toast.error('Status failed', { description: err.message });
-                  }
-                }}
-              >
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Check Raw Status
-              </Button>
-            </div>
-            <div className="text-xs text-muted-foreground space-y-1 border-t pt-2">
-              <p><strong>Note on the toast:</strong> "+0 new, N re-saved" is normal — it means Firecrawl returned listings already stored. The chain keeps moving to fresh targets automatically.</p>
-              <p><strong>To convert raw → live later:</strong> run vibe analysis on rows where <code>raw_only=true</code> (one-click button coming, or use existing process-vibe-queue).</p>
-            </div>
-          </CardContent>
-        </Card>
+          <CrawlNowPanel />
 
         {/* Verify External Listings */}
         <Card>
@@ -1448,14 +544,14 @@ const AdminTools = () => {
               Verify External Listings
             </CardTitle>
             <CardDescription>
-              Check active external listings against their source sites (Nhatot, Batdongsan, Airbnb).
-              Listings detected as removed/expired twice in a row are auto-deactivated. Runs daily via cron.
+              Checks live listings against their source ads, oldest-checked first. A listing found removed or
+              expired twice in a row is taken down. The cron runs every 20 minutes, 25 listings at a time.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Button onClick={handleVerifyExternalListings} disabled={isVerifyingListings}>
               {isVerifyingListings ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verifying (up to 50)…</>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verifying (up to 25)…</>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-2" /> Verify external listings now</>
               )}
@@ -1594,808 +690,286 @@ const AdminTools = () => {
           </CardContent>
         </Card>
 
-        {/* Batch Re-analyze Image Highlights */}
+          <CrawlerRejectionsPanel />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              Backfill Image Highlights
-            </CardTitle>
-            <CardDescription>
-              Re-analyze external properties that have legacy <code>per_image</code> data but missing <code>image_analyses</code> in vibe_analysis.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              onClick={handleBatchReanalyzeImageHighlights}
-              disabled={isBatchReanalyzing}
-              size="lg"
-              className="w-full"
-            >
-              {isBatchReanalyzing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Re-analyzing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Backfill Image Highlights
-                </>
-              )}
-            </Button>
-
-            {backfillProgress && (
-              <div className="space-y-3 p-4 bg-muted rounded-lg">
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>{backfillProgress.current} of {backfillProgress.total} properties</span>
-                  <span>{Math.round((backfillProgress.current / backfillProgress.total) * 100)}%</span>
+          <Collapsible>
+            <CollapsibleTrigger className="group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+              Maintenance - image mirroring, translation, highlight backfill
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 space-y-4 md:space-y-6">
+          {/* Mirror crawled images to Supabase Storage */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                Mirror Crawled Images to Storage
+              </CardTitle>
+              <CardDescription>
+                Downloads remote CDN images on external listings into the <code>external-property-images</code> bucket so they survive source-listing removal. "Mirror Everything" loops until done (incl. raw + inactive).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Mirror progress status */}
+              <div className="p-4 rounded-lg border bg-card space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-semibold text-sm">Mirror Progress</h4>
+                  <Button size="sm" variant="ghost" onClick={loadMirrorStatus} disabled={mirrorStatusLoading}>
+                    {mirrorStatusLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  </Button>
                 </div>
-                <Progress value={(backfillProgress.current / backfillProgress.total) * 100} className="h-2" />
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  <span className="truncate">{backfillProgress.currentTitle}</span>
-                </div>
-                <div className="flex gap-4 text-xs">
-                  <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-primary" /> {backfillProgress.fixed} fixed</span>
-                  <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" /> {backfillProgress.errors} errors</span>
-                </div>
+                {!mirrorStatus && !mirrorStatusLoading && (
+                  <p className="text-xs text-muted-foreground">No data yet.</p>
+                )}
+                {mirrorStatus && (
+                  <>
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Images mirrored</span>
+                        <span className="font-medium">{mirrorStatus.mirrored_images} / {mirrorStatus.total_images} ({mirrorStatus.mirrored_pct}%)</span>
+                      </div>
+                      <Progress value={mirrorStatus.mirrored_pct} className="h-2" />
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="p-2 rounded bg-muted">
+                        <div className="text-muted-foreground">Listings w/ images</div>
+                        <div className="font-semibold text-sm">{mirrorStatus.rows_with_images}</div>
+                      </div>
+                      <div className="p-2 rounded bg-muted">
+                        <div className="text-muted-foreground">Active listings</div>
+                        <div className="font-semibold text-sm">{mirrorStatus.active_rows}</div>
+                      </div>
+                      <div className="p-2 rounded bg-muted">
+                        <div className="text-muted-foreground">Rows w/ remote URLs</div>
+                        <div className="font-semibold text-sm">{mirrorStatus.rows_with_unmirrored}</div>
+                      </div>
+                      <div className="p-2 rounded bg-muted">
+                        <div className="text-muted-foreground">Active rows pending</div>
+                        <div className={`font-semibold text-sm ${mirrorStatus.active_rows_with_unmirrored === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {mirrorStatus.active_rows_with_unmirrored}
+                        </div>
+                      </div>
+                    </div>
+                    {mirrorStatus.active_rows_with_unmirrored === 0 && mirrorStatus.remote_images > 0 && (
+                      <p className="text-xs text-emerald-600">All active listings fully mirrored. Remaining {mirrorStatus.remote_images} remote images are on inactive/raw rows.</p>
+                    )}
+                    {mirrorStatus.remote_images === 0 && (
+                      <p className="text-xs text-emerald-600">Every crawled image is mirrored to storage.</p>
+                    )}
+                  </>
+                )}
               </div>
-            )}
 
-            {batchReanalyzeResults && (
-              <div className="p-4 bg-muted rounded-lg space-y-2">
-                <p className="font-semibold">Backfill Results</p>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Found</p>
-                    <p className="text-2xl font-bold">{batchReanalyzeResults.total}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Fixed</p>
-                    <p className="text-2xl font-bold text-primary">{batchReanalyzeResults.fixed}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Errors</p>
-                    <p className="text-2xl font-bold text-destructive">{batchReanalyzeResults.errors}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <p className="text-xs text-muted-foreground">
-              Finds properties with old <code>per_image</code> format or missing <code>image_analyses</code>, then calls analyze-vibe to generate proper per-image highlights.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Mirror crawled images to Supabase Storage */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              Mirror Crawled Images to Storage
-            </CardTitle>
-            <CardDescription>
-              Downloads remote CDN images on external listings into the <code>external-property-images</code> bucket so they survive source-listing removal. "Mirror Everything" loops until done (incl. raw + inactive).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Mirror progress status */}
-            <div className="p-4 rounded-lg border bg-card space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="font-semibold text-sm">Mirror Progress</h4>
-                <Button size="sm" variant="ghost" onClick={loadMirrorStatus} disabled={mirrorStatusLoading}>
-                  {mirrorStatusLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  onClick={async () => {
+                    try {
+                      setMirrorRunning(true);
+                      let totalProcessed = 0;
+                      let rounds = 0;
+                      let idleStreak = 0;
+                      const maxRounds = 1000;
+                      while (rounds < maxRounds) {
+                        rounds++;
+                        const { data, error } = await supabase.functions.invoke('backfill-external-images', {
+                          body: { batchSize: 10, includeRaw: true, includeInactive: true },
+                        });
+                        if (error) throw error;
+                        const processed = Number(data?.processed ?? 0);
+                        const bumped = Number(data?.bumped_already_done ?? 0);
+                        totalProcessed += processed;
+                        setMirrorResult({ ...data, totalProcessed, rounds });
+                        // Truly done only when there's nothing left to mirror AND
+                        // nothing left to advance past (cursor exhausted).
+                        if (processed === 0 && bumped === 0) {
+                          idleStreak++;
+                          if (idleStreak >= 2) break;
+                        } else {
+                          idleStreak = 0;
+                        }
+                        if (rounds % 5 === 0) loadMirrorStatus();
+                        await new Promise((r) => setTimeout(r, 250));
+                      }
+                      await loadMirrorStatus();
+                      toast.success(`Mirror Remaining done — ${totalProcessed} listings across ${rounds} rounds`);
+                    } catch (e: any) {
+                      toast.error('Mirror failed', { description: e?.message || String(e) });
+                    } finally {
+                      setMirrorRunning(false);
+                    }
+                  }}
+                  disabled={mirrorRunning || (mirrorStatus && mirrorStatus.remote_images === 0)}
+                  size="lg"
+                  className="w-full"
+                >
+                  {mirrorRunning ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring remaining...</>
+                  ) : (
+                    <><Sparkles className="mr-2 h-4 w-4" />Mirror Remaining{mirrorStatus ? ` (${mirrorStatus.remote_images.toLocaleString()} images / ${mirrorStatus.rows_with_unmirrored} listings)` : ''}</>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      setMirrorRunning(true);
+                      const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: false, includeInactive: false } });
+                      if (error) throw error;
+                      setMirrorResult(data);
+                      toast.success(`Mirrored ${data?.processed ?? 0} listings`);
+                    } catch (e: any) {
+                      toast.error('Mirror failed', { description: e?.message || String(e) });
+                    } finally {
+                      setMirrorRunning(false);
+                    }
+                  }}
+                  disabled={mirrorRunning}
+                  size="lg"
+                  className="w-full"
+                >
+                  Active Processed Only
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!confirm('Repair listings whose mirrored images collided with other listings?\n\nThis will:\n• Restore images from raw_data.original_image_urls when available\n• Otherwise hide the listing and mark it for re-crawl')) return;
+                    try {
+                      setMirrorRunning(true);
+                      const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { action: 'repair-collisions' } });
+                      if (error) throw error;
+                      setMirrorResult(data);
+                      toast.success(`Repair done — restored ${data?.rows_restored_from_raw_data ?? 0}, cleared ${data?.rows_cleared_for_recrawl ?? 0}`);
+                      await loadMirrorStatus();
+                    } catch (e: any) {
+                      toast.error('Repair failed', { description: e?.message || String(e) });
+                    } finally {
+                      setMirrorRunning(false);
+                    }
+                  }}
+                  disabled={mirrorRunning}
+                  size="lg"
+                  className="w-full"
+                >
+                  Repair Collisions
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      setLanguageRunning(true);
+                      const { data, error } = await supabase.functions.invoke('backfill-listing-language', { body: { batchSize: 20 } });
+                      if (error) throw error;
+                      setMirrorResult(data);
+                      toast.success(
+                        `Rewrote ${data?.rewritten ?? 0} listing(s) in English`,
+                        { description: `${data?.remaining ?? 0} still to go` },
+                      );
+                    } catch (e: any) {
+                      toast.error('Translation backfill failed', { description: e?.message || String(e) });
+                    } finally {
+                      setLanguageRunning(false);
+                    }
+                  }}
+                  disabled={languageRunning}
+                  size="lg"
+                  className="w-full"
+                >
+                  {languageRunning ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rewriting in English...</>
+                  ) : (
+                    'Translate Vietnamese Listings'
+                  )}
                 </Button>
               </div>
-              {!mirrorStatus && !mirrorStatusLoading && (
-                <p className="text-xs text-muted-foreground">No data yet.</p>
-              )}
-              {mirrorStatus && (
-                <>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-muted-foreground">Images mirrored</span>
-                      <span className="font-medium">{mirrorStatus.mirrored_images} / {mirrorStatus.total_images} ({mirrorStatus.mirrored_pct}%)</span>
-                    </div>
-                    <Progress value={mirrorStatus.mirrored_pct} className="h-2" />
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div className="p-2 rounded bg-muted">
-                      <div className="text-muted-foreground">Listings w/ images</div>
-                      <div className="font-semibold text-sm">{mirrorStatus.rows_with_images}</div>
-                    </div>
-                    <div className="p-2 rounded bg-muted">
-                      <div className="text-muted-foreground">Active listings</div>
-                      <div className="font-semibold text-sm">{mirrorStatus.active_rows}</div>
-                    </div>
-                    <div className="p-2 rounded bg-muted">
-                      <div className="text-muted-foreground">Rows w/ remote URLs</div>
-                      <div className="font-semibold text-sm">{mirrorStatus.rows_with_unmirrored}</div>
-                    </div>
-                    <div className="p-2 rounded bg-muted">
-                      <div className="text-muted-foreground">Active rows pending</div>
-                      <div className={`font-semibold text-sm ${mirrorStatus.active_rows_with_unmirrored === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                        {mirrorStatus.active_rows_with_unmirrored}
-                      </div>
-                    </div>
-                  </div>
-                  {mirrorStatus.active_rows_with_unmirrored === 0 && mirrorStatus.remote_images > 0 && (
-                    <p className="text-xs text-emerald-600">All active listings fully mirrored. Remaining {mirrorStatus.remote_images} remote images are on inactive/raw rows.</p>
+              {mirrorResult && (
+                <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
+                  {mirrorResult.totalProcessed !== undefined && (
+                    <p>Total mirrored so far: <span className="font-semibold">{mirrorResult.totalProcessed}</span> (round {mirrorResult.rounds})</p>
                   )}
-                  {mirrorStatus.remote_images === 0 && (
-                    <p className="text-xs text-emerald-600">Every crawled image is mirrored to storage.</p>
-                  )}
-                </>
+                  <p>Last batch processed: <span className="font-semibold">{mirrorResult.processed}</span></p>
+                  <p>Remaining candidates this run: <span className="font-semibold">{mirrorResult.remaining_candidates}</span></p>
+                </div>
               )}
-            </div>
+            </CardContent>
+          </Card>
 
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Button
-                onClick={async () => {
-                  try {
-                    setMirrorRunning(true);
-                    let totalProcessed = 0;
-                    let rounds = 0;
-                    let idleStreak = 0;
-                    const maxRounds = 1000;
-                    while (rounds < maxRounds) {
-                      rounds++;
-                      const { data, error } = await supabase.functions.invoke('backfill-external-images', {
-                        body: { batchSize: 10, includeRaw: true, includeInactive: true },
-                      });
-                      if (error) throw error;
-                      const processed = Number(data?.processed ?? 0);
-                      const bumped = Number(data?.bumped_already_done ?? 0);
-                      totalProcessed += processed;
-                      setMirrorResult({ ...data, totalProcessed, rounds });
-                      // Truly done only when there's nothing left to mirror AND
-                      // nothing left to advance past (cursor exhausted).
-                      if (processed === 0 && bumped === 0) {
-                        idleStreak++;
-                        if (idleStreak >= 2) break;
-                      } else {
-                        idleStreak = 0;
-                      }
-                      if (rounds % 5 === 0) loadMirrorStatus();
-                      await new Promise((r) => setTimeout(r, 250));
-                    }
-                    await loadMirrorStatus();
-                    toast.success(`Mirror Remaining done — ${totalProcessed} listings across ${rounds} rounds`);
-                  } catch (e: any) {
-                    toast.error('Mirror failed', { description: e?.message || String(e) });
-                  } finally {
-                    setMirrorRunning(false);
-                  }
-                }}
-                disabled={mirrorRunning || (mirrorStatus && mirrorStatus.remote_images === 0)}
-                size="lg"
-                className="w-full"
-              >
-                {mirrorRunning ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring remaining...</>
-                ) : (
-                  <><Sparkles className="mr-2 h-4 w-4" />Mirror Remaining{mirrorStatus ? ` (${mirrorStatus.remote_images.toLocaleString()} images / ${mirrorStatus.rows_with_unmirrored} listings)` : ''}</>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    setMirrorRunning(true);
-                    const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: false, includeInactive: false } });
-                    if (error) throw error;
-                    setMirrorResult(data);
-                    toast.success(`Mirrored ${data?.processed ?? 0} listings`);
-                  } catch (e: any) {
-                    toast.error('Mirror failed', { description: e?.message || String(e) });
-                  } finally {
-                    setMirrorRunning(false);
-                  }
-                }}
-                disabled={mirrorRunning}
-                size="lg"
-                className="w-full"
-              >
-                Active Processed Only
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={async () => {
-                  if (!confirm('Repair listings whose mirrored images collided with other listings?\n\nThis will:\n• Restore images from raw_data.original_image_urls when available\n• Otherwise hide the listing and mark it for re-crawl')) return;
-                  try {
-                    setMirrorRunning(true);
-                    const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { action: 'repair-collisions' } });
-                    if (error) throw error;
-                    setMirrorResult(data);
-                    toast.success(`Repair done — restored ${data?.rows_restored_from_raw_data ?? 0}, cleared ${data?.rows_cleared_for_recrawl ?? 0}`);
-                    await loadMirrorStatus();
-                  } catch (e: any) {
-                    toast.error('Repair failed', { description: e?.message || String(e) });
-                  } finally {
-                    setMirrorRunning(false);
-                  }
-                }}
-                disabled={mirrorRunning}
-                size="lg"
-                className="w-full"
-              >
-                Repair Collisions
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    setLanguageRunning(true);
-                    const { data, error } = await supabase.functions.invoke('backfill-listing-language', { body: { batchSize: 20 } });
-                    if (error) throw error;
-                    setMirrorResult(data);
-                    toast.success(
-                      `Rewrote ${data?.rewritten ?? 0} listing(s) in English`,
-                      { description: `${data?.remaining ?? 0} still to go` },
-                    );
-                  } catch (e: any) {
-                    toast.error('Translation backfill failed', { description: e?.message || String(e) });
-                  } finally {
-                    setLanguageRunning(false);
-                  }
-                }}
-                disabled={languageRunning}
-                size="lg"
-                className="w-full"
-              >
-                {languageRunning ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rewriting in English...</>
-                ) : (
-                  'Translate Vietnamese Listings'
-                )}
-              </Button>
-            </div>
-            {mirrorResult && (
-              <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
-                {mirrorResult.totalProcessed !== undefined && (
-                  <p>Total mirrored so far: <span className="font-semibold">{mirrorResult.totalProcessed}</span> (round {mirrorResult.rounds})</p>
-                )}
-                <p>Last batch processed: <span className="font-semibold">{mirrorResult.processed}</span></p>
-                <p>Remaining candidates this run: <span className="font-semibold">{mirrorResult.remaining_candidates}</span></p>
-                <p className="text-xs text-muted-foreground">~669 listings / ~4,123 images to mirror (~600 MB est.). New crawls auto-mirror after vibe analysis.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {/* Batch Re-analyze Image Highlights */}
 
-        <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
-          <CardHeader className="px-4 md:px-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="flex flex-wrap items-center gap-2 text-base md:text-lg">
-                  <Clock className="h-5 w-5" />
-                  Auto-Crawl Schedule
-                  {isPaused && <Badge variant="destructive" className="text-xs">Paused</Badge>}
-                  {!isPaused && <Badge variant="default" className="text-xs bg-emerald-600">Active</Badge>}
-                  {crawlConfigStorageError && <Badge variant="outline" className="text-xs">Storage unavailable</Badge>}
-                </CardTitle>
-                <CardDescription className="mt-1 text-xs md:text-sm">
-                  Cron runs every 30 min. The function checks config and crawls the least-recently-crawled location.
-                </CardDescription>
-              </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                Backfill Image Highlights
+              </CardTitle>
+              <CardDescription>
+                Re-analyze external properties that have legacy <code>per_image</code> data but missing <code>image_analyses</code> in vibe_analysis.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <Button
-                variant={isPaused ? 'default' : 'destructive'}
-                size="sm"
-                onClick={handleTogglePause}
-                disabled={isSavingConfig || !!crawlConfigStorageError}
-                className="shrink-0 self-start"
+                onClick={handleBatchReanalyzeImageHighlights}
+                disabled={isBatchReanalyzing}
+                size="lg"
+                className="w-full"
               >
-                {isSavingConfig ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : isPaused ? (
-                  <><Play className="h-4 w-4 mr-1" /> Resume</>
+                {isBatchReanalyzing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Re-analyzing...
+                  </>
                 ) : (
-                  <><Pause className="h-4 w-4 mr-1" /> Pause</>
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Backfill Image Highlights
+                  </>
                 )}
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {crawlConfigStorageError && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                Auto-crawl is fail-closed as paused because Upstash Redis config storage is unavailable: {crawlConfigStorageError}
-              </div>
-            )}
 
-            {/* Crawl Settings */}
-            <div className="border rounded-lg p-3 space-y-3">
-              <p className="text-sm font-semibold flex items-center gap-1">
-                <Settings2 className="h-4 w-4" /> Crawl Settings
+              {backfillProgress && (
+                <div className="space-y-3 p-4 bg-muted rounded-lg">
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>{backfillProgress.current} of {backfillProgress.total} properties</span>
+                    <span>{Math.round((backfillProgress.current / backfillProgress.total) * 100)}%</span>
+                  </div>
+                  <Progress value={(backfillProgress.current / backfillProgress.total) * 100} className="h-2" />
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span className="truncate">{backfillProgress.currentTitle}</span>
+                  </div>
+                  <div className="flex gap-4 text-xs">
+                    <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-primary" /> {backfillProgress.fixed} fixed</span>
+                    <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" /> {backfillProgress.errors} errors</span>
+                  </div>
+                </div>
+              )}
+
+              {batchReanalyzeResults && (
+                <div className="p-4 bg-muted rounded-lg space-y-2">
+                  <p className="font-semibold">Backfill Results</p>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Found</p>
+                      <p className="text-2xl font-bold">{batchReanalyzeResults.total}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Fixed</p>
+                      <p className="text-2xl font-bold text-primary">{batchReanalyzeResults.fixed}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Errors</p>
+                      <p className="text-2xl font-bold text-destructive">{batchReanalyzeResults.errors}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                Finds properties with old <code>per_image</code> format or missing <code>image_analyses</code>, then calls analyze-vibe to generate proper per-image highlights.
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Re-crawl cooldown</Label>
-                    <span className="text-xs font-bold text-primary">
-                      {effectiveFrequency >= 60 
-                        ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
-                        : `${effectiveFrequency}min`}
-                    </span>
-                  </div>
-                  <Slider
-                    value={[effectiveFrequency]}
-                    onValueChange={(v) => setLocalFrequency(v[0])}
-                    min={30}
-                    max={4320}
-                    step={30}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    How long before the same location can be re-crawled
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Max listings per run</Label>
-                    <span className="text-xs font-bold text-primary">{effectiveMaxListings}</span>
-                  </div>
-                  <Slider
-                    value={[effectiveMaxListings]}
-                    onValueChange={(v) => setLocalMaxListings(v[0])}
-                    min={1}
-                    max={10}
-                    step={1}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Maximum listings scraped per location per run
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Min price (VND/month)</Label>
-                    <span className="text-xs font-bold text-primary">{(effectiveMinPrice / 1e6).toFixed(1)}M</span>
-                  </div>
-                  <Slider
-                    value={[effectiveMinPrice]}
-                    onValueChange={(v) => setLocalMinPrice(v[0])}
-                    min={0}
-                    max={20_000_000}
-                    step={500_000}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Listings below this rent are skipped - keeps inventory mid-range for our target renters
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Source platforms</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {ALL_MARKETPLACES.map((mp) => {
-                      const active = effectiveMarketplaces.includes(mp);
-                      return (
-                        <button
-                          key={mp}
-                          type="button"
-                          onClick={() => {
-                            const next = active
-                              ? effectiveMarketplaces.filter((m) => m !== mp)
-                              : [...effectiveMarketplaces, mp];
-                            if (next.length === 0) {
-                              toast.error('Keep at least one platform enabled');
-                              return;
-                            }
-                            setLocalMarketplaces(next);
-                          }}
-                          className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
-                            active
-                              ? 'bg-primary text-primary-foreground border-primary'
-                              : 'bg-background border-border text-muted-foreground hover:border-primary/50'
-                          }`}
-                        >
-                          {mp}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    The rotation only crawls the selected platforms
-                  </p>
-                </div>
-              </div>
-              {hasUnsavedChanges && (
-                <div className="flex justify-end pt-1">
-                  <Button
-                    size="sm"
-                    onClick={handleSaveConfig}
-                    disabled={isSavingConfig}
-                    className="h-7 text-xs"
-                  >
-                    {isSavingConfig ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                    Save Settings
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="p-3 bg-muted rounded-lg text-center">
-                <p className="text-xs text-muted-foreground">Cron Interval</p>
-                <p className="text-sm font-bold">Every 30 min</p>
-              </div>
-              <div className="p-3 bg-muted rounded-lg text-center">
-                <p className="text-xs text-muted-foreground">Locations</p>
-                <p className="text-sm font-bold">20 districts</p>
-              </div>
-              <div className="p-3 bg-muted rounded-lg text-center">
-                <p className="text-xs text-muted-foreground">Marketplaces</p>
-                <p className="text-sm font-bold">{effectiveMarketplaces.join(' + ') || 'none'}</p>
-              </div>
-              <div className="p-3 bg-muted rounded-lg text-center">
-                <p className="text-xs text-muted-foreground">Cooldown</p>
-                <p className="text-sm font-bold">
-                  {effectiveFrequency >= 60 
-                    ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
-                    : `${effectiveFrequency}min`}
-                </p>
-              </div>
-            </div>
-
-            {/* Dynamic Coverage Tracker */}
-            <div className="text-sm space-y-3 border-t pt-3">
-              <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> District Coverage Tracker</p>
-              {(() => {
-                 const ALL_DISTRICTS: Record<string, { label: string; districts: string[] }> = {
-                  ho_chi_minh: {
-                    label: 'Ho Chi Minh City',
-                    districts: ['District 1','District 3','District 4','District 7','District 10','Binh Thanh','Phu Nhuan','Tan Binh','Go Vap','Thu Duc'],
-                  },
-                  hanoi: {
-                    label: 'Hanoi',
-                    districts: ['Ba Dinh','Hoan Kiem','Dong Da','Cau Giay','Hai Ba Trung','Tay Ho','Long Bien'],
-                  },
-                  da_nang: {
-                    label: 'Da Nang',
-                    districts: ['Hai Chau','Son Tra','Ngu Hanh Son'],
-                  },
-                };
-
-                const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
-
-                const matchesDistrict = (districtName: string, locationKey: string): boolean => {
-                  const norm = normalize(districtName);
-                  const normKey = normalize(locationKey);
-                  // Direct containment
-                  if (normKey.includes(norm) || norm.includes(normKey)) return true;
-                  // For "district N", also match "q N" and "quan N"
-                  const distMatch = norm.match(/^district (\d+)$/);
-                  if (distMatch) {
-                    const n = distMatch[1];
-                    if (normKey.includes(`district ${n}`) || normKey.includes(`q${n}`) || normKey.includes(`quan ${n}`)) return true;
-                  }
-                  return false;
-                };
-
-                const totalDistricts = Object.values(ALL_DISTRICTS).reduce((sum, c) => sum + c.districts.length, 0);
-                let totalCrawled = 0;
-
-                return (
-                  <div className="space-y-4">
-                    {Object.entries(ALL_DISTRICTS).map(([cityKey, cityData]) => {
-                      const crawledCount = cityData.districts.filter(d => {
-                        if (!districtCoverage) return false;
-                        for (const [key] of districtCoverage) {
-                          if (matchesDistrict(d, key)) return true;
-                        }
-                        return false;
-                      }).length;
-                      totalCrawled += crawledCount;
-                      const pct = Math.round((crawledCount / cityData.districts.length) * 100);
-
-                      return (
-                        <div key={cityKey} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium text-xs">{cityData.label} ({crawledCount}/{cityData.districts.length})</p>
-                            <Badge variant={pct === 100 ? 'default' : pct > 0 ? 'secondary' : 'outline'} className="text-xs">
-                              {pct}%
-                            </Badge>
-                          </div>
-                          <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary rounded-full transition-all"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {cityData.districts.map(district => {
-                              let info: { lastCrawled: string; sources: Set<string>; count: number } | null = null;
-                              if (districtCoverage) {
-                                for (const [key, val] of districtCoverage) {
-                                  if (matchesDistrict(district, key)) {
-                                    // Merge if multiple location keys match the same district
-                                    if (!info) {
-                                      info = { ...val, sources: new Set(val.sources) };
-                                    } else {
-                                      val.sources.forEach(s => info!.sources.add(s));
-                                      info.count += val.count;
-                                      if (val.lastCrawled > info.lastCrawled) info.lastCrawled = val.lastCrawled;
-                                    }
-                                  }
-                                }
-                              }
-                              const isCrawled = !!info;
-                              const displayName = district.replace(/^quận /, 'Q');
-                              return (
-                                <span
-                                  key={district}
-                                  title={isCrawled
-                                    ? `Last crawled: ${getTimeAgo(info!.lastCrawled)} · ${info!.count} listings · Sources: ${Array.from(info!.sources).join(', ')}`
-                                    : 'Not yet crawled'}
-                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
-                                    isCrawled
-                                      ? 'bg-primary/10 text-primary border-primary/20'
-                                      : 'bg-muted text-muted-foreground border-border'
-                                  }`}
-                                >
-                                  {isCrawled ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5 opacity-40" />}
-                                  {displayName}
-                                  {isCrawled && <span className="opacity-60">({getTimeAgo(info!.lastCrawled)})</span>}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div className="flex items-center justify-between pt-1 border-t text-xs text-muted-foreground">
-                      <span>Total: {totalCrawled}/{totalDistricts} districts crawled</span>
-                      <span>{Math.round((totalCrawled / totalDistricts) * 100)}% coverage</span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            <div className="text-sm text-muted-foreground space-y-1 border-t pt-3">
-              <p><strong>Deduplication:</strong> URL normalization + database check prevents duplicate entries.</p>
-              <p><strong>Fake filter:</strong> Listings with price &lt;2M or &gt;200M VND, no images, sale keywords, or non-residential keywords are automatically rejected.</p>
-              <p><strong>Freshness:</strong> Skips locations crawled within the cooldown period (default 48h). Listings stay active for as long as their source link is live - they are retired only when verification finds the source page gone.</p>
-              <p><strong>Credit saving:</strong> Search pages use direct HTTP fetch; Firecrawl credits (max 5/run) reserved for detail pages only.</p>
-            </div>
-
-            {/* Active Listings Stats */}
-            {crawlStats && (
-              <div className="border-t pt-3 space-y-2">
-                <p className="text-sm font-semibold flex items-center gap-1">
-                  <Activity className="h-4 w-4" /> Active Listings: {crawlStats.total}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(crawlStats.byCitySource).map(([key, count]) => {
-                    const [city, source] = key.split('/');
-                    const cityLabel = city === 'ho_chi_minh' ? 'HCM' : city === 'hanoi' ? 'Hanoi' : city === 'da_nang' ? 'Da Nang' : city;
-                    return (
-                      <Badge key={key} variant="outline" className="text-xs">
-                        {cityLabel} / {source}: {count}
-                      </Badge>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Crawl Activity Log */}
-            <div className="border-t pt-3 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <p className="text-sm font-semibold flex items-center gap-1">
-                  <Clock className="h-4 w-4" /> Recent Crawl Runs
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => refetchCrawlActivity()}
-                    className="h-7 text-xs"
-                  >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Refresh
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={isManualCrawlTriggering}
-                    onClick={async () => {
-                      setIsManualCrawlTriggering(true);
-                      try {
-                        const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: {} });
-                        if (error) throw error;
-                        toast.success('Auto-crawl triggered', {
-                          description: data?.summary 
-                            ? `${data.summary.target?.location}/${data.summary.target?.marketplace}: ${data.summary.newListings || 0} new, ${data.summary.filteredOut || 0} filtered`
-                            : data?.message || 'Completed'
-                        });
-                        refetchCrawlActivity();
-                      } catch (err: any) {
-                        toast.error('Failed to trigger crawl', { description: err.message });
-                      } finally {
-                        setIsManualCrawlTriggering(false);
-                      }
-                    }}
-                    className="h-7 text-xs"
-                  >
-                    {isManualCrawlTriggering ? (
-                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running...</>
-                    ) : (
-                      <>Trigger Now</>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {crawlActivity && crawlActivity.length > 0 ? (
-                <div className="space-y-1.5 max-h-80 overflow-y-auto">
-                  {crawlActivity.map((run, idx) => {
-                    const timeAgo = getTimeAgo(run.timestamp);
-                    const cityLabel = run.city === 'ho_chi_minh' ? 'HCM' : run.city === 'hanoi' ? 'Hanoi' : run.city === 'da_nang' ? 'Da Nang' : run.city;
-                    const isExpanded = expandedRunIdx === idx;
-                    return (
-                      <div key={idx} className="space-y-1.5">
-                        <div className="flex flex-wrap items-center justify-between p-2 bg-muted/50 rounded text-xs gap-1.5 sm:gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
-                            <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
-                            <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
-                            
-                          </div>
-                          <Badge
-                            className="text-xs shrink-0 cursor-pointer hover:bg-primary/80 transition-colors"
-                            onClick={() => handleExpandRun(idx, run.propertyIds)}
-                          >
-                            {run.count} listings {isExpanded ? '▲' : '▼'}
-                          </Badge>
-                        </div>
-                        {isExpanded && (
-                          <div className="ml-4 border-l-2 border-primary/20 pl-3 space-y-1.5">
-                            {isLoadingRunProperties ? (
-                              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-                                <Loader2 className="h-3 w-3 animate-spin" /> Loading properties...
-                              </div>
-                            ) : expandedRunProperties.length > 0 ? (
-                              expandedRunProperties.map((prop) => {
-                                const vibeAnalysis = prop.vibe_analysis as any;
-                                const imageCount = (prop.images || []).length;
-                                // New: badge keys off vibe_status enum (set by analyze-vibe / queue consumer)
-                                // when ALL images successfully produced highlights. Fallback to legacy heuristic
-                                // for properties analyzed before the enum existed.
-                                const vibeStatus = (prop as any).vibe_status as string | undefined;
-                                const analyses =
-                                  (Array.isArray(vibeAnalysis?.image_analyses) && vibeAnalysis.image_analyses) ||
-                                  (Array.isArray(vibeAnalysis?.per_image) && vibeAnalysis.per_image) ||
-                                  [];
-                                const legacyHasPerImage =
-                                  imageCount > 0 &&
-                                  analyses.length >= imageCount &&
-                                  analyses.slice(0, imageCount).every((a: any) => {
-                                    const hl = String(a?.image_highlight || '').trim();
-                                    const detail = String(a?.detailed_analysis || '');
-                                    if (!hl || hl.length < 4) return false;
-                                    if (/rate.?limit|api error|rate_limit_exceeded|analysis failed/i.test(detail)) return false;
-                                    return true;
-                                  });
-                                const hasPerImage = vibeStatus
-                                  ? vibeStatus === 'complete'
-                                  : legacyHasPerImage;
-                                return (
-                                  <div
-                                    key={prop.id}
-                                    className="flex items-center gap-2 p-1.5 bg-background rounded border cursor-pointer hover:border-primary/50 transition-colors text-xs"
-                                    onClick={() => setPreviewProperty(prop)}
-                                  >
-                                    {imageCount > 0 ? (
-                                      <img
-                                        src={prop.images[0]}
-                                        alt=""
-                                        className="h-10 w-14 rounded object-cover shrink-0"
-                                        loading="lazy"
-                                      />
-                                    ) : (
-                                      <div className="h-10 w-14 rounded bg-muted flex items-center justify-center shrink-0">
-                                        <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
-                                      </div>
-                                    )}
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-medium truncate">{prop.title}</p>
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-primary font-bold">
-                                          {prop.price ? `${(prop.price / 1_000_000).toFixed(1)}M` : 'N/A'}
-                                        </span>
-                                        <Badge variant={hasPerImage ? 'default' : 'destructive'} className="text-[8px] px-1 py-0 h-3.5">
-                                          {hasPerImage ? '✓ vibe' : '✗ vibe'}
-                                        </Badge>
-                                        <span className="text-muted-foreground truncate">{prop.location}</span>
-                                      </div>
-                                    </div>
-                                    <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <p className="text-xs text-muted-foreground italic py-1">No properties found.</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground italic">No crawl runs recorded yet. Cron job runs every 30 minutes.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Crawler Rejections */}
-        <Card>
-          <CardHeader className="px-4 md:px-6">
-            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-              <XCircle className="h-5 w-5" />
-              Crawler Rejections
-              {rejections && rejections.length > 0 && (
-                <Badge variant="outline" className="text-xs">{rejections.length}</Badge>
-              )}
-            </CardTitle>
-            <CardDescription className="text-xs md:text-sm">
-              URLs the crawler refused to insert (e.g. outdoor-only galleries, missing interiors).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 md:px-6">
-            {!rejections || rejections.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No rejections logged yet.</p>
-            ) : (
-              <div className="divide-y border rounded-md max-h-[420px] overflow-y-auto">
-                {rejections.map((r: any) => (
-                  <div key={r.id} className="p-2.5 text-xs space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Badge variant="outline" className="text-[10px] capitalize">{r.source}</Badge>
-                        <Badge variant="destructive" className="text-[10px]">{r.reason}</Badge>
-                      </div>
-                      <span className="text-muted-foreground whitespace-nowrap">{getTimeAgo(r.rejected_at)}</span>
-                    </div>
-                    <a
-                      href={r.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block truncate text-primary hover:underline"
-                    >
-                      {r.source_url}
-                    </a>
-                    {Array.isArray(r.sample_images) && r.sample_images.length > 0 && (
-                      <div className="flex gap-1 overflow-x-auto pt-1">
-                        {r.sample_images.slice(0, 4).map((img: string, i: number) => (
-                          <img
-                            key={i}
-                            src={img}
-                            alt=""
-                            className="h-12 w-16 object-cover rounded border flex-shrink-0"
-                            loading="lazy"
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-3">
-              <Button size="sm" variant="ghost" onClick={() => refetchRejections()}>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Refresh
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-
-
+            </CardContent>
+          </Card>
+            </CollapsibleContent>
+          </Collapsible>
         </TabsContent>
 
         <TabsContent value="ai" className="mt-4 space-y-4 md:space-y-6">
@@ -2746,7 +1320,9 @@ const AdminTools = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {previewProperty && (() => {
             const vibeAnalysis = previewProperty.vibe_analysis as any;
-            const perImage = vibeAnalysis?.per_image || [];
+            // image_analyses is the current shape; per_image is what listings
+            // analysed before it still carry.
+            const perImage = vibeAnalysis?.image_analyses || vibeAnalysis?.per_image || [];
             return (
               <>
                 <DialogHeader>
@@ -2795,7 +1371,7 @@ const AdminTools = () => {
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">Price</p>
-                      <p className="font-medium">{previewProperty.price ? `${(previewProperty.price / 1_000_000).toFixed(1)}M VND` : 'N/A'}</p>
+                      <p className="font-medium">{Number(previewProperty.price_vnd) ? `${Math.round(Number(previewProperty.price_vnd) / 100_000) / 10}M ₫` : 'N/A'}</p>
                     </div>
                     {previewProperty.size && (
                       <div>
