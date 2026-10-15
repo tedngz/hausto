@@ -25,7 +25,22 @@ export interface CrawlStatus {
   marketplaces: string[];
   spend: { source: string; used: number; cap: number; agencyFeed: boolean }[];
   firecrawl: { left: number; daily: number };
+  /** pg_cron's interval. The rotation's real pace is `triggers`, summed. */
   cronMinutes: number;
+  /** Everything that starts a rotation run: pg_cron's job, and each QStash
+   *  schedule aimed at the function. Absent from a function deployed before
+   *  2026-10-16, which is read as pg_cron alone. */
+  triggers?: RotationTrigger[];
+  /** Why the QStash schedules could not be listed, if they could not. */
+  triggersError?: string;
+}
+
+export interface RotationTrigger {
+  kind: 'pg_cron' | 'qstash';
+  name: string;
+  cron: string;
+  everyMinutes: number | null;
+  createdAt?: string;
 }
 
 export function useCrawlStatus() {
@@ -117,14 +132,29 @@ export function formatVndM(vnd: number): string {
   return `${Math.round((vnd / 1e6) * 10) / 10}M ₫`;
 }
 
+/** The triggers starting rotation runs, with pg_cron alone standing in for a
+ *  function too old to list them. */
+export function rotationTriggers(status: CrawlStatus): RotationTrigger[] {
+  return status.triggers?.length
+    ? status.triggers
+    : [{ kind: 'pg_cron', name: 'auto-crawl-v3', cron: `*/${status.cronMinutes} * * * *`, everyMinutes: status.cronMinutes }];
+}
+
+/** Rotation runs started per hour, over every trigger whose rate is known. */
+export function runsPerHour(status: CrawlStatus): number {
+  const rate = rotationTriggers(status).reduce((n, t) => n + (t.everyMinutes ? 60 / t.everyMinutes : 0), 0);
+  return rate > 0 ? rate : 60 / status.cronMinutes;
+}
+
 /**
- * How long one pass over every district x source takes. The cron crawls one
- * combo per call, so this - not the cooldown - is what paces a source; the
+ * How long one pass over every district x source takes. Each trigger's call
+ * crawls one combo, so this - not the cooldown - is what paces a source; the
  * cooldown only decides whether a due combo is skipped (scheduled-crawl's
- * DEFAULT_CONFIG comment has the arithmetic).
+ * DEFAULT_CONFIG comment has the arithmetic). Two triggers on the same half
+ * hour halve it, which is what pg_cron and a QStash schedule did on 2026-10-15.
  */
 export function rotationMinutes(status: CrawlStatus, enabled: string[]): number {
-  return status.locations.length * Math.max(1, enabled.length) * status.cronMinutes;
+  return Math.round((status.locations.length * Math.max(1, enabled.length) * 60) / runsPerHour(status));
 }
 
 export const VERDICT_LABEL: Record<string, string> = {

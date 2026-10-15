@@ -25,7 +25,7 @@ and dialable brokers.
 
 | Milestone | State | Against its "done when" |
 |---|---|---|
-| S1 supply | Retention built, depth not | 180 active (753 total) against an 800 gate. One new row across all three sources in the last 24 hours; housingsgn's newest is from 2026-09-12. The resurrection sweep, the 20% single-reason ceiling, `delisted_at` and `crawl_runs` telemetry are built. `auto-crawl-v2` is still scheduled; a Supabase support ticket to remove it was filed on 2026-09-28 (item 2). Three new sources (item 6): rentapartment.vn and vnrenthome.com on 2026-10-14, jhouse.vn on 2026-10-15. |
+| S1 supply | Retention built, depth not | 180 active (753 total) against an 800 gate. One new row across all three sources in the last 24 hours; housingsgn's newest is from 2026-09-12. The resurrection sweep, the 20% single-reason ceiling, `delisted_at` and `crawl_runs` telemetry are built. `auto-crawl-v2` is still scheduled; a Supabase support ticket to remove it was filed on 2026-09-28 and is still open on 2026-10-16 (item 2). A QStash schedule doubles the crawl cadence until it is deleted (item 2). Three new sources (item 6): rentapartment.vn and vnrenthome.com on 2026-10-14, jhouse.vn on 2026-10-15. |
 | S2 realtor identity | Scaffolding done, acquisition short | `realtors` has 34 rows; 84 of 180 active listings resolve to one, 83 have a dialable number (46%, bar 60%). `extract-phone` runs hourly. `source_agent_id` is captured on nhatot only (15 of 40 active), and `realtor_identities` has no rows, so resolution by agent id has never matched. |
 | S3 normalization | Done | Canonical columns populated; 157 of 180 active rows shortlistable. `vibe` is out of the response, the style filter reads `styles`, the `$730` rule is asserted in CI, and the title/description price cross-check runs every 30 minutes (#117, #118). |
 | S4 intake + handshake | Done, and changed | Intake is `RequestViewingModal`: one button per card, a signed-in user, 1-5 listings, no today or tomorrow (CLAUDE.md invariants 7-8). Since 2026-10-07 a request is the Pass's past one free place per WhatsApp number (`requestGate`, SPEC §9); the plan is then locked in. The `wa.me` handshake is as planned. WhatsApp is on the Cloud API. |
@@ -215,6 +215,28 @@ Retention before acquisition. In order:
    (48 of 48 in the preceding 24 hours), so nothing reaches `scheduled-crawl`.
    Done when `SELECT jobid, jobname FROM cron.job WHERE jobname LIKE
    'auto-crawl%'` returns only jobid 13, `auto-crawl-v3`.
+
+   Still there on 2026-10-16, failing 48 of 48 a day, so the ticket needs
+   chasing. Add jobid 5 to it: `deactivate-expired-properties`, also owned by
+   `supabase_read_only_user`, fails 24 of 24 a day on "permission denied for
+   function deactivate_expired_properties" and duplicates jobid 16
+   (`deactivate-expired-properties-v2`, owned by `postgres`, which works). The
+   request: run `SELECT cron.unschedule(7); SELECT cron.unschedule(5);` as
+   `supabase_admin`.
+
+   **The second crawler that did run was QStash.** On 2026-10-15 an Upstash
+   QStash schedule posting `{"source":"qstash"}` fired about a second after
+   `auto-crawl-v3` on every half hour - "Authorized via QStash signature" beside
+   "Authorized via cron secret" in the function logs, 11:30 to 17:00 UTC
+   without a gap. Each tick crawled two combos, the rotation took ~15h rather
+   than the 30h the admin page reported, and a 504 was retried by QStash as a
+   third run. Nothing in the repo created it. Keep pg_cron (it is the
+   documented scheduler, and `net.http_post` does not retry); QStash stays for
+   the self-chained continuations, which publish one-off messages and need no
+   schedule. Deleting it is done in the Upstash console, and waits on the
+   owner. `scheduled-crawl`
+   `status` now lists every QStash schedule aimed at it, and the admin page sums
+   them with pg_cron, so its rotation figure holds whichever stays.
 3. **Recover the switched-off rows.** Cause found and fixed in #72:
    backfill-image-highlights hides a listing on a failed highlight pass and
    enqueues the retry fire-and-forget, swallowing the insert error, so a failed
