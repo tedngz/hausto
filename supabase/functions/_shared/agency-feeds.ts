@@ -1,13 +1,14 @@
 // Agency sites crawled from their own structured data.
 //
-// rentapartment.vn and vnrenthome.com are single-agency English sites, like
-// housingsgn, but neither needs what housingsgn costs. Both answer a plain
-// fetch (no Cloudflare, no client rendering), both publish the listing's facts
-// in a machine-readable form - a WordPress REST feed on one, schema.org JSON-LD
-// on the other - and both can list their stock newest first and say which units
-// are still available. So, as with nhatot's ad payload, a listing is built from
-// typed fields rather than guessed out of page text by a model, and neither
-// source spends a Firecrawl credit (firecrawl-budget.ts).
+// rentapartment.vn, vnrenthome.com and jhouse.vn are single-agency English
+// sites, like housingsgn, but none needs what housingsgn costs. All answer a
+// plain fetch (no Cloudflare, no client rendering), all publish the listing's
+// facts in a machine-readable form - a WordPress REST feed, schema.org
+// JSON-LD, and the JSON API jhouse's own pages render from - and all can list
+// their stock newest first and say which units are still available. So, as
+// with nhatot's ad payload, a listing is built from typed fields rather than
+// guessed out of page text by a model, and none spends a Firecrawl credit
+// (firecrawl-budget.ts).
 //
 // Each source module exports the same three things: a discovery pass that
 // returns listing URLs in the order they should be crawled, a builder that
@@ -16,7 +17,7 @@
 
 import { USD_TO_VND } from './price-mentions.ts';
 
-export const AGENCY_FEED_SOURCES = ['rentapartment', 'vnrenthome'] as const;
+export const AGENCY_FEED_SOURCES = ['rentapartment', 'vnrenthome', 'jhouse'] as const;
 export type AgencyFeedSource = typeof AGENCY_FEED_SOURCES[number];
 
 export function isAgencyFeedSource(source: string): source is AgencyFeedSource {
@@ -28,6 +29,7 @@ export function agencySourceOf(source: string, url = ''): AgencyFeedSource | nul
   const s = `${source} ${url}`.toLowerCase();
   if (s.includes('rentapartment')) return 'rentapartment';
   if (s.includes('vnrenthome')) return 'vnrenthome';
+  if (s.includes('jhouse')) return 'jhouse';
   return null;
 }
 
@@ -59,7 +61,7 @@ export interface FeedCandidate {
 /**
  * Crawl order: available before uncertain, newest first within each. Rented
  * units are dropped - there is nothing to arrange a viewing of. Where a feed
- * gives no date, its own order stands (both sites are asked for newest first),
+ * gives no date, its own order stands (every feed is asked for newest first),
  * which is why the sort is stable rather than falling back to the URL.
  */
 export function prioritise(candidates: FeedCandidate[]): FeedCandidate[] {
@@ -113,7 +115,7 @@ export interface AgencyVerification {
 
 // ─── Shared parsing helpers ──────────────────────────────────────────────
 
-/** Both sites quote dollars a month. A figure this large is already dong. */
+/** rentapartment and vnrenthome quote dollars a month. A figure this large is already dong. */
 const DONG_FLOOR = 100_000;
 
 /**
@@ -197,7 +199,7 @@ export function firstTelLink(html: string, after = 0): string | null {
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-/** A plain GET. Neither agency site blocks one, so no Firecrawl is involved. */
+/** A plain GET. No agency site blocks one, so no Firecrawl is involved. */
 export async function fetchPage(url: string, accept = 'text/html'): Promise<{ status: number; url: string; text: string }> {
   const res = await fetch(url, {
     headers: { 'User-Agent': UA, Accept: accept, 'Accept-Language': 'en-US,en;q=0.9' },

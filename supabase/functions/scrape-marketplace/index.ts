@@ -16,7 +16,7 @@ import { looksVietnamese, normalizeListingCopy } from '../_shared/listing-langua
 import { normalizeLocationForEnglishDisplay } from '../_shared/location-language.ts';
 import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
 import {
-  buildAgencyListing, discoverAgencyListings, extractAgencyListingId, isAgencyFeedSource,
+  AGENCY_FEED_SOURCES, buildAgencyListing, discoverAgencyListings, extractAgencyListingId, isAgencyFeedSource,
 } from '../_shared/agency-sources.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -1130,7 +1130,7 @@ interface ExternalProperty {
   raw_data?: { images: string[]; source_url: string; scraped_at: string };
 }
 
-type Marketplace = 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn' | 'rentapartment' | 'vnrenthome';
+type Marketplace = 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn' | 'rentapartment' | 'vnrenthome' | 'jhouse';
 
 interface SearchParams {
   marketplace: Marketplace;
@@ -2547,7 +2547,7 @@ Deno.serve(async (req) => {
     // nhatot page that gets here has genuinely nothing to offer.
     // The agency-feed sources never get here with anything worth extracting:
     // a feed that yielded nothing new is a quiet run, not a failed page.
-    const searchPageFallbackSources = ['housingsgn', 'nhatot', 'rentapartment', 'vnrenthome'];
+    const searchPageFallbackSources: string[] = ['housingsgn', 'nhatot', ...AGENCY_FEED_SOURCES];
     if (!rawMode && properties.length < 2 && !searchPageFallbackSources.includes(marketplace)) {
       console.log(`[Fallback] Only ${properties.length} from detail pages, falling back to search page extraction`);
       

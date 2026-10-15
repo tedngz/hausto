@@ -34,8 +34,8 @@ const DAILY_COUNT_KEY = 'crawl:daily_count';
 //
 //   batdongsan, housingsgn   1 Firecrawl fetch per listing (scrapeDetailPage)
 //   nhatot                   0 - the chotot ad payload replaces the fetch
-//   rentapartment,           0 - and no search page either: both are read
-//   vnrenthome                   from the agency's own feed (_shared/agency-feeds.ts)
+//   rentapartment,           0 - and no search page either: all three are
+//   vnrenthome, jhouse           read from the agency's own feed (_shared/agency-feeds.ts)
 //
 // Both still cost one search-page fetch per RUN, and one vision pass per
 // listing. The vision pass is not worth rationing: 1447 calls over 14 days came
@@ -58,6 +58,7 @@ const MAX_DAILY_LISTINGS: Record<string, number> = {
   nhatot: 20,
   rentapartment: 20,
   vnrenthome: 20,
+  jhouse: 20,
 };
 const DEFAULT_MAX_DAILY_LISTINGS = 20;
 
@@ -253,14 +254,14 @@ interface CrawlConfig {
 // not obvious from either one:
 //
 // A run crawls exactly ONE location+marketplace combo, and there are 10
-// locations x 5 marketplaces = 50 of them (60 before Hanoi and Da Nang were
-// dropped and rentapartment and vnrenthome added, 2026-10-14). pg_cron fires
-// every 30 minutes, so 48 runs a day means any given combo comes back around
-// only every ~25 hours. The rotation, not `frequencyMinutes`, is what paces a
-// source.
+// locations x 6 marketplaces = 60 of them (rentapartment and vnrenthome added
+// 2026-10-14 as Hanoi and Da Nang were dropped, jhouse 2026-10-15). pg_cron
+// fires every 30 minutes, so 48 runs a day means any given combo comes back
+// around only every ~30 hours. The rotation, not `frequencyMinutes`, is what
+// paces a source.
 //
-// So frequencyMinutes only decides whether a due combo gets SKIPPED. Above ~25h
-// it starts skipping runs outright (it was 2880, i.e. 48h); below ~25h it
+// So frequencyMinutes only decides whether a due combo gets SKIPPED. Above ~30h
+// it starts skipping runs outright (it was 2880, i.e. 48h); below ~30h it
 // changes nothing, because the rotation is already slower than that. 1440 sits
 // under the rotation period without pretending to be a real cadence, and taking
 // it to the 30-minute floor would buy nothing.
@@ -274,7 +275,7 @@ const DEFAULT_CONFIG: CrawlConfig = {
   frequencyMinutes: 1440,
   maxListingsPerRun: 10,
   minPriceVnd: 5_000_000,
-  enabledMarketplaces: ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome'],
+  enabledMarketplaces: ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome', 'jhouse'],
 };
 
 // Redis helpers
@@ -398,7 +399,7 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'ho_chi_minh', location: 'Thủ Đức' },
 ];
 
-const MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome'] as const;
+const MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn', 'rentapartment', 'vnrenthome', 'jhouse'] as const;
 // The sources a config saved before `knownMarketplaces` was recorded knew about.
 const LEGACY_MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'];
 

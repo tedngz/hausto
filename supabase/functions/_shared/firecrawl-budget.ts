@@ -14,6 +14,8 @@
 // The crawler also plans each run against what is left (planRun), so it never
 // buys a search page whose listings it then cannot afford to open.
 
+import { AGENCY_FEED_SOURCES } from './agency-feeds.ts';
+
 export const FIRECRAWL_DAILY_CREDITS = 50;
 
 /** The day's counter. UTC, as the crawler's own daily counts are kept. */
@@ -88,10 +90,11 @@ export async function firecrawlCreditsLeft(counter: Counter, now: Date = new Dat
  *  come from the chotot ad payload instead and cost nothing. */
 const DETAIL_COSTS_A_CREDIT = new Set(['batdongsan', 'housingsgn']);
 
-/** Sources that never call Firecrawl at all: rentapartment and vnrenthome are
- *  read from their own feeds with plain fetches (_shared/agency-feeds.ts), so
- *  a spent Firecrawl day is no reason to stop them. */
-const NEVER_USES_FIRECRAWL = new Set(['rentapartment', 'vnrenthome']);
+/** Sources that never call Firecrawl at all: the agency feeds (rentapartment,
+ *  vnrenthome, jhouse) are read from their own data with plain fetches
+ *  (_shared/agency-feeds.ts), so a spent Firecrawl day is no reason to stop
+ *  them. */
+const NEVER_USES_FIRECRAWL = new Set<string>(AGENCY_FEED_SOURCES);
 
 /**
  * How many new listings a run may open, given the credits left today: one for

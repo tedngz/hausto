@@ -35,7 +35,7 @@ Do not restructure it. Add only:
 | `source_agent_id` | `text` | The broker's profile id on the source site. The durable join key for realtor identity - see §1. Free on nhatot (`account_oid`), and the half of identity that does not have to be bought: the phone usually needs a reveal, this arrives with the ad. |
 | `realtor_id` | `uuid` | Resolved broker, nullable. Set at ingest in the order agent identity → phone → NULL. A NULL here is normal and not a defect: a listing needs a contact only once a renter shortlists it. |
 | `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification **confirms** the unit is gone - the listing's own source saying so, twice - or when it goes 21 days without a price confirmation. A URL that merely failed to resolve sets `deactivated_at` only; on nhatot that is routinely wrong, since expired ads come back under the same id when the seller reposts. |
-| `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it, and the agency feeds rentapartment and vnrenthome - see "Sources" below), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
+| `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it, and the agency feeds rentapartment, vnrenthome and jhouse - see "Sources" below), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
 | `contact_phone_e164` | `text` | Generated: `normalize_vn_phone(contact_phone)`, stored. NULL for a masked value (`0775 924 ***`) rather than a number nobody can ring, so it is what "has a dialable contact" means. `extract-phone` works through active rows where it is NULL. |
 
 `price_vnd`, `bedrooms` and `district_code` are NOT NULL for any row that can
@@ -73,18 +73,23 @@ happen is ops quoting a figure the broker has already changed - the mismatch
 `price_vnd_at_request` (§1) exists to catch, and should not have to.
 
 **Sources.** `source` is one of `batdongsan`, `nhatot`, `housingsgn`,
-`rentapartment` and `vnrenthome` (`concierge` rows are agents' units, §11).
-The last two, added 2026-10-14 (PLAN-v3 S1 item 6), are HCMC agencies' own
-English sites and are read from structured data rather than scraped
-(`_shared/agency-feeds.ts`): rentapartment.vn's WordPress REST feed and
-vnrenthome.com's listing index plus each page's schema.org JSON-LD. Plain
-fetches, no Firecrawl, no extraction model. Both list stock newest first and
-say what is free, so a run takes **available units before uncertain ones,
-newest first** (`prioritise`), and never stores one the agency marks rented.
-`external_id` is the agency's own reference (`ra2249`, `vr3763`); `price` is
-stored in dong, converted from their dollars on write, with the dollars in
-`price_display`. A multi-unit ad quoting several rents is refused
-(`multi_unit_ad`), and the batch-ad text heuristic is not applied - agency
+`rentapartment`, `vnrenthome` and `jhouse` (`concierge` rows are agents'
+units, §11). The last three - rentapartment and vnrenthome added 2026-10-14,
+jhouse 2026-10-15 (PLAN-v3 S1 item 6) - are HCMC agencies' own English sites
+and are read from structured data rather than scraped
+(`_shared/agency-feeds.ts`): rentapartment.vn's WordPress REST feed,
+vnrenthome.com's listing index plus each page's schema.org JSON-LD, and the
+public CRM API jhouse.vn's own pages render from (`crm.jhouse.vn/api/public/
+units`). Plain fetches, no Firecrawl, no extraction model. All list stock
+newest first and say what is free, so a run takes **available units before
+uncertain ones, newest first** (`prioritise`), and never stores one the agency
+marks rented. `external_id` is the agency's own reference (`ra2249`,
+`vr3763`), except on jhouse, whose code (H03287) appears in no URL and keys
+nothing in its API, so the listing's slug stands in
+(`jh-rome-apartment-thao-dien-1-bedroom-a603`); `price` is stored in dong,
+converted from rentapartment's and vnrenthome's dollars on write, with the
+dollars in `price_display` (jhouse quotes dong). A multi-unit ad quoting
+several rents is refused (`multi_unit_ad`), and the batch-ad text heuristic is not applied - agency
 English trips it on single units. `verify-external-listings` re-reads the
 agency's label and rent, so these rows re-price, decay after 21 days
 unconfirmed, and are delisted when the agency marks them rented
@@ -123,7 +128,7 @@ covers every future listing from them.
 
 ```
 realtor_id      uuid references realtors(id)
-source          text                      -- batdongsan | nhatot | housingsgn | rentapartment | vnrenthome
+source          text                      -- batdongsan | nhatot | housingsgn | rentapartment | vnrenthome | jhouse
 source_agent_id text
 primary key (source, source_agent_id)
 ```
