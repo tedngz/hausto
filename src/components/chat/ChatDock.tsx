@@ -23,8 +23,8 @@ import { markChatDockPointerDown } from '@/lib/hubLayout';
  *
  * The comparison table has a hard 760px minimum, and a chat rail narrow enough
  * to fit beside it at 1024px is too cramped to hold a conversation - both panes
- * lose. 1280 is the first width where a usable rail (400px) and the full table
- * (760 + 48 padding) both fit without either one scrolling sideways. Under it,
+ * lose. 1280 is the first width where a usable rail (340px) and the full table
+ * (about 830 + 48 padding) both fit without either one scrolling sideways. Under it,
  * the chat docks as a sheet and the main pane gets the whole width.
  *
  * Matches Tailwind's `xl`, which is what the breakpoint utilities use.
@@ -152,8 +152,8 @@ export const ChatDock = ({
 
   if (hasRail) {
     return (
-      // A third of the viewport, the same share the sheet takes on a phone or
-      // tablet. The width is --hub-rail (src/index.css): every floating surface
+      // About a quarter of the viewport, so the browse table fits beside it.
+      // The width is --hub-rail (src/index.css): every floating surface
       // positions itself against the same value, and it used to be spelled out
       // in two files that disagreed.
       <aside

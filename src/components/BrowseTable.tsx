@@ -572,7 +572,9 @@ export const BrowseTable = ({
           {/* Full comparison table at every width — on phones it scrolls
               horizontally rather than dropping columns */}
           <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm shadow-sm overflow-x-auto [scrollbar-width:thin]">
-            <Table className="min-w-[760px]">
+            {/* px-3 rather than the default 16px: eight columns of padding
+                was the difference between fitting beside the chat rail and not. */}
+            <Table className="min-w-[760px] [&_td]:px-3 [&_th]:px-3">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8"><Scale className="w-3.5 h-3.5" /></TableHead>
@@ -602,7 +604,7 @@ export const BrowseTable = ({
                         />
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-3 min-w-[220px]">
+                        <div className="flex items-center gap-3 min-w-[200px]">
                           {r.images?.[0] && (
                             <img
                               src={r.images[0]}
@@ -617,8 +619,11 @@ export const BrowseTable = ({
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {districtOf(r.location)}
+                      {/* Wraps rather than nowrap: districtOf falls back to a
+                          street address when it finds no district, and one
+                          of those used to stretch the column for every row. */}
+                      <TableCell className="max-w-[140px] text-sm text-muted-foreground">
+                        <span className="line-clamp-2">{districtOf(r.location)}</span>
                       </TableCell>
                       <TableCell className="text-sm whitespace-nowrap">{r.rooms || '-'}</TableCell>
                       <TableCell className="text-sm whitespace-nowrap">

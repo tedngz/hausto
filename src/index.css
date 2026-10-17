@@ -43,9 +43,11 @@ All colors MUST be HSL.
        of it and they are portaled to the body, out of reach of anything the
        rail could carry. src/lib/hubLayout.ts does the arithmetic against this;
        Hub.tsx applies it to the rail itself. Floor: narrow enough to hold a
-       conversation. Ceiling: what the comparison table needs beside it - its
-       760px minimum plus 48px of pane padding. */
-    --hub-rail: clamp(400px, 33vw, calc(100vw - 808px));
+       conversation. Ceiling: what the browse table needs beside it - about
+       830px with real listings in it (measured 2026-10-17; its 760px minimum
+       is for phones) plus 48px of pane padding. At 33vw the rail pushed the
+       table into a sideways scroll on a 1333px laptop. */
+    --hub-rail: clamp(340px, 26vw, calc(100vw - 880px));
 
     /* The two edges the hub's floating surfaces have to stay off, for the same
        reason: they are portaled to the body and cannot measure the page.
