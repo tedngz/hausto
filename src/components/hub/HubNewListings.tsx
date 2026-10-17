@@ -24,7 +24,7 @@ const firstSeenLabel = (iso: string): string => {
  */
 const sinceLabel = (seenAt: number): string => {
   const days = Math.floor((Date.now() - seenAt) / 86_400_000);
-  if (days < 1) return 'since earlier today';
+  if (days < 1) return 'today';
   if (days === 1) return 'since yesterday';
   if (days < NEW_WINDOW_DAYS) {
     return `since ${new Date(seenAt).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Ho_Chi_Minh' })}`;
@@ -53,13 +53,10 @@ export const HubNewListings = () => {
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
         </span>
-        <span className="text-sm font-semibold">
-          {total} new {sinceLabel(seenAt)}
-        </span>
-        <span className="hidden truncate text-xs text-muted-foreground md:inline">
-          {isScoped
-            ? 'just listed, matching what you are looking for'
-            : 'just listed on Hausto'}
+        {/* One phrase: "6 new apartments matching your vibe this week". */}
+        <span className="min-w-0 truncate text-sm font-semibold">
+          {total} new {total === 1 ? 'apartment' : 'apartments'}
+          {isScoped ? ' matching your vibe' : ''} {sinceLabel(seenAt)}
         </span>
         <Button
           variant="ghost"
