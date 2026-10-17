@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { useNewListings } from '@/hooks/useNewListings';
+import { NEW_WINDOW_DAYS, useNewListings } from '@/hooks/useNewListings';
 import { districtOf } from '@/utils/districts';
 import { useCurrency, VND_TO_USD_RATE } from '@/contexts/CurrencyContext';
 
@@ -18,15 +18,18 @@ const firstSeenLabel = (iso: string): string => {
   return RELATIVE.format(-Math.floor(hours / 24), 'day');
 };
 
-/** "since Tuesday" / "since 3 March" - what the count is counting from. */
+/**
+ * "since Tuesday" / "this week" - what the count is counting from. seenAt is
+ * never older than NEW_WINDOW_DAYS, so a date is never needed.
+ */
 const sinceLabel = (seenAt: number): string => {
   const days = Math.floor((Date.now() - seenAt) / 86_400_000);
   if (days < 1) return 'since earlier today';
   if (days === 1) return 'since yesterday';
-  if (days < 7) {
-    return `since ${new Date(seenAt).toLocaleDateString('en-US', { weekday: 'long' })}`;
+  if (days < NEW_WINDOW_DAYS) {
+    return `since ${new Date(seenAt).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Ho_Chi_Minh' })}`;
   }
-  return `since ${new Date(seenAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}`;
+  return 'this week';
 };
 
 /**
@@ -55,8 +58,8 @@ export const HubNewListings = () => {
         </span>
         <span className="hidden truncate text-xs text-muted-foreground md:inline">
           {isScoped
-            ? 'first seen by the crawler, inside what you asked for'
-            : 'first seen by the crawler'}
+            ? 'just listed, matching what you are looking for'
+            : 'just listed on Hausto'}
         </span>
         <Button
           variant="ghost"

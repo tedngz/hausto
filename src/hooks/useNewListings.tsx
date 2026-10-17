@@ -5,22 +5,23 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { locationMatchesDistrict } from '@/utils/districts';
 import { normalizeSize } from '@/lib/preferences';
 
-// How far back a first-time visitor's "new" window reaches. Without this the
-// strip would open on every listing we have ever crawled.
-const FIRST_VISIT_WINDOW_DAYS = 7;
+// How far back the "new" window reaches. Without it a first visit would open on
+// every listing we have ever crawled, and a renter who last pressed "Mark all
+// seen" weeks ago would read "new since" a date long past.
+export const NEW_WINDOW_DAYS = 7;
 const MAX_SHOWN = 8;
 
 const seenKey = (userId: string) => `hubListingsSeen_${userId}`;
 
 const readSeenAt = (userId?: string): number => {
-  const fallback = Date.now() - FIRST_VISIT_WINDOW_DAYS * 86_400_000;
-  if (!userId) return fallback;
+  const floor = Date.now() - NEW_WINDOW_DAYS * 86_400_000;
+  if (!userId) return floor;
   try {
     const raw = localStorage.getItem(seenKey(userId));
     const parsed = raw ? Date.parse(raw) : NaN;
-    return Number.isNaN(parsed) ? fallback : parsed;
+    return Number.isNaN(parsed) ? floor : Math.max(parsed, floor);
   } catch {
-    return fallback;
+    return floor;
   }
 };
 
