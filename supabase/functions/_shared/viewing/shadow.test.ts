@@ -223,6 +223,10 @@ describe('drafted renter replies', () => {
 
   beforeEach(() => {
     seen = [];
+    // These run on the real clock, so the request has to be recent by it: the
+    // drain only reads the last three weeks, and the fixed fixture date aged
+    // out of that on 2026-10-18.
+    db.tables.viewing_requests[0].created_at = new Date().toISOString();
     db.tables.messages.push({ id: 'in-1', request_id: 'req-1', direction: 'IN', to_phone: '+84912345678',
       body: 'Is the first one furnished? call me 0912345678', status: 'QUEUED', idempotency_key: 'inbound:w1', created_at: new Date().toISOString() });
     db.tables.events.push({ id: 'e10', request_id: 'req-1', item_id: null, type: 'RENTER_REPLIED',
