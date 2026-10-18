@@ -37,7 +37,7 @@ export default function ComplexDetail() {
         <meta name="description" content={complex.tagline ?? `Vetted profile of ${complex.name} in ${complex.district}. Realistic rent ranges, amenities, pet policy, and concierge availability.`} />
         <link rel="canonical" href={`https://hausto.lovable.app/complexes/${complex.slug}`} />
         <meta property="og:title" content={`${complex.name} — Hausto`} />
-        <meta property="og:description" content={complex.tagline ?? ''} />
+        <meta property="og:description" content={complex.tagline || `${complex.name} in ${complex.district}, ${CITY_LABEL[complex.city]}: realistic rent ranges, amenities, pet policy and viewing help from Hausto.`} />
         {complex.hero_image && <meta property="og:image" content={complex.hero_image} />}
         <meta property="og:url" content={`https://hausto.lovable.app/complexes/${complex.slug}`} />
       </Helmet>
