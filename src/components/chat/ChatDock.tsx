@@ -39,6 +39,18 @@ const DOCK_MIN_PX = 240;
 const dockDefaultPx = () => Math.max(Math.round(window.innerHeight * 0.5), DOCK_MIN_PX);
 const dockMaxPx = () => Math.round(window.innerHeight * 0.85);
 
+// Fields that bring up the on-screen keyboard. A disabled one does not, which
+// matters: sending disables the composer, and it can still hold focus.
+const KEYBOARD_FIELDS =
+  'textarea:enabled:not([readonly]), select:enabled, ' +
+  'input:enabled:not([readonly]):not([type=button]):not([type=checkbox]):not([type=file])' +
+  ':not([type=image]):not([type=radio]):not([type=range]):not([type=reset]):not([type=submit])';
+
+const wantsKeyboard = () => {
+  const el = document.activeElement;
+  return el instanceof HTMLElement && (el.isContentEditable || el.matches(KEYBOARD_FIELDS));
+};
+
 interface ChatDockProps {
   /** True at rail widths. The caller measures it, so a page can force the
    *  sheet (a narrow layout on a wide screen) without lying about the viewport. */
@@ -129,6 +141,39 @@ export const ChatDock = ({
     };
     window.addEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
     return () => window.removeEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
+  }, [hasRail]);
+
+  // The page under the sheet is one screen tall (h-[100dvh]) and its panes
+  // scroll themselves, so the window should never move. iOS moves it anyway:
+  // focusing the composer, it scrolls the window to lift the field clear of
+  // the keyboard, and when the keyboard goes - sending disables the field,
+  // which dismisses it - it can leave the window where it put it. The page
+  // then sits a keyboard too high, its nav cut off at the top and a blank band
+  // under the composer where the sheet should meet the bottom of the screen.
+  // So once nothing wants the keyboard, the window goes back to the top. The
+  // check waits for scrolling and the keyboard to settle, so it never fights
+  // a finger or the keyboard's own animation.
+  useEffect(() => {
+    if (hasRail) return;
+    const viewport = window.visualViewport;
+    let timer: number | undefined;
+    const settle = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        // A pinch-zoom pans the window too, and is the renter's to undo.
+        if (wantsKeyboard() || (viewport && viewport.scale > 1.01)) return;
+        if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+      }, 150);
+    };
+    window.addEventListener('scroll', settle, { passive: true });
+    window.addEventListener('focusout', settle);
+    viewport?.addEventListener('resize', settle);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('scroll', settle);
+      window.removeEventListener('focusout', settle);
+      viewport?.removeEventListener('resize', settle);
+    };
   }, [hasRail]);
 
   // How much of the bottom edge the chat is taking, published for the floating
