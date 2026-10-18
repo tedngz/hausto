@@ -150,6 +150,27 @@ const writeAnonSearchCount = (count: number) => {
   }
 };
 
+// What the rail's thread last moved to show: the newest turn of the
+// conversation (data-chat-turn), or the Deep scan (data-chat-scan). The scan
+// is not simply the newest turn - it stays pinned below every message once
+// opened, so a reply that arrives after it lands above it.
+type ThreadFocus = 'turn' | 'scan';
+
+// Brings that into view: all of it when it fits, its first line when it is
+// taller than the thread, so a long reply or a scan is read from the start
+// rather than met at its end. It moves the thread's own scroll only -
+// scrollIntoView would move the window as well, which in the phone sheet is
+// the blank band ChatDock exists to prevent. offsetTop is measured against the
+// thread (it is `relative`) and ignores the slide-up animation's transform.
+const showInThread = (thread: HTMLElement, focus: ThreadFocus, behavior: ScrollBehavior) => {
+  const target = focus === 'scan'
+    ? thread.querySelector<HTMLElement>('[data-chat-scan]')
+    : Array.from(thread.querySelectorAll<HTMLElement>('[data-chat-turn]')).pop();
+  if (!target || thread.clientHeight === 0) return;
+  const end = thread.scrollHeight - thread.clientHeight;
+  thread.scrollTo({ top: Math.max(0, Math.min(target.offsetTop - 8, end)), behavior });
+};
+
 interface HomeAIProps {
   userPreferences?: UserPreferences;
   /** When provided, HomeAI auto-sends this as the first message once (used for the
@@ -247,6 +268,7 @@ export const HomeAI = ({
   const [wantsNewChat, setWantsNewChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
   const initialQuerySentRef = useRef(false);
   const navigate = useNavigate();
   const {
@@ -404,6 +426,44 @@ export const HomeAI = ({
       }
     }
   }, [messages, tempUserMessageForLoggedIn]);
+
+  // The rail's thread follows the conversation. Nothing used to move it, so a
+  // message went out below the fold and the dots and the reply landed under
+  // it - in the phone sheet, a few lines tall, the renter saw the top of their
+  // own bubble and nothing after. The keys change when something is added,
+  // not on every render, so a renter scrolled back to read is only moved when
+  // there is something new to see. Sending makes the conversation the focus,
+  // a scan makes itself the focus, and a thread that merely loads (history
+  // arriving under a scan handed over from another page) keeps whichever it had.
+  const threadFocusRef = useRef<ThreadFocus>('turn');
+  const sendKey = [tempUserMessageForLoggedIn, isSendingMessage, tempUserMessage, isSearching].join('|');
+  const scanKey = scanRequest?.propertyId ?? analysisProperty?.id ?? '';
+  const threadKey = [currentConversationId, messages.length, !!searchResults].join('|');
+  useEffect(() => {
+    threadFocusRef.current = 'turn';
+  }, [sendKey]);
+  useEffect(() => {
+    if (scanKey) threadFocusRef.current = 'scan';
+  }, [scanKey]);
+  useEffect(() => {
+    if (isRail && threadRef.current) showInThread(threadRef.current, threadFocusRef.current, 'smooth');
+  }, [isRail, sendKey, scanKey, threadKey]);
+
+  // And catches up when it comes back into view: a reply that arrived while
+  // the phone sheet was folded (or the hub was on the profile) is waiting when
+  // it reopens, rather than the top of the thread.
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (!isRail || !thread || typeof ResizeObserver === 'undefined') return;
+    let shown = thread.clientHeight > 0;
+    const observer = new ResizeObserver(() => {
+      const nowShown = thread.clientHeight > 0;
+      if (nowShown && !shown) showInThread(thread, threadFocusRef.current, 'auto');
+      shown = nowShown;
+    });
+    observer.observe(thread);
+    return () => observer.disconnect();
+  }, [isRail]);
 
   // Typing effect for placeholder
   const fullPlaceholder = "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light... (or upload reference images)";
@@ -957,7 +1017,7 @@ export const HomeAI = ({
         : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10 flex flex-col'}>
         
         {/* Scrollable Conversation Area */}
-        <div className={isRail ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-1' : 'flex flex-col gap-2'}>
+        <div ref={threadRef} className={isRail ? 'relative flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-1' : 'flex flex-col gap-2'}>
       {/* Header — history / new-chat controls. Given a headerPortal they move up
           onto the pane's own "Hausto Agent" heading, which already has a half-empty
           row; without one they sit in normal flow so they reserve their own row
@@ -999,7 +1059,7 @@ export const HomeAI = ({
       {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage || scanRequest || analysisProperty) && <div className="space-y-4 mb-4">
           {messages.map((message, index) => {
           if (message.role === 'user') {
-            return <div key={index} className="flex justify-end animate-slide-up">
+            return <div key={index} data-chat-turn className="flex justify-end animate-slide-up">
                   <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
                     <p className="text-sm text-left">{message.content}</p>
                     {message.metadata?.images && message.metadata.images.length > 0 && <div className="flex gap-2 flex-wrap">
@@ -1017,7 +1077,7 @@ export const HomeAI = ({
             const followupBlocks = (searchResults?.blocks || []).filter((b: any) => BELOW_RESULTS.has(b.type));
             const cards = searchResults?.results ?? [];
             const isShowing = hoistResults && activeResultsIdx === index;
-            return <div key={index} className="flex justify-start animate-slide-up">
+            return <div key={index} data-chat-turn className="flex justify-start animate-slide-up">
                   <div className="w-full space-y-4">
                     {searchResults?.summary && <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
                         <p className="text-sm text-left text-foreground/90 leading-relaxed">{searchResults.summary}</p>
@@ -1084,7 +1144,7 @@ export const HomeAI = ({
         })}
 
           {/* Temporary user message for instant feedback - shows after all existing messages */}
-          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-slide-up">
+          {tempUserMessageForLoggedIn && <div data-chat-turn className="flex justify-end animate-slide-up">
               <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
                 <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
                 {tempUserImages.length > 0 && <div className="flex gap-2 flex-wrap">
@@ -1093,7 +1153,7 @@ export const HomeAI = ({
               </div>
             </div>}
 
-          {isSendingMessage && <div className="flex justify-start animate-fade-in">
+          {isSendingMessage && <div data-chat-turn className="flex justify-start animate-fade-in">
               <div className="glass p-4 rounded-2xl rounded-tl-sm shadow-sm">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
@@ -1116,7 +1176,7 @@ export const HomeAI = ({
               from a chip reads itself on arrival; opening a listing only pins
               the offer, because spending the scan is the renter's call. */}
           {user && (scanRequest || analysisProperty) && (
-            <div className="animate-fade-in">
+            <div data-chat-scan className="animate-fade-in">
               <DeepVibeAnalysis
                 key={scanRequest?.propertyId ?? analysisProperty!.id}
                 propertyId={scanRequest?.propertyId ?? analysisProperty!.id}
@@ -1142,7 +1202,7 @@ export const HomeAI = ({
       {/* Temporary Chat Messages for Non-Logged In Users */}
       {tempUserMessage && !user && <div className="space-y-4 mb-6">
           {/* User Message */}
-          <div className="flex justify-end animate-slide-up">
+          <div data-chat-turn className="flex justify-end animate-slide-up">
             <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
               <p className="text-sm text-left">{tempUserMessage}</p>
               {tempUserImages.length > 0 && <div className="flex gap-2 flex-wrap">
@@ -1151,7 +1211,7 @@ export const HomeAI = ({
             </div>
           </div>
           
-          {isSearching && <div className="flex justify-start animate-fade-in">
+          {isSearching && <div data-chat-turn className="flex justify-start animate-fade-in">
               <div className="glass p-4 rounded-2xl rounded-tl-sm shadow-sm">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
@@ -1170,7 +1230,7 @@ export const HomeAI = ({
 
       {/* Search Results for Non-Logged In Users */}
       {searchResults && !user && <div className="space-y-4 mb-6">
-          <div className="flex justify-start animate-slide-up">
+          <div data-chat-turn className="flex justify-start animate-slide-up">
             <div className="w-full space-y-4">
               {searchResults.summary && <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
                   <p className="text-sm text-left text-foreground/90 leading-relaxed">{searchResults.summary}</p>
