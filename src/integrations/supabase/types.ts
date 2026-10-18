@@ -10,10 +10,93 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
+      account_digest_opt_ins: {
+        Row: {
+          opted_in_at: string
+          user_id: string
+        }
+        Insert: {
+          opted_in_at?: string
+          user_id: string
+        }
+        Update: {
+          opted_in_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      account_link_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string
+          renter_id: string | null
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expires_at: string
+          renter_id?: string | null
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          renter_id?: string | null
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_link_codes_renter_id_fkey"
+            columns: ["renter_id"]
+            isOneToOne: false
+            referencedRelation: "renters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_operator_controls: {
+        Row: {
+          gate_override: string[]
+          id: string
+          last_run_at: string | null
+          last_state: Json | null
+          note: string | null
+          paused: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          gate_override?: string[]
+          id?: string
+          last_run_at?: string | null
+          last_state?: Json | null
+          note?: string | null
+          paused?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          gate_override?: string[]
+          id?: string
+          last_run_at?: string | null
+          last_state?: Json | null
+          note?: string | null
+          paused?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       ai_search_results: {
         Row: {
           created_at: string | null
@@ -90,6 +173,68 @@ export type Database = {
           },
         ]
       }
+      alert_items: {
+        Row: {
+          created_at: string
+          detail_sent_at: string | null
+          id: string
+          listing_id: string
+          message_id: string
+          renter_id: string
+          source: string
+          watch_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          detail_sent_at?: string | null
+          id?: string
+          listing_id: string
+          message_id: string
+          renter_id: string
+          source: string
+          watch_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          detail_sent_at?: string | null
+          id?: string
+          listing_id?: string
+          message_id?: string
+          renter_id?: string
+          source?: string
+          watch_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_items_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "external_properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_items_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_items_renter_id_fkey"
+            columns: ["renter_id"]
+            isOneToOne: false
+            referencedRelation: "renters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_items_watch_id_fkey"
+            columns: ["watch_id"]
+            isOneToOne: false
+            referencedRelation: "complex_watches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           created_at: string
@@ -145,6 +290,48 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complex_agents: {
+        Row: {
+          added_by: string
+          complex_id: string
+          created_at: string
+          note: string | null
+          realtor_id: string
+          source: string
+        }
+        Insert: {
+          added_by: string
+          complex_id: string
+          created_at?: string
+          note?: string | null
+          realtor_id: string
+          source: string
+        }
+        Update: {
+          added_by?: string
+          complex_id?: string
+          created_at?: string
+          note?: string | null
+          realtor_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complex_agents_complex_id_fkey"
+            columns: ["complex_id"]
+            isOneToOne: false
+            referencedRelation: "complexes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complex_agents_realtor_id_fkey"
+            columns: ["realtor_id"]
+            isOneToOne: false
+            referencedRelation: "realtors"
             referencedColumns: ["id"]
           },
         ]
@@ -248,14 +435,29 @@ export type Database = {
             referencedRelation: "complexes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "complex_inquiries_renter_id_fkey"
+            columns: ["renter_id"]
+            isOneToOne: false
+            referencedRelation: "renters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complex_inquiries_watch_id_fkey"
+            columns: ["watch_id"]
+            isOneToOne: false
+            referencedRelation: "complex_watches"
+            referencedColumns: ["id"]
+          },
         ]
       }
       complex_inquiry_messages: {
         Row: {
           body: string
+          channel: string
           created_at: string
           direction: string
-          from_email: string
+          from_email: string | null
           id: string
           in_reply_to: string | null
           inquiry_id: string
@@ -263,12 +465,14 @@ export type Database = {
           source: string
           subject: string | null
           to_emails: string[]
+          whatsapp_message_id: string | null
         }
         Insert: {
           body: string
+          channel?: string
           created_at?: string
           direction: string
-          from_email: string
+          from_email?: string | null
           id?: string
           in_reply_to?: string | null
           inquiry_id: string
@@ -276,12 +480,14 @@ export type Database = {
           source?: string
           subject?: string | null
           to_emails?: string[]
+          whatsapp_message_id?: string | null
         }
         Update: {
           body?: string
+          channel?: string
           created_at?: string
           direction?: string
-          from_email?: string
+          from_email?: string | null
           id?: string
           in_reply_to?: string | null
           inquiry_id?: string
@@ -289,6 +495,7 @@ export type Database = {
           source?: string
           subject?: string | null
           to_emails?: string[]
+          whatsapp_message_id?: string | null
         }
         Relationships: [
           {
@@ -296,6 +503,82 @@ export type Database = {
             columns: ["inquiry_id"]
             isOneToOne: false
             referencedRelation: "complex_inquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complex_inquiry_messages_whatsapp_message_id_fkey"
+            columns: ["whatsapp_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complex_watches: {
+        Row: {
+          area_district_codes: string[] | null
+          area_label: string | null
+          bedrooms: number | null
+          budget_max_vnd: number | null
+          code: string
+          complex_id: string | null
+          confirmed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          move_in_by: string | null
+          renter_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          area_district_codes?: string[] | null
+          area_label?: string | null
+          bedrooms?: number | null
+          budget_max_vnd?: number | null
+          code: string
+          complex_id?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          move_in_by?: string | null
+          renter_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          area_district_codes?: string[] | null
+          area_label?: string | null
+          bedrooms?: number | null
+          budget_max_vnd?: number | null
+          code?: string
+          complex_id?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          move_in_by?: string | null
+          renter_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complex_watches_complex_id_fkey"
+            columns: ["complex_id"]
+            isOneToOne: false
+            referencedRelation: "complexes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complex_watches_renter_id_fkey"
+            columns: ["renter_id"]
+            isOneToOne: false
+            referencedRelation: "renters"
             referencedColumns: ["id"]
           },
         ]
@@ -464,6 +747,76 @@ export type Database = {
           subject_key?: string
         }
         Relationships: []
+      }
+      contact_checks: {
+        Row: {
+          checked_at: string
+          checked_by: string
+          evidence_url: string | null
+          found_via: string | null
+          id: string
+          listing_id: string
+          note: string | null
+          phone_e164: string | null
+          result: string
+        }
+        Insert: {
+          checked_at?: string
+          checked_by: string
+          evidence_url?: string | null
+          found_via?: string | null
+          id?: string
+          listing_id: string
+          note?: string | null
+          phone_e164?: string | null
+          result: string
+        }
+        Update: {
+          checked_at?: string
+          checked_by?: string
+          evidence_url?: string | null
+          found_via?: string | null
+          id?: string
+          listing_id?: string
+          note?: string | null
+          phone_e164?: string | null
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_checks_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "external_properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_reveals: {
+        Row: {
+          listing_id: string
+          revealed_at: string
+          user_id: string
+        }
+        Insert: {
+          listing_id: string
+          revealed_at?: string
+          user_id: string
+        }
+        Update: {
+          listing_id?: string
+          revealed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_reveals_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "external_properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crawl_runs: {
         Row: {
@@ -656,6 +1009,8 @@ export type Database = {
           created_at: string | null
           deactivated_at: string | null
           delisted_at: string | null
+          described_price_max_vnd: number | null
+          described_price_min_vnd: number | null
           description: string | null
           district_code: string | null
           expires_at: string | null
@@ -711,6 +1066,8 @@ export type Database = {
           created_at?: string | null
           deactivated_at?: string | null
           delisted_at?: string | null
+          described_price_max_vnd?: number | null
+          described_price_min_vnd?: number | null
           description?: string | null
           district_code?: string | null
           expires_at?: string | null
@@ -766,6 +1123,8 @@ export type Database = {
           created_at?: string | null
           deactivated_at?: string | null
           delisted_at?: string | null
+          described_price_max_vnd?: number | null
+          described_price_min_vnd?: number | null
           description?: string | null
           district_code?: string | null
           expires_at?: string | null
@@ -917,6 +1276,83 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      free_viewings: {
+        Row: {
+          item_id: string | null
+          phone_e164: string
+          request_id: string | null
+          used_at: string
+          user_id: string | null
+        }
+        Insert: {
+          item_id?: string | null
+          phone_e164: string
+          request_id?: string | null
+          used_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          item_id?: string | null
+          phone_e164?: string
+          request_id?: string | null
+          used_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "free_viewings_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "ops_request_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "free_viewings_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "viewing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inquiry_events: {
+        Row: {
+          actor: string
+          created_at: string
+          id: number
+          inquiry_id: string
+          occurred_at: string
+          payload: Json
+          type: string
+        }
+        Insert: {
+          actor: string
+          created_at?: string
+          id?: never
+          inquiry_id: string
+          occurred_at?: string
+          payload?: Json
+          type: string
+        }
+        Update: {
+          actor?: string
+          created_at?: string
+          id?: never
+          inquiry_id?: string
+          occurred_at?: string
+          payload?: Json
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inquiry_events_inquiry_id_fkey"
+            columns: ["inquiry_id"]
+            isOneToOne: false
+            referencedRelation: "complex_inquiries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jobs: {
         Row: {
@@ -1134,6 +1570,101 @@ export type Database = {
         }
         Relationships: []
       }
+      operator_proposals: {
+        Row: {
+          action: string
+          agent_version: string
+          confidence: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          dedupe_key: string
+          edited: boolean
+          execute_after: string | null
+          executed_action: string | null
+          executed_at: string | null
+          executed_input: Json | null
+          id: string
+          input: Json
+          item_id: string | null
+          rationale: string
+          request_id: string
+          status: string
+        }
+        Insert: {
+          action: string
+          agent_version: string
+          confidence?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          dedupe_key: string
+          edited?: boolean
+          execute_after?: string | null
+          executed_action?: string | null
+          executed_at?: string | null
+          executed_input?: Json | null
+          id?: string
+          input?: Json
+          item_id?: string | null
+          rationale: string
+          request_id: string
+          status?: string
+        }
+        Update: {
+          action?: string
+          agent_version?: string
+          confidence?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          dedupe_key?: string
+          edited?: boolean
+          execute_after?: string | null
+          executed_action?: string | null
+          executed_at?: string | null
+          executed_input?: Json | null
+          id?: string
+          input?: Json
+          item_id?: string | null
+          rationale?: string
+          request_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_proposals_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "ops_request_items_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_proposals_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "request_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_proposals_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "ops_request_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_proposals_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "viewing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       passes: {
         Row: {
           amount_usd: number
@@ -1143,6 +1674,7 @@ export type Database = {
           provider: string
           provider_order_id: string
           purchased_at: string
+          refunded_at: string | null
           renter_id: string
           viewings_included: number
           viewings_used: number
@@ -1155,6 +1687,7 @@ export type Database = {
           provider?: string
           provider_order_id: string
           purchased_at?: string
+          refunded_at?: string | null
           renter_id: string
           viewings_included: number
           viewings_used?: number
@@ -1167,6 +1700,7 @@ export type Database = {
           provider?: string
           provider_order_id?: string
           purchased_at?: string
+          refunded_at?: string | null
           renter_id?: string
           viewings_included?: number
           viewings_used?: number
@@ -1439,6 +1973,115 @@ export type Database = {
           },
         ]
       }
+      realtor_messages: {
+        Row: {
+          actor: string
+          attachments: Json | null
+          body: string
+          claimed_at: string | null
+          created_at: string
+          direction: string
+          error: string | null
+          id: string
+          idempotency_key: string
+          inquiry_id: string | null
+          item_id: string | null
+          medium: string
+          on_sent_event: Json | null
+          provider_id: string | null
+          purpose: string
+          realtor_id: string | null
+          request_id: string | null
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          actor: string
+          attachments?: Json | null
+          body: string
+          claimed_at?: string | null
+          created_at?: string
+          direction: string
+          error?: string | null
+          id?: string
+          idempotency_key: string
+          inquiry_id?: string | null
+          item_id?: string | null
+          medium: string
+          on_sent_event?: Json | null
+          provider_id?: string | null
+          purpose: string
+          realtor_id?: string | null
+          request_id?: string | null
+          sent_at?: string | null
+          status: string
+        }
+        Update: {
+          actor?: string
+          attachments?: Json | null
+          body?: string
+          claimed_at?: string | null
+          created_at?: string
+          direction?: string
+          error?: string | null
+          id?: string
+          idempotency_key?: string
+          inquiry_id?: string | null
+          item_id?: string | null
+          medium?: string
+          on_sent_event?: Json | null
+          provider_id?: string | null
+          purpose?: string
+          realtor_id?: string | null
+          request_id?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "realtor_messages_inquiry_id_fkey"
+            columns: ["inquiry_id"]
+            isOneToOne: false
+            referencedRelation: "complex_inquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "realtor_messages_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "ops_request_items_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "realtor_messages_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "request_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "realtor_messages_realtor_id_fkey"
+            columns: ["realtor_id"]
+            isOneToOne: false
+            referencedRelation: "realtors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "realtor_messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "ops_request_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "realtor_messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "viewing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       realtors: {
         Row: {
           agency: string | null
@@ -1471,6 +2114,67 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      renter_searches: {
+        Row: {
+          answers_message_id: string
+          counted: boolean
+          created_at: string
+          filters: Json | null
+          id: string
+          listing_ids: string[]
+          message_id: string | null
+          query: string
+          refused: string | null
+          renter_id: string
+        }
+        Insert: {
+          answers_message_id: string
+          counted?: boolean
+          created_at?: string
+          filters?: Json | null
+          id?: string
+          listing_ids?: string[]
+          message_id?: string | null
+          query: string
+          refused?: string | null
+          renter_id: string
+        }
+        Update: {
+          answers_message_id?: string
+          counted?: boolean
+          created_at?: string
+          filters?: Json | null
+          id?: string
+          listing_ids?: string[]
+          message_id?: string | null
+          query?: string
+          refused?: string | null
+          renter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renter_searches_answers_message_id_fkey"
+            columns: ["answers_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "renter_searches_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "renter_searches_renter_id_fkey"
+            columns: ["renter_id"]
+            isOneToOne: false
+            referencedRelation: "renters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       renters: {
         Row: {
@@ -1713,6 +2417,7 @@ export type Database = {
           availability: Json
           created_at: string
           id: string
+          inquiry_id: string | null
           move_in_date: string | null
           ref: string
           renter_id: string
@@ -1721,6 +2426,7 @@ export type Database = {
           availability?: Json
           created_at?: string
           id?: string
+          inquiry_id?: string | null
           move_in_date?: string | null
           ref: string
           renter_id: string
@@ -1729,11 +2435,19 @@ export type Database = {
           availability?: Json
           created_at?: string
           id?: string
+          inquiry_id?: string | null
           move_in_date?: string | null
           ref?: string
           renter_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "viewing_requests_inquiry_id_fkey"
+            columns: ["inquiry_id"]
+            isOneToOne: false
+            referencedRelation: "complex_inquiries"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "viewing_requests_renter_id_fkey"
             columns: ["renter_id"]
@@ -1758,6 +2472,39 @@ export type Database = {
           renter_id?: string
           request_id?: string | null
           used_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_number_status: {
+        Row: {
+          checked_at: string | null
+          id: string
+          last_error: string | null
+          previous_rating: string | null
+          quality_rating: string | null
+          rating_changed_at: string | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          checked_at?: string | null
+          id?: string
+          last_error?: string | null
+          previous_rating?: string | null
+          quality_rating?: string | null
+          rating_changed_at?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          checked_at?: string | null
+          id?: string
+          last_error?: string | null
+          previous_rating?: string | null
+          quality_rating?: string | null
+          rating_changed_at?: string | null
+          status?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1791,6 +2538,39 @@ export type Database = {
           name?: string
           quality?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      zalo_bridge_status: {
+        Row: {
+          device: string | null
+          id: string
+          last_error: string | null
+          last_seen_at: string | null
+          paused: boolean
+          sent_today: number
+          updated_at: string
+          version: string | null
+        }
+        Insert: {
+          device?: string | null
+          id?: string
+          last_error?: string | null
+          last_seen_at?: string | null
+          paused?: boolean
+          sent_today?: number
+          updated_at?: string
+          version?: string | null
+        }
+        Update: {
+          device?: string | null
+          id?: string
+          last_error?: string | null
+          last_seen_at?: string | null
+          paused?: boolean
+          sent_today?: number
+          updated_at?: string
+          version?: string | null
         }
         Relationships: []
       }
@@ -1922,6 +2702,10 @@ export type Database = {
         }
       }
       cleanup_expired_external_properties: { Args: never; Returns: undefined }
+      complex_listing_ids: {
+        Args: { _complex_id: string; _since: string }
+        Returns: string[]
+      }
       consume_viewing_credits: {
         Args: { _needed: number; _request_id?: string; _user_id: string }
         Returns: number
@@ -2081,9 +2865,32 @@ export type Database = {
         Args: { activated_at: string }
         Returns: boolean
       }
+      listings_missing_contact: {
+        Args: { _limit?: number }
+        Returns: {
+          listing_id: string
+          requested: boolean
+          shows: string
+          signed_as: string
+          source: string
+          source_url: string
+          title: string
+          visible_digits: string
+        }[]
+      }
+      mask_phone_numbers: {
+        Args: { _body: string; _renter_phone: string }
+        Returns: string
+      }
       normalize_location: { Args: { location_text: string }; Returns: string }
       normalize_vn_phone: { Args: { raw: string }; Returns: string }
       openai_spend_today: { Args: never; Returns: number }
+      ops_area_roster: { Args: { _district_codes: string[] }; Returns: Json }
+      ops_building_roster: { Args: never; Returns: Json }
+      ops_inquiries: { Args: never; Returns: Json }
+      ops_inquiry_detail: { Args: { _inquiry_id: string }; Returns: Json }
+      ops_listing_url: { Args: { _listing_id: string }; Returns: string }
+      ops_request_thread: { Args: { _request_id: string }; Returns: Json }
       parse_area_sqm: { Args: { _size: string }; Returns: number }
       parse_bedrooms: { Args: { _rooms: string }; Returns: number }
       parse_bedrooms_is_min: { Args: { _rooms: string }; Returns: boolean }
@@ -2091,9 +2898,39 @@ export type Database = {
         Args: { _user_id: string }
         Returns: number
       }
-      price_confidence_for: { Args: { _price_vnd: number }; Returns: string }
+      phone_mask_prefix: { Args: { raw: string }; Returns: string }
+      price_confidence_for: {
+        Args: {
+          _described_max: number
+          _described_min: number
+          _price_vnd: number
+        }
+        Returns: string
+      }
       prune_orphan_listing_group_refs: { Args: never; Returns: number }
+      record_contact_check: {
+        Args: {
+          _checked_by?: string
+          _evidence_url?: string
+          _found_via?: string
+          _listing_id: string
+          _name?: string
+          _note?: string
+          _phone?: string
+          _result: string
+        }
+        Returns: Json
+      }
+      record_pass_refund: {
+        Args: {
+          _pass_days: number
+          _provider_order_id: string
+          _refunded_at: string
+        }
+        Returns: Json
+      }
       release_job: { Args: { _error: string; _id: string }; Returns: undefined }
+      renter_national_number: { Args: { _e164: string }; Returns: string }
       reveal_listing_contact: { Args: { _listing_id: string }; Returns: Json }
       set_fast_track_archived: {
         Args: { _archived: boolean; _request_id: string }
