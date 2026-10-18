@@ -9,7 +9,7 @@ import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { createClient } from "npm:@supabase/supabase-js@^2.108.2";
 import { z } from "npm:zod@^3.25.76";
-var BASE_URL = "https://hausto.lovable.app";
+var BASE_URL = "https://www.hausto.com";
 var VND_TO_USD = 24500;
 function sbForUser(ctx) {
   return createClient(
@@ -24,7 +24,7 @@ function sbForUser(ctx) {
 var search_properties_default = defineTool({
   name: "search_properties",
   title: "Search rental properties",
-  description: "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a hausto.lovable.app share link.",
+  description: "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a www.hausto.com share link.",
   inputSchema: {
     city: z.enum(["hcmc", "hanoi", "danang"]).optional().describe("City slug. Use 'hcmc' for Ho Chi Minh City."),
     district: z.string().optional().describe("District name filter."),
@@ -105,7 +105,7 @@ ${results.map(
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { createClient as createClient2 } from "npm:@supabase/supabase-js@^2.108.2";
 import { z as z2 } from "npm:zod@^3.25.76";
-var BASE_URL2 = "https://hausto.lovable.app";
+var BASE_URL2 = "https://www.hausto.com";
 var VND_TO_USD2 = 24500;
 function sbForUser2(ctx) {
   return createClient2(
@@ -178,7 +178,7 @@ var mcp_default = defineMcp({
   name: "hausto-mcp",
   title: "Hausto Property Search",
   version: "0.2.0",
-  instructions: "Tools for Hausto \u2014 search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Sign in with your Hausto account to connect. Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (hausto.lovable.app) with the user.",
+  instructions: "Tools for Hausto \u2014 search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Sign in with your Hausto account to connect. Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (www.hausto.com) with the user.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"

@@ -57,7 +57,7 @@ GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search
     {
       "id": "uuid",
       "title": "Modern 2BR in Thao Dien",
-      "url": "https://hausto.lovable.app/property/uuid",
+      "url": "https://www.hausto.com/property/uuid",
       "location": "Thao Dien, District 2, HCMC",
       "price_vnd": 15000000,
       "price_usd": 612,
@@ -80,7 +80,7 @@ GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search
 External listings include `last_verified_at`: the timestamp when the source listing was last confirmed still live. Listings failing verification twice or unconfirmed for 60 days are automatically removed. `last_verified_at` means live-on-source, not guaranteed available - availability at the listed price is what Hausto confirms with the agent when a renter requests a viewing.
 
 ### Important: Always link to Hausto
-The `url` field in every result points to the Hausto property page (`https://hausto.lovable.app/property/{id}`). **Always use this `url` when sharing listings with users.** `source_url` is kept in the response for compatibility and is always `null`: this API never returns the original marketplace listing or the agent's contact details. On the Hausto page a renter can request a viewing, and Hausto deals with the agent - or, signed in, see the agent's number where the original ad lists one.
+The `url` field in every result points to the Hausto property page (`https://www.hausto.com/property/{id}`). **Always use this `url` when sharing listings with users.** `source_url` is kept in the response for compatibility and is always `null`: this API never returns the original marketplace listing or the agent's contact details. On the Hausto page a renter can request a viewing, and Hausto deals with the agent - or, signed in, see the agent's number where the original ad lists one.
 
 ### Rate Limits
 - 60 requests per minute per IP
@@ -94,10 +94,10 @@ The `url` field in every result points to the Hausto property page (`https://hau
 - Contact information is never included in API responses
 
 ## OpenAPI Specification
-Available at: https://hausto.lovable.app/openapi.json
+Available at: https://www.hausto.com/openapi.json
 
 ## Property Pages
-Individual property pages are at: `https://hausto.lovable.app/property/{id}`
+Individual property pages are at: `https://www.hausto.com/property/{id}`
 Each page includes Schema.org JSON-LD structured data for machine-readable parsing.
 
 ## Sitemap

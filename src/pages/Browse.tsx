@@ -17,7 +17,7 @@ const Browse = () => {
       <Helmet>
         <title>Browse rentals - Hausto</title>
         <meta name="description" content="Compare verified rental apartments in Ho Chi Minh City, Hanoi, and Da Nang. Sortable table with prices, sizes, and freshness - duplicates merged." />
-        <link rel="canonical" href="https://hausto.lovable.app/browse" />
+        <link rel="canonical" href="https://www.hausto.com/browse" />
       </Helmet>
 
       {/* Header mirrors the landing page nav for a consistent shell */}

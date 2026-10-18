@@ -62,7 +62,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const BASE_URL = 'https://hausto.lovable.app';
+    const BASE_URL = 'https://www.hausto.com';
     const VND_TO_USD = 24500;
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
 

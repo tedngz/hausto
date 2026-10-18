@@ -2,7 +2,7 @@ import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-const BASE_URL = "https://hausto.lovable.app";
+const BASE_URL = "https://www.hausto.com";
 const VND_TO_USD = 24500;
 
 declare const process: { env: Record<string, string | undefined> };
@@ -22,7 +22,7 @@ export default defineTool({
   name: "search_properties",
   title: "Search rental properties",
   description:
-    "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a hausto.lovable.app share link.",
+    "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a www.hausto.com share link.",
   inputSchema: {
     city: z
       .enum(["hcmc", "hanoi", "danang"])

@@ -2,7 +2,7 @@ import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-const BASE_URL = "https://hausto.lovable.app";
+const BASE_URL = "https://www.hausto.com";
 const VND_TO_USD = 24500;
 
 declare const process: { env: Record<string, string | undefined> };

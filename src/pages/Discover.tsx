@@ -64,7 +64,7 @@ const Discover = () => {
       <Helmet>
         <title>Realtor dashboard - Hausto</title>
         <meta name="description" content="Manage your listings, renter matches and viewing requests on Hausto." />
-        <link rel="canonical" href="https://hausto.lovable.app/discover" />
+        <link rel="canonical" href="https://www.hausto.com/discover" />
       </Helmet>
 
       <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">

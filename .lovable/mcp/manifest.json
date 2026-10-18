@@ -19,7 +19,7 @@
       {
         "name": "search_properties",
         "title": "Search rental properties",
-        "description": "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a hausto.lovable.app share link.",
+        "description": "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a www.hausto.com share link.",
         "annotations": {
           "readOnlyHint": true,
           "openWorldHint": true

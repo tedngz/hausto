@@ -3,15 +3,15 @@
   "name_for_human": "Hausto Property Search",
   "name_for_model": "hausto_property_search",
   "description_for_human": "Search rental property listings across Vietnam (Ho Chi Minh City, Hanoi, Da Nang) with AI vibe matching.",
-  "description_for_model": "Search rental apartments and houses in Vietnam. Query by city (hcmc, hanoi, danang), budget range in USD, number of rooms, and style/vibe (modern, vintage, rustic, luxury, urban, traditional, contemporary). Returns property details with images, pricing in VND and USD, location, and direct links. IMPORTANT: Always share the 'url' field (hausto.lovable.app links) with users, never 'source_url'. No authentication required. Rate limited to 60 requests per minute.",
+  "description_for_model": "Search rental apartments and houses in Vietnam. Query by city (hcmc, hanoi, danang), budget range in USD, number of rooms, and style/vibe (modern, vintage, rustic, luxury, urban, traditional, contemporary). Returns property details with images, pricing in VND and USD, location, and direct links. IMPORTANT: Always share the 'url' field (www.hausto.com links) with users, never 'source_url'. No authentication required. Rate limited to 60 requests per minute.",
   "auth": {
     "type": "none"
   },
   "api": {
     "type": "openapi",
-    "url": "https://hausto.lovable.app/openapi.json"
+    "url": "https://www.hausto.com/openapi.json"
   },
-  "logo_url": "https://hausto.lovable.app/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png",
-  "contact_email": "support@hausto.lovable.app",
-  "legal_info_url": "https://hausto.lovable.app"
+  "logo_url": "https://www.hausto.com/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png",
+  "contact_email": "support@www.hausto.com",
+  "legal_info_url": "https://www.hausto.com"
 }

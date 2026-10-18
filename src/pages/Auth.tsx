@@ -302,10 +302,10 @@ const Auth = () => {
       <Helmet>
         <title>Hausto - Sign In or Create an Account</title>
         <meta name="description" content="Sign in to Hausto or create a free account to discover rental apartments in Vietnam with AI vibe matching." />
-        <link rel="canonical" href="https://hausto.lovable.app/auth" />
+        <link rel="canonical" href="https://www.hausto.com/auth" />
         <meta property="og:title" content="Hausto - Sign In" />
         <meta property="og:description" content="Sign in to Hausto to start matching with rental apartments in Vietnam." />
-        <meta property="og:url" content="https://hausto.lovable.app/auth" />
+        <meta property="og:url" content="https://www.hausto.com/auth" />
       </Helmet>
       <main className="w-full max-w-md">
         <div className="text-center mb-8">

@@ -16,7 +16,7 @@ export default function ComplexMap() {
           name="description"
           content="An editorial map of 100% vetted luxury rental complexes across Saigon and Hanoi. Browse by district, see realistic rent ranges, and tap a pin to open the building profile."
         />
-        <link rel="canonical" href="https://hausto.lovable.app/map" />
+        <link rel="canonical" href="https://www.hausto.com/map" />
       </Helmet>
 
       <main className="min-h-screen bg-[#FAF9F6]">
