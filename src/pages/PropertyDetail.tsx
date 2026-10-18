@@ -236,7 +236,7 @@ const PropertyDetail = () => {
     "@type": "RealEstateListing",
     "name": apartment.title,
     "description": apartment.description,
-    "url": `https://hausto.lovable.app/property/${apartment.id}`,
+    "url": `https://www.hausto.com/property/${apartment.id}`,
     "image": apartment.images?.slice(0, 5),
     "address": {
       "@type": "PostalAddress",
@@ -274,7 +274,7 @@ const PropertyDetail = () => {
         <Helmet>
           <title>{`${apartment!.title} — Hausto`}</title>
           <meta name="description" content={apartment!.description?.substring(0, 160) || `${apartment!.title} in ${apartment!.location}`} />
-          <link rel="canonical" href={`https://hausto.lovable.app/property/${apartment!.id}`} />
+          <link rel="canonical" href={`https://www.hausto.com/property/${apartment!.id}`} />
           <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
         </Helmet>
       )}

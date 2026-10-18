@@ -12,7 +12,7 @@ export default defineMcp({
   title: "Hausto Property Search",
   version: "0.2.0",
   instructions:
-    "Tools for Hausto — search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Sign in with your Hausto account to connect. Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (hausto.lovable.app) with the user.",
+    "Tools for Hausto — search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Sign in with your Hausto account to connect. Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (www.hausto.com) with the user.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",

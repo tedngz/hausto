@@ -234,7 +234,7 @@ const Hub = () => {
           name="description"
           content="Browse verified rentals, chat with the AI, and keep your matches in one place."
         />
-        <link rel="canonical" href="https://hausto.lovable.app/hub" />
+        <link rel="canonical" href="https://www.hausto.com/hub" />
       </Helmet>
 
       <div className="flex h-[100dvh] flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
