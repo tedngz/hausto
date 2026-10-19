@@ -9,11 +9,13 @@ export const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'TV': { icon: Tv, label: 'TV' },
   'Smart TV': { icon: Tv, label: 'Smart TV' },
   'Large Screen TV': { icon: Tv, label: 'Large TV' },
+  'Television': { icon: Tv, label: 'TV' },
   
   // Connectivity
   'WiFi Router': { icon: Wifi, label: 'WiFi' },
   'Internet Equipment': { icon: Wifi, label: 'Internet' },
   'WiFi': { icon: Wifi, label: 'WiFi' },
+  'Wi-Fi': { icon: Wifi, label: 'WiFi' },
   
   // Climate
   'Air Conditioning': { icon: Wind, label: 'AC' },
@@ -30,9 +32,11 @@ export const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'Oven': { icon: ChefHat, label: 'Oven' },
   'Stove': { icon: ChefHat, label: 'Stove' },
   'Refrigerator': { icon: ChefHat, label: 'Fridge' },
+  'Fridge': { icon: ChefHat, label: 'Fridge' },
   
   // Fitness & Wellness
   'Gym Equipment': { icon: Dumbbell, label: 'Gym' },
+  'Gym': { icon: Dumbbell, label: 'Gym' },
   'Fitness Area': { icon: Dumbbell, label: 'Fitness' },
   'Pool': { icon: Waves, label: 'Pool' },
   'Swimming Pool': { icon: Waves, label: 'Pool' },
@@ -66,6 +70,7 @@ export const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'Pet Amenities': { icon: PawPrint, label: 'Pet Friendly' },
   'Pet Bed': { icon: PawPrint, label: 'Pet Friendly' },
   'Pet Bowls': { icon: PawPrint, label: 'Pet Friendly' },
+  'Pet Friendly': { icon: PawPrint, label: 'Pet Friendly' },
   
   // Premium Features
   'Fireplace': { icon: Flame, label: 'Fireplace' },
@@ -75,12 +80,14 @@ export const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'Kitchen Island': { icon: ChefHat, label: 'Kitchen Island' },
   'Breakfast Bar': { icon: ChefHat, label: 'Breakfast Bar' },
   'Hardwood Floors': { icon: Sparkles, label: 'Hardwood' },
+  'Wood Floor': { icon: Sparkles, label: 'Hardwood' },
   'Marble': { icon: Sparkles, label: 'Marble' },
   'Premium Finishes': { icon: Sparkles, label: 'Premium' },
   'Smart Home Devices': { icon: Sparkles, label: 'Smart Home' },
   'Automation': { icon: Sparkles, label: 'Automation' },
   'Natural Light': { icon: Sun, label: 'Natural Light' },
   'Large Windows': { icon: Sun, label: 'Large Windows' },
+  'Large Window': { icon: Sun, label: 'Large Windows' },
   
   // Furniture
   'Bed': { icon: Bed, label: 'Bed' },
@@ -99,6 +106,7 @@ export const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'Coffee Table': { icon: Table, label: 'Coffee Table' },
   'Couch': { icon: Sofa, label: 'Couch' },
   'Sectional': { icon: Sofa, label: 'Sectional' },
+  'Sofa': { icon: Sofa, label: 'Sofa' },
   
   // Electronics
   'Fan': { icon: Fan, label: 'Fan' },
@@ -138,18 +146,28 @@ export const isValidAmenity = (amenity: string): boolean => {
   return !NON_AMENITY_PATTERNS.some(pattern => pattern.test(trimmed));
 };
 
-// Normalize amenity names to match icon keys
+// Longest first, so "coffee table" finds "Coffee Table" before "Table".
+const KEYS_LONGEST_FIRST = Object.keys(amenityIconMap).sort((a, b) => b.length - a.length);
+
+// Normalize amenity names to match icon keys. A name folds onto a key it
+// contains as a whole word ("Electric Stove" -> Stove), never onto a key that
+// merely contains it: that read "bed" as "Pet Bed" and labelled every listing
+// with a bed in its photos Pet Friendly.
 export const normalizeAmenity = (amenity: string): string => {
   const normalized = amenity.trim();
-  // Try direct match first
   if (amenityIconMap[normalized]) return normalized;
-  
-  // Try fuzzy matching
+
   const lower = normalized.toLowerCase();
-  for (const key of Object.keys(amenityIconMap)) {
-    if (lower.includes(key.toLowerCase()) || key.toLowerCase().includes(lower)) {
-      return key;
-    }
+  for (const key of KEYS_LONGEST_FIRST) {
+    const k = key.toLowerCase();
+    if (lower === k) return key;
+    const at = lower.indexOf(k);
+    if (at === -1) continue;
+    const before = lower[at - 1];
+    // A plural still matches: "Ceiling fans" is a Ceiling Fan.
+    const end = at + k.length + (lower[at + k.length] === 's' ? 1 : 0);
+    const after = lower[end];
+    if ((!before || !/[a-z0-9]/.test(before)) && (!after || !/[a-z0-9]/.test(after))) return key;
   }
   return normalized;
 };
@@ -170,11 +188,20 @@ export interface NormalizedAmenity {
  */
 export const getNormalizedAmenities = (amenities?: string[] | null, limit = 12): NormalizedAmenity[] => {
   if (!amenities || amenities.length === 0) return [];
-  return Array.from(new Set(amenities.filter(isValidAmenity).map(normalizeAmenity)))
-    .filter(a => isValidAmenity(a))
-    .slice(0, limit)
-    .map(a => {
-      const mapped = amenityIconMap[a];
-      return { key: a, label: mapped?.label ?? a, icon: mapped?.icon };
-    });
+  // Deduplicated on the label shown, not the key: "TV" and "Television", or
+  // "sofa" and "Sofa", are one thing to the renter reading the list.
+  const seen = new Set<string>();
+  const out: NormalizedAmenity[] = [];
+  for (const raw of amenities) {
+    if (typeof raw !== 'string' || !isValidAmenity(raw)) continue;
+    const key = normalizeAmenity(raw);
+    if (!isValidAmenity(key)) continue;
+    const mapped = amenityIconMap[key];
+    const label = mapped?.label ?? key;
+    if (seen.has(label.toLowerCase())) continue;
+    seen.add(label.toLowerCase());
+    out.push({ key, label, icon: mapped?.icon });
+    if (out.length >= limit) break;
+  }
+  return out;
 };
