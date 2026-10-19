@@ -957,6 +957,7 @@ export const HomeAI = ({
           images: fullProperty.images?.length ? fullProperty.images : property.images,
           description: fullProperty.description || property.description,
           highlights: fullProperty.highlights?.length ? fullProperty.highlights : property.highlights,
+          amenities: fullProperty.amenities?.length ? fullProperty.amenities : property.amenities,
           size: fullProperty.size || property.size,
           price: Number(fullProperty.price ?? property.price),
           vibe: fullProperty.vibe || property.vibe,
@@ -971,7 +972,7 @@ export const HomeAI = ({
         // toggle - the full text only exists on the row itself.
         const { data: external } = await supabase
           .from('external_properties')
-          .select('description, highlights, images, size, vibe, vibe_analysis')
+          .select('description, highlights, amenities, images, size, vibe, vibe_analysis')
           .eq('id', property.id)
           .maybeSingle();
         setSelectedProperty(
@@ -981,6 +982,8 @@ export const HomeAI = ({
                 images: external.images?.length ? external.images : property.images,
                 description: external.description || property.description,
                 highlights: external.highlights?.length ? external.highlights : property.highlights,
+                // The row's own list, as the listing's page reads it.
+                amenities: external.amenities?.length ? external.amenities : property.amenities,
                 size: external.size || property.size,
                 vibe: external.vibe || property.vibe,
                 vibe_analysis: external.vibe_analysis ?? property.vibe_analysis,
@@ -1584,7 +1587,10 @@ export const HomeAI = ({
           vibe: selectedProperty.vibe,
           description: selectedProperty.description,
           highlights: selectedProperty.highlights,
-          amenities: selectedProperty.vibe_analysis?.amenities || selectedProperty.amenities || [],
+          // The listing's own list (chat-ai: the ad's, then the photos'), not
+          // the photo analysis's alone - so the preview shows what the
+          // listing's page does.
+          amenities: selectedProperty.amenities || [],
           vibe_analysis: selectedProperty.vibe_analysis,
         } : null}
         vibeScore={selectedProperty ? cardVibeScore(selectedProperty) : undefined}

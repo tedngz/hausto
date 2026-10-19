@@ -1,4 +1,4 @@
-import { amenityIconMap, isValidAmenity, normalizeAmenity } from '@/lib/amenities';
+import { getNormalizedAmenities } from '@/lib/amenities';
 
 interface PropertyAmenitiesProps {
   amenities: string[];
@@ -10,10 +10,7 @@ interface PropertyAmenitiesProps {
 export const PropertyAmenities = ({ amenities, compact = true, variant = 'default' }: PropertyAmenitiesProps) => {
   if (!amenities || amenities.length === 0) return null;
 
-  // Deduplicate, filter, and normalize amenities
-  const uniqueAmenities = Array.from(new Set(amenities.filter(isValidAmenity).map(normalizeAmenity)))
-    .filter(a => isValidAmenity(a))
-    .slice(0, compact ? 8 : 12);
+  const uniqueAmenities = getNormalizedAmenities(amenities, compact ? 8 : 12);
 
   if (uniqueAmenities.length === 0) return null;
 
@@ -24,14 +21,11 @@ export const PropertyAmenities = ({ amenities, compact = true, variant = 'defaul
 
   return (
     <div className={`flex flex-wrap gap-2 ${compact ? 'py-2' : 'py-3'}`}>
-      {uniqueAmenities.map((amenity) => {
-        const mapped = amenityIconMap[amenity];
-
-        if (mapped) {
-          const { icon: Icon, label } = mapped;
+      {uniqueAmenities.map(({ key, label, icon: Icon }) => {
+        if (Icon) {
           return (
             <div
-              key={amenity}
+              key={key}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${chipClass} ${compact ? 'text-xs' : 'text-sm'}`}
               title={label}
             >
@@ -44,11 +38,11 @@ export const PropertyAmenities = ({ amenities, compact = true, variant = 'defaul
         // Render AI-detected amenities without icons
         return (
           <div
-            key={amenity}
+            key={key}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${chipClass} ${compact ? 'text-xs' : 'text-sm'}`}
-            title={amenity}
+            title={label}
           >
-            <span className="font-medium">{amenity}</span>
+            <span className="font-medium">{label}</span>
           </div>
         );
       })}

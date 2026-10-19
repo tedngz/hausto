@@ -1260,16 +1260,28 @@ function filterAndScoreProperties(
     const locLower = p.location.toLowerCase();
     const titleLowerPre = (p.title || '').toLowerCase();
     
-    // Extract amenities: check top-level first, then aggregate from image_analyses
-    let amenities = p.vibe_analysis?.amenities || p.amenities || [];
-    if ((!amenities || amenities.length === 0) && p.vibe_analysis?.image_analyses) {
-      const imageAmenities = new Set<string>();
-      for (const img of p.vibe_analysis.image_analyses) {
-        if (Array.isArray(img.amenities)) {
-          for (const a of img.amenities) imageAmenities.add(a);
-        }
+    // The ad's amenities, then what the photo analysis saw. Both, because each
+    // misses what the other has: a pool or a gym the ad lists is rarely in a
+    // photo, and a desk in a photo is often missing from the ad. Taking the
+    // photo list alone, as this used to, meant "with a pool" never matched a
+    // listing on its ad. Ad first, because the preview is built from this list
+    // and shows the first few - the same order the listing's page shows.
+    const amenities: string[] = [];
+    const seenAmenity = new Set<string>();
+    const addAmenities = (list: unknown) => {
+      if (!Array.isArray(list)) return;
+      for (const a of list) {
+        if (typeof a !== 'string' || !a.trim()) continue;
+        const k = a.trim().toLowerCase();
+        if (seenAmenity.has(k)) continue;
+        seenAmenity.add(k);
+        amenities.push(a.trim());
       }
-      amenities = Array.from(imageAmenities);
+    };
+    addAmenities(p.amenities);
+    addAmenities(p.vibe_analysis?.amenities);
+    if (amenities.length === 0 && Array.isArray(p.vibe_analysis?.image_analyses)) {
+      for (const img of p.vibe_analysis.image_analyses) addAmenities(img?.amenities);
     }
     const styles = p.vibe_analysis?.styles || [];
     
