@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { ASSISTANT_COMPARE_EVENT } from '@/lib/assistantEvents';
 import { markChatDockPointerDown } from '@/lib/hubLayout';
@@ -51,6 +51,11 @@ const wantsKeyboard = () => {
   return el instanceof HTMLElement && (el.isContentEditable || el.matches(KEYBOARD_FIELDS));
 };
 
+// How much of the visible page has to vanish while a field has focus before it
+// counts as an on-screen keyboard. A phone's takes 250px and more; a browser
+// toolbar folding away, or the shortcut bar over a hardware keyboard, less.
+const KEYBOARD_MIN_PX = 150;
+
 interface ChatDockProps {
   /** True at rail widths. The caller measures it, so a page can force the
    *  sheet (a narrow layout on a wide screen) without lying about the viewport. */
@@ -84,6 +89,9 @@ export const ChatDock = ({
   const [dockHeight, setDockHeight] = useState<number | null>(null);
   // Suppresses the height transition mid-drag, which would otherwise lag the finger.
   const [dragging, setDragging] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  // Where the visible page is while the keyboard is up (see below); null otherwise.
+  const [keyboardFrame, setKeyboardFrame] = useState<{ top: number; height: number } | null>(null);
 
   // Dragging the grabber resizes the sheet. Pointer events rather than touch
   // events so the same handler serves a finger, a stylus and a mouse; capture
@@ -176,6 +184,56 @@ export const ChatDock = ({
     };
   }, [hasRail]);
 
+  // While the keyboard is up for a field in the sheet, the sheet is pinned over
+  // exactly the part of the page the renter can see: from the top of the
+  // visual viewport down to the keyboard. Left in the page's flow it was at
+  // the mercy of how each browser makes room for a keyboard - Brave on iOS
+  // shrinks 100dvh but not the document, so the page ended a hand's width
+  // above the keyboard, slicing through the composer, with blank page below
+  // it to scroll into. The visual viewport is the one measure every browser
+  // agrees on. So while the renter types the sheet is the whole screen - the
+  // thread, then the composer sitting on the keyboard - and it goes back into
+  // the page when the keyboard goes.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (hasRail || !viewport) return;
+    // How tall the visible page is with no keyboard, re-read whenever nothing
+    // wants one, so a resized window or a folded toolbar is not mistaken for it.
+    let restHeight = viewport.height;
+    const measure = () => {
+      const typing = wantsKeyboard();
+      if (!typing) restHeight = viewport.height;
+      const up =
+        typing &&
+        !!sheetRef.current?.contains(document.activeElement) &&
+        viewport.height < restHeight - KEYBOARD_MIN_PX;
+      const top = Math.round(viewport.offsetTop);
+      const height = Math.round(viewport.height);
+      setKeyboardFrame((prev) =>
+        !up ? null : prev && prev.top === top && prev.height === height ? prev : { top, height },
+      );
+    };
+    // Focus moves before activeElement settles, and before the keyboard starts
+    // to rise; the viewport's own events carry the rest.
+    let timer: number | undefined;
+    const measureSoon = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(measure, 0);
+    };
+    viewport.addEventListener('resize', measure);
+    viewport.addEventListener('scroll', measure);
+    document.addEventListener('focusin', measureSoon);
+    document.addEventListener('focusout', measureSoon);
+    return () => {
+      window.clearTimeout(timer);
+      viewport.removeEventListener('resize', measure);
+      viewport.removeEventListener('scroll', measure);
+      document.removeEventListener('focusin', measureSoon);
+      document.removeEventListener('focusout', measureSoon);
+      setKeyboardFrame(null);
+    };
+  }, [hasRail]);
+
   // How much of the bottom edge the chat is taking, published for the floating
   // panels (see lib/hubLayout). They are portaled to the body and cannot
   // measure this page, and a panel that assumed the collapsed height simply
@@ -227,28 +285,43 @@ export const ChatDock = ({
     // Marking the pointerdown (and data-chat-dock, for focus) tells the
     // dialog a tap here is not a tap outside it (components/ui/dialog.tsx).
     <div
+      ref={sheetRef}
       data-chat-dock
       onPointerDownCapture={(e) => markChatDockPointerDown(e.nativeEvent)}
-      className={hidden ? 'hidden' : 'pointer-events-auto z-[60] shrink-0'}
+      className={
+        hidden
+          ? 'hidden'
+          : `pointer-events-auto z-[60] ${keyboardFrame ? 'fixed inset-x-0' : 'shrink-0'}`
+      }
+      style={keyboardFrame ? { top: keyboardFrame.top } : undefined}
     >
       <div
-        className={`glass-card flex flex-col rounded-t-3xl ${dragging ? '' : 'transition-[height] duration-200'}`}
+        className={`glass-card flex flex-col rounded-t-3xl ${
+          dragging || keyboardFrame ? '' : 'transition-[height] duration-200'
+        }`}
         // A third of the viewport by default, not two thirds: on a phone the
         // dock used to bury whatever the renter was asking about, so the answer
         // arrived with no way to see what it referred to. A Deep scan is longer
         // than that third, though, so the renter can drag it taller - up to
         // 85dvh - and the choice sticks.
+        // Pinned, it also goes opaque: it covers the listings then, instead of
+        // sitting beneath them, and their text showing through the glass
+        // competed with the conversation.
         style={{
-          height: isOpen
-            ? dockHeight === null
-              ? 'max(50dvh, 15rem)'
-              : `${dockHeight}px`
-            : '4rem',
+          height: keyboardFrame
+            ? `${keyboardFrame.height}px`
+            : isOpen
+              ? dockHeight === null
+                ? 'max(50dvh, 15rem)'
+                : `${dockHeight}px`
+              : '4rem',
+          backgroundColor: keyboardFrame ? 'hsl(var(--background))' : undefined,
         }}
       >
         {/* Grabber. Only while the sheet is open: collapsed, there is nothing
-            to resize and the whole bar is already a toggle. */}
-        {isOpen && (
+            to resize and the whole bar is already a toggle. Nor while it is
+            pinned over the keyboard, where its height is the screen's. */}
+        {isOpen && !keyboardFrame && (
           <div
             role="separator"
             aria-orientation="horizontal"
