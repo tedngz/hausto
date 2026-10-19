@@ -6,6 +6,7 @@ import { askCompare } from "../_shared/compare-listings.ts";
 import { logOpenAIUsage } from "../_shared/openai-usage.ts";
 import { MAX_AREA_DISTRICTS, THIN_SEARCH } from "../_shared/viewing/place.ts";
 import { aiCreditKey, creditAllows, CREDITS_USED_REPLY } from "../_shared/ai-credits.ts";
+import { extractAmenities, parseBedrooms, parsePrice, splitAvoidedAreas } from "../_shared/chat-search-parse.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -348,67 +349,6 @@ function isCenterRequest(text: string): boolean {
   return /\b(center|central|trung tâm|trung tam|downtown|city center|nội thành|noi thanh)\b/.test(lowerText);
 }
 
-function parsePrice(text: string): number | null {
-  const patterns = [
-    /(?:under|below|less than|dưới|max|maximum|budget)\s*(\d+(?:\.\d+)?)\s*(mil|million|m|tr|triệu|trieu)/gi,
-    /(\d+(?:\.\d+)?)\s*(mil|million|m|tr|triệu|trieu)\s*(?:or less|max|maximum|budget|vnd)/gi,
-    /(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:vnd|đồng|dong)/gi, // Direct VND amounts
-  ];
-  
-  for (const pattern of patterns) {
-    const matches = text.toLowerCase().matchAll(pattern);
-    for (const match of matches) {
-      let value = parseFloat(match[1].replace(/,/g, ''));
-      
-      // Convert to VND if in millions
-      if (match[2] && /mil|million|m|tr|triệu|trieu/i.test(match[2])) {
-        value = value * 1000000;
-      }
-      
-      if (value > 0 && value < 100000000) { // Reasonable price range
-        return value;
-      }
-    }
-  }
-  return null;
-}
-
-// Returns canonical bedroom token: "studio", "1", "2", "3", "4+", or null
-function parseBedrooms(text: string): string | null {
-  const lower = text.toLowerCase();
-  // Studio
-  if (/\bstudio\b/.test(lower)) return 'studio';
-  // Penthouse — treat as its own category, don't conflate with bedroom counts
-  // Patterns: "2 bedroom(s)", "2-bedroom", "2br", "2 br", "2bd", "2 phòng ngủ", "2 phong ngu", "2 pn", "2pn"
-  const patterns: RegExp[] = [
-    /(\d+)\s*\+?\s*(?:bedroom|bed\s*room|bedrooms|bed-?room)s?\b/,
-    /(\d+)\s*\+?\s*br\b/,
-    /(\d+)\s*\+?\s*bd\b/,
-    /(\d+)\s*\+?\s*ph[oòô]ng\s*ng[uủ]/,
-    /(\d+)\s*\+?\s*pn\b/,
-  ];
-  for (const re of patterns) {
-    const m = lower.match(re);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (!isNaN(n) && n >= 1) {
-        if (n >= 4) return '4+';
-        return String(n);
-      }
-    }
-  }
-  // "one bedroom", "two bedrooms"
-  const wordMap: Record<string, string> = {
-    one: '1', two: '2', three: '3', four: '4+', five: '4+',
-    một: '1', hai: '2', ba: '3', bốn: '4+', mot: '1', bon: '4+',
-  };
-  for (const [w, n] of Object.entries(wordMap)) {
-    const re = new RegExp(`\\b${w}\\s+(?:bedroom|bed-?room|ph[oòô]ng\\s*ng[uủ])`, 'i');
-    if (re.test(lower)) return n;
-  }
-  return null;
-}
-
 // Check if a property's `rooms` field matches the requested bedroom token
 function propertyMatchesBedrooms(roomsField: string | null | undefined, requested: string): boolean {
   if (!roomsField) return false;
@@ -424,35 +364,6 @@ function propertyMatchesBedrooms(roomsField: string | null | undefined, requeste
   const m = r.match(/^(\d+)\s*bedroom/);
   if (m) return m[1] === requested;
   return false;
-}
-
-function extractAmenities(text: string): string[] {
-  const lowerText = text.toLowerCase();
-  const amenityMap: Record<string, string[]> = {
-    'balcony': ['balcony', 'ban công', 'ban cong'],
-    'pool': ['pool', 'swimming', 'hồ bơi', 'ho boi', 'bể bơi', 'be boi'],
-    'gym': ['gym', 'fitness', 'phòng gym', 'phong gym', 'tập gym', 'tap gym'],
-    'parking': ['parking', 'đỗ xe', 'do xe', 'bãi đỗ', 'bai do', 'garage'],
-    'pet': ['pet', 'thú cưng', 'thu cung', 'dog', 'cat', 'chó', 'cho', 'mèo', 'meo'],
-    'furnished': ['furnished', 'nội thất', 'noi that', 'đầy đủ', 'day du'],
-    'wifi': ['wifi', 'internet', 'mạng', 'mang'],
-    'elevator': ['elevator', 'thang máy', 'thang may', 'lift'],
-    'security': ['security', 'bảo vệ', 'bao ve', 'an ninh'],
-    'garden': ['garden', 'vườn', 'vuon', 'sân vườn', 'san vuon'],
-    'sofa': ['sofa', 'ghế sofa', 'ghe sofa', 'couch'],
-    'tv': ['tv', 'tivi', 'ti vi', 'television', 'smart tv'],
-    'washing machine': ['washing machine', 'máy giặt', 'may giat', 'laundry'],
-    'air conditioning': ['air conditioning', 'ac', 'điều hòa', 'dieu hoa', 'máy lạnh', 'may lanh'],
-    'kitchen': ['kitchen', 'bếp', 'bep', 'nhà bếp', 'nha bep'],
-  };
-  
-  const found: string[] = [];
-  for (const [canonical, variations] of Object.entries(amenityMap)) {
-    if (variations.some(v => lowerText.includes(v))) {
-      found.push(canonical);
-    }
-  }
-  return found;
 }
 
 function extractStyles(text: string): string[] {
@@ -536,8 +447,11 @@ function extractRequestedComplexes(text: string): string[] {
   );
 }
 
-// Extract specific districts/areas mentioned by user (including sub-districts and roads)
-function extractSpecificDistricts(text: string): string[] {
+// Extract specific districts/areas mentioned by user (including sub-districts and roads).
+// withParents: false reads only the places named - a ward or a building, not
+// the district around it, and nothing from a road or a landmark. That is how
+// a place to AVOID is read: "avoid Thao Dien" leaves the rest of District 2.
+function extractSpecificDistricts(text: string, { withParents = true }: { withParents?: boolean } = {}): string[] {
   const lowerText = text.toLowerCase();
   const districts: string[] = [];
   
@@ -673,7 +587,7 @@ function extractSpecificDistricts(text: string): string[] {
   };
 
   // Check landmark names first (highest priority)
-  for (const [landmark, district] of Object.entries(HCM_LANDMARKS)) {
+  for (const [landmark, district] of withParents ? Object.entries(HCM_LANDMARKS) : []) {
     if (lowerText.includes(landmark)) {
       if (!districts.includes(district)) districts.push(district);
     }
@@ -683,7 +597,7 @@ function extractSpecificDistricts(text: string): string[] {
   for (const [complex, district] of Object.entries(HCM_COMPLEXES)) {
     if (lowerText.includes(complex)) {
       if (!districts.includes(complex)) districts.push(complex); // Add complex name itself for exact matching
-      if (!districts.includes(district)) districts.push(district);
+      if (withParents && !districts.includes(district)) districts.push(district);
     }
   }
   
@@ -767,14 +681,14 @@ function extractSpecificDistricts(text: string): string[] {
         districts.push(area.canonical);
       }
       // Also add parent district for broader matching
-      if (!districts.includes(area.parent)) {
+      if (withParents && !districts.includes(area.parent)) {
         districts.push(area.parent);
       }
     }
   }
   
   // Check for road names and add their districts
-  for (const [road, district] of Object.entries(HCM_ROADS)) {
+  for (const [road, district] of withParents ? Object.entries(HCM_ROADS) : []) {
     if (lowerText.includes(road)) {
       if (!districts.includes(district)) {
         districts.push(district);
@@ -790,7 +704,12 @@ function extractSpecificDistricts(text: string): string[] {
 // that Thao Dien is part of District 2.
 const DISTRICT_SUB_AREAS: Record<string, string[]> = {
   'district 1': ['da kao', 'ben nghe', 'ben thanh', 'nguyen thai binh', 'pham ngu lao', 'tan dinh', 'cau kho', 'co giang'],
-  'district 2': ['thao dien', 'an phu', 'thu thiem', 'cat lai', 'thanh my loi', 'binh an', 'binh khanh', 'an khanh'],
+  'district 2': ['thao dien', 'an phu', 'thu thiem', 'cat lai', 'thanh my loi', 'binh an', 'binh khanh', 'an khanh',
+    'binh trung tay', 'binh trung dong', 'an loi dong'],
+  // Former District 9 wards, now addressed as Thu Duc City. Not Tan Phu: that
+  // name is also a district of its own.
+  'district 9': ['long binh', 'long phuoc', 'long thanh my', 'long truong', 'phu huu', 'phuoc binh',
+    'phuoc long a', 'phuoc long b', 'tang nhon phu a', 'tang nhon phu b', 'truong thanh', 'hiep phu'],
   'district 3': ['vo thi sau'],
   'district 7': ['phu my hung', 'tan phong', 'tan phu d7', 'tan hung', 'tan kieng'],
   'binh thanh': ['thanh da', 'binh quoi', 'hang xanh', 'van thanh'],
@@ -834,7 +753,8 @@ function matchesArea(locLower: string, searchableText: string, district: string)
   if (district === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
   if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
   if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
-  if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
+  // A whole word: "tan phu" contains "an phu".
+  if (district === 'an phu' && (matchesWord(locLower, 'an phu') || matchesWord(locLower, 'an phú'))) return true;
   if (district === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
   if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
   if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
@@ -907,7 +827,8 @@ function extractLikes(text: string): string[] {
   const lower = text.toLowerCase();
   const out: string[] = [];
   const patterns: Array<[RegExp, string]> = [
-    [/(love|like|prefer|want) (the )?([a-z0-9\s-]{2,30})/i, 'likes $3'],
+    // Not "prefer to avoid ..." or "want nothing ...": those are the opposite.
+    [/(love|like|prefer|want) (?!to avoid|not|nothing|no )(the )?([a-z0-9\s-]{2,30})/i, 'likes $3'],
     [/(perfect|great|nice|good) (for|fit|match)/i, 'positive reaction'],
     [/(this|that) (one|looks) (good|great|perfect|nice)/i, 'positive on shown option'],
     [/show me more like/i, 'wants more like previous'],
@@ -1036,7 +957,17 @@ function buildAccumulatedContext(
     // and asking for a DIFFERENT one moves everything named so far onto the
     // avoid list. Without that second half the old district simply stuck, and
     // "similar style in different areas" came back with the same streets.
-    const specificDistricts = extractSpecificDistricts(text);
+    //
+    // Places the message asks to stay out of ("avoid District 2", "anything
+    // but D9") are read separately and go straight onto the avoid list. Read
+    // with the rest, they came back as the only places to search.
+    const { wanted, avoided } = splitAvoidedAreas(text);
+    const avoidedHere = avoided.flatMap(clause => extractSpecificDistricts(clause, { withParents: false }));
+    for (const d of avoidedHere) {
+      if (!context.excludedDistricts.includes(d)) context.excludedDistricts.push(d);
+    }
+    context.specificDistricts = context.specificDistricts.filter(d => !avoidedHere.includes(d));
+    const specificDistricts = extractSpecificDistricts(wanted);
     if (specificDistricts.length > 0) {
       for (const d of specificDistricts) {
         if (!context.specificDistricts.includes(d)) context.specificDistricts.push(d);
@@ -1044,7 +975,7 @@ function buildAccumulatedContext(
       // Naming a place is a fresh start for it - somewhere they walked away
       // from earlier is fair game again the moment they ask for it by name.
       context.excludedDistricts = context.excludedDistricts.filter(d => !specificDistricts.includes(d));
-    } else if (wantsDifferentAreas(text)) {
+    } else if (avoidedHere.length === 0 && wantsDifferentAreas(text)) {
       for (const d of context.specificDistricts) {
         if (!context.excludedDistricts.includes(d)) context.excludedDistricts.push(d);
       }
@@ -1065,7 +996,7 @@ function buildAccumulatedContext(
   // while still allowing them to pivot to a new complex without old ones sticking around.
   let latestComplexes: string[] = [];
   for (const text of allUserTexts) {
-    const found = extractRequestedComplexes(text);
+    const found = extractRequestedComplexes(splitAvoidedAreas(text).wanted);
     if (found.length > 0) {
       latestComplexes = found;
     }
@@ -1074,7 +1005,7 @@ function buildAccumulatedContext(
 
   // Specific districts: honor those mentioned in the CURRENT user message if present.
   // This allows users to pivot their search to a new district without dragging old ones along.
-  const currentDistricts = extractSpecificDistricts(currentMessage);
+  const currentDistricts = extractSpecificDistricts(splitAvoidedAreas(currentMessage).wanted);
   if (currentDistricts.length > 0) {
     context.specificDistricts = currentDistricts;
   }
@@ -1236,6 +1167,7 @@ interface PropertyWithScore {
   vibe_analysis?: any;
   // Scoring
   matchScore: number;
+  rankScore: number;  // matchScore before the 100 cap; what byRank sorts on
   priceMatch: boolean;
   locationMatch: boolean;
   amenityMatchCount: number;
@@ -1336,7 +1268,11 @@ function filterAndScoreProperties(
     // shortlist sits in one district, penalising it still returns that district.
     if (context.excludedDistricts.length > 0) {
       const haystack = `${locLower} ${titleLowerPre}`;
-      if (context.excludedDistricts.some(d => matchesArea(locLower, haystack, d))) {
+      // A district's wards too: since the 2025 merger many addresses read
+      // "Thao Dien, Thu Duc City" and never say District 2.
+      const inAvoidedWard = context.excludedDistricts.some(d =>
+        (DISTRICT_SUB_AREAS[d] || []).some(ward => matchesWord(locLower, ward)));
+      if (inAvoidedWard || context.excludedDistricts.some(d => matchesArea(locLower, haystack, d))) {
         console.log(`[Scoring] Property ${p.id} EXCLUDED - renter asked for a different area than ${p.location}`);
         continue;
       }
@@ -1518,9 +1454,10 @@ function filterAndScoreProperties(
       matchReasons.push(`${context.styles.filter(s => lowerStyles.some((ls: string) => ls.includes(s))).join(', ')} style`);
     }
     
-    // Cap score at 100 for display, but keep exact sub-area first via separate flag
+    // Cap score at 100 for display; ranking uses the uncapped score (see byRank).
+    const rankScore = score;
     score = Math.min(100, Math.max(0, score));
-    
+
     scored.push({
       id: p.id,
       title: p.title,
@@ -1537,6 +1474,7 @@ function filterAndScoreProperties(
       rooms: p.rooms || null,
       vibe_analysis: p.vibe_analysis || null,
       matchScore: score,
+      rankScore,
       priceMatch,
       locationMatch,
       amenityMatchCount,
@@ -1549,12 +1487,19 @@ function filterAndScoreProperties(
     });
   }
   
-  // Sort by priority: exact sub-area matches first, then by score
-  return scored.sort((a, b) => {
-    if (a.isExactSubAreaMatch && !b.isExactSubAreaMatch) return -1;
-    if (!a.isExactSubAreaMatch && b.isExactSubAreaMatch) return 1;
-    return b.matchScore - a.matchScore;
-  });
+  return scored.sort(byRank);
+}
+
+// Exact sub-area matches first, then everything inside the budget, then by
+// uncapped score. The budget is its own tier because the score cannot carry
+// it: a listing 30 over budget with five matching amenities and two styles
+// scored 105, capped to 100, and tied with every in-budget listing - and the
+// tie went to whichever came first from the database. "Nothing under 15M
+// matched" was said over 2-bedrooms at 13M and 15M.
+function byRank(a: PropertyWithScore, b: PropertyWithScore): number {
+  if (!!a.isExactSubAreaMatch !== !!b.isExactSubAreaMatch) return a.isExactSubAreaMatch ? -1 : 1;
+  if (a.priceMatch !== b.priceMatch) return a.priceMatch ? -1 : 1;
+  return b.rankScore - a.rankScore;
 }
 
 // ========== POST-PROCESSING VALIDATION ==========
@@ -1863,7 +1808,9 @@ serve(async (req) => {
       id: ext.id, // Use real UUID so ai_search_results FK works
       title: ext.title,
       location: ext.location,
-      price: Number(ext.price) || 0,
+      // price_vnd is the canonical rent; price holds USD for some housingsgn
+      // rows, which read as a few hundred dong and topped every budget.
+      price: Number(ext.price_vnd ?? ext.price) || 0,
       size: ext.size || null,
       vibe: ext.vibe || null,
       description: ext.description || null,
@@ -2375,10 +2322,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
       const topInternals = scoredProperties
         .filter(p => !p.isExternal)
         .slice(0, topSize - externalQuota);
-      topProperties = [...topInternals, ...topExternals].sort((a, b) => {
-        if (a.isExactSubAreaMatch !== b.isExactSubAreaMatch) return a.isExactSubAreaMatch ? -1 : 1;
-        return b.matchScore - a.matchScore;
-      });
+      topProperties = [...topInternals, ...topExternals].sort(byRank);
     }
     console.log(`[Filtering] externals in scored=${externalsInScored.length}, in topProperties=${topProperties.filter(p => p.isExternal).length}`);
 
