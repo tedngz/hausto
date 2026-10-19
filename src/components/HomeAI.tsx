@@ -1020,7 +1020,10 @@ export const HomeAI = ({
         : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10 flex flex-col'}>
         
         {/* Scrollable Conversation Area */}
-        <div ref={threadRef} className={isRail ? 'relative flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-1' : 'flex flex-col gap-2'}>
+        {/* overscroll-contain: reaching the end of the thread must not carry
+            on into the page behind it, which in the phone sheet scrolled the
+            window into the blank below the hub. */}
+        <div ref={threadRef} className={isRail ? 'relative flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto overscroll-contain pr-1' : 'flex flex-col gap-2'}>
       {/* Header — history / new-chat controls. Given a headerPortal they move up
           onto the pane's own "Hausto Agent" heading, which already has a half-empty
           row; without one they sit in normal flow so they reserve their own row
