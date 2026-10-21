@@ -22,6 +22,7 @@ import { briefOf } from '../_shared/viewing/offer.ts';
 import { placeOf } from '../_shared/viewing/place.ts';
 import { reduceInquiry, type InquiryEvent } from '../_shared/viewing-domain.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { hasClaudeKey } from '../_shared/claude.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,7 +31,6 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   if (reply.length > MAX_REPLY_CHARS) {
     return json({ error: 'reply_too_long', message: `Paste the agent's reply only - ${reply.length} characters is more than ${MAX_REPLY_CHARS}.` }, 400);
   }
-  if (!OPENAI_API_KEY) return json({ error: 'openai_not_configured' }, 500);
+  if (!hasClaudeKey()) return json({ error: 'model_not_configured' }, 500);
 
   if (inquiryId) {
     const { data: inq } = await db.from('complex_inquiries')
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       db.from('inquiry_events').select('id, inquiry_id, type, payload, actor, occurred_at').eq('inquiry_id', inquiryId),
     ]);
     if (await isOpenAIBudgetExhausted()) {
-      return json({ error: 'budget_exhausted', message: 'Daily OpenAI budget reached - fill the unit in by hand.' }, 429);
+      return json({ error: 'budget_exhausted', message: 'Daily AI budget reached - fill the unit in by hand.' }, 429);
     }
     const view = reduceInquiry(inquiryId, (events ?? []) as InquiryEvent[]);
     const result = await callUnitParseModel({
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
       complexName: place?.name ?? 'the building',
       brief: briefOf({ bedrooms: Number(inq.bedrooms_needed), budgetMaxVnd: inq.budget_max_vnd ?? null }, view.brief),
       now: new Date(),
-    }, OPENAI_API_KEY);
+    });
     if (!result.ok) {
       console.error('[ops-parse-reply] unit parse failed:', result.error);
       return json({ error: 'llm_failed', message: 'The reply could not be read - fill the unit in by hand.' }, 502);
@@ -101,10 +101,10 @@ Deno.serve(async (req) => {
   const { data: request } = await db
     .from('viewing_requests').select('availability').eq('id', item.request_id).maybeSingle();
 
-  // The cap every OpenAI function honours. A spend cap one function ignores is
+  // The cap every model-calling function honours. A spend cap one function ignores is
   // not a spend cap.
   if (await isOpenAIBudgetExhausted()) {
-    return json({ error: 'budget_exhausted', message: 'Daily OpenAI budget reached - pick the outcome by hand.' }, 429);
+    return json({ error: 'budget_exhausted', message: 'Daily AI budget reached - pick the outcome by hand.' }, 429);
   }
 
   const ctx = {
@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
     now: new Date(),
   };
 
-  const result = await callParseModel(ctx, OPENAI_API_KEY);
+  const result = await callParseModel(ctx);
   if (!result.ok) {
     console.error('[ops-parse-reply] failed:', result.error);
     return json({ error: 'llm_failed', message: 'The reply could not be read - pick the outcome by hand.' }, 502);

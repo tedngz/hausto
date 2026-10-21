@@ -5,6 +5,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { chat, hasClaudeKey, type ChatMessage } from '../_shared/claude.ts';
 import { isVideoOrAnimatedUrl, isMapOrDiagramUrl, STORE_TARGET } from '../_shared/vibe-policy.ts';
 import { fetchNhatotMedia, type PropertyVideo } from '../_shared/nhatot.ts';
 import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
@@ -17,7 +18,6 @@ const corsHeaders = {
 };
 
 const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
 // ─── HTTP helpers ───────────────────────────────────────────────
 async function directFetch(url: string): Promise<string> {
@@ -150,21 +150,15 @@ function detectMarketplace(source: string, url: string): string {
   return source || 'unknown';
 }
 
-async function callAI(messages: any[], maxTokens = 2500): Promise<string | null> {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
-    body: JSON.stringify({ model: 'gpt-4o-mini', messages, max_completion_tokens: maxTokens, temperature: 0.2 }),
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!res.ok) {
-    console.error('[recrawl] AI call failed:', res.status, await res.text().catch(() => ''));
+async function callAI(messages: ChatMessage[], maxTokens = 2500): Promise<string | null> {
+  if (!hasClaudeKey()) throw new Error('ANTHROPIC_API_KEY not configured');
+  const r = await chat({ messages, maxTokens, timeoutMs: 60_000 });
+  if (!r.ok) {
+    console.error('[recrawl] AI call failed:', r.error);
     return null;
   }
-  const data = await res.json();
-  logOpenAIUsage({ fn: 'recrawl-external-listing', model: 'gpt-4o-mini', usage: data?.usage });
-  return data?.choices?.[0]?.message?.content || null;
+  logOpenAIUsage({ fn: 'recrawl-external-listing', model: r.model, usage: r.usage });
+  return r.text || null;
 }
 
 async function extractFromDetailPage(markdown: string, images: string[], sourceUrl: string, marketplace: string) {

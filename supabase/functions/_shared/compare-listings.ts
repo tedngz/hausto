@@ -15,6 +15,7 @@
 // and the reply shape has no "results" field to fill. It cannot answer with a
 // search because there is nothing to search.
 import { logOpenAIUsage } from './openai-usage.ts';
+import { chat, parseJsonReply } from './claude.ts';
 
 export interface CompareListing {
   title?: string | null;
@@ -90,8 +91,7 @@ export async function askCompare(opts: {
   preferences?: unknown;
   /** Prior turns, oldest first, so a follow-up doesn't restate the comparison */
   history?: { role: string; content: string }[];
-  openaiKey: string;
-  /** Label for the shared OpenAI spend log */
+  /** Label for the shared spend log */
   fn: string;
 }): Promise<CompareAnswer> {
   const priorTurns = (Array.isArray(opts.history) ? opts.history : [])
@@ -99,38 +99,30 @@ export async function askCompare(opts: {
     .slice(-8)
     .map((m) => ({ role: m.role, content: String(m.content).slice(0, 1500) }));
 
-  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${opts.openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      max_tokens: 500,
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildCompareSystemPrompt(opts.listings, opts.preferences) },
-        ...priorTurns,
-        { role: 'user', content: String(opts.question).slice(0, 500) },
-      ],
-    }),
+  const r = await chat({
+    json: true,
+    maxTokens: 500,
+    messages: [
+      { role: 'system', content: buildCompareSystemPrompt(opts.listings, opts.preferences) },
+      ...priorTurns,
+      { role: 'user', content: String(opts.question).slice(0, 500) },
+    ],
   });
 
-  if (!resp.ok) {
-    const detail = await resp.text();
-    console.error(`[${opts.fn}] OpenAI error:`, resp.status, detail.slice(0, 300));
-    throw new Error(`AI request failed (${resp.status})`);
+  if (!r.ok) {
+    console.error(`[${opts.fn}] model error:`, r.error);
+    throw new Error(`AI request failed (${r.status ?? 'network'})`);
   }
 
-  const data = await resp.json();
-  logOpenAIUsage({ fn: opts.fn, model: 'gpt-4o-mini', usage: data?.usage });
-  const raw = data.choices?.[0]?.message?.content?.trim() || '';
+  logOpenAIUsage({ fn: opts.fn, model: r.model, usage: r.usage });
+  const raw = r.text;
 
-  // JSON mode should guarantee the shape, but a malformed reply must still
-  // produce a usable answer rather than dumping braces into the chat.
+  // The prompt asks for bare JSON, but a malformed reply must still produce a
+  // usable answer rather than dumping braces into the chat.
   let answer = '';
   let followups: string[] = [];
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = parseJsonReply(raw) as { answer?: unknown; followups?: unknown };
     answer = String(parsed?.answer || '').trim();
     followups = (Array.isArray(parsed?.followups) ? parsed.followups : [])
       .filter((f: unknown) => typeof f === 'string' && f.trim())

@@ -25,8 +25,14 @@
 import { OUTCOMES, validateOutcome, type Outcome, type Slot } from './outcomes.ts';
 import { withinWindows, DAY_PART_HOURS, type DayPart } from './intake.ts';
 
-/** Same house model as the other extraction calls - this is five fields from a paragraph. */
-export const PARSE_MODEL = 'gpt-4o-mini';
+/**
+ * Claude Sonnet 5.5 (CAREFUL_MODEL in _shared/claude.ts, spelled out here
+ * because the console imports this file and must not pull in the SDK). Five
+ * fields from a paragraph, but a paragraph in an agent's Vietnamese, where a
+ * misread outcome costs a renter a viewing - and at a few calls a day the
+ * larger model costs cents.
+ */
+export const PARSE_MODEL = 'claude-sonnet-5-5';
 
 /** Replies longer than this are a paste gone wrong, and cost money to read. */
 export const MAX_REPLY_CHARS = 2000;

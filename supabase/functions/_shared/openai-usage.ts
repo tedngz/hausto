@@ -1,4 +1,7 @@
-// Shared helper to log OpenAI API usage into public.openai_usage_log.
+// Shared helper to log model usage into public.openai_usage_log - every model
+// call, Claude's as well as OpenAI's embeddings. The table, the function names
+// and the OPENAI_DAILY_USD_CAP secret keep the name they were given when
+// OpenAI was the only provider; renaming them would buy nothing.
 // Non-blocking: never throws — failures are logged and swallowed so cost
 // tracking cannot break the caller's happy path.
 
@@ -8,13 +11,16 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 
-// Daily spend ceiling, in USD. A soft app-level stop that sits under whatever
-// hard limit the OpenAI project itself enforces — set that too, since this one
-// cannot help if the key is being spent from outside this codebase.
+// Daily spend ceiling, in USD, across every provider. A soft app-level stop
+// that sits under whatever hard limits the Anthropic and OpenAI consoles
+// enforce — set those too, since this one cannot help if a key is being spent
+// from outside this codebase.
 const DAILY_USD_CAP = Number(Deno.env.get('OPENAI_DAILY_USD_CAP') ?? '1');
 
-// gpt-4o-mini pricing per 1M tokens (USD)
+// Pricing per 1M tokens (USD). Claude rows are the API's list prices.
 const PRICING: Record<string, { input: number; output: number }> = {
+  'claude-haiku-5-5': { input: 0.10, output: 0.50 },
+  'claude-sonnet-5-5': { input: 2.00, output: 10.00 },
   'gpt-4o-mini': { input: 0.15, output: 0.60 },
   'gpt-4o': { input: 2.50, output: 10.00 },
   'gpt-4.1-mini': { input: 0.40, output: 1.60 },
@@ -27,7 +33,13 @@ export function estimateCostUsd(
   promptTokens: number,
   completionTokens: number,
 ): number {
-  const p = PRICING[model] ?? PRICING['gpt-4o-mini'];
+  // Haiku 5.5 bills a prompt over 100K tokens at five times the rate.
+  if (model === 'claude-haiku-5-5' && promptTokens > 100_000) {
+    return (promptTokens / 1_000_000) * 0.50 + (completionTokens / 1_000_000) * 2.50;
+  }
+  // A model missing from the table is costed at the dearest one in use, so
+  // the cap errs towards stopping early rather than late.
+  const p = PRICING[model] ?? PRICING['claude-sonnet-5-5'];
   return (
     (promptTokens / 1_000_000) * p.input +
     (completionTokens / 1_000_000) * p.output

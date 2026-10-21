@@ -9,9 +9,7 @@
 //
 // It never fails a listing - on any error the caller keeps the original text.
 import { logOpenAIUsage } from './openai-usage.ts';
-
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const MODEL = 'gpt-4o-mini';
+import { chat, hasClaudeKey, parseJsonReply } from './claude.ts';
 
 export interface ListingCopy {
   title: string;
@@ -47,7 +45,7 @@ export async function normalizeListingCopy(input: {
   fn: string;
   sourceUrl?: string;
 }): Promise<ListingCopy | null> {
-  if (!OPENAI_API_KEY) return null;
+  if (!hasClaudeKey()) return null;
   const body = (input.description || '').substring(0, 6000);
   if (!input.title && !body) return null;
 
@@ -69,45 +67,34 @@ RESPOND WITH VALID JSON ONLY:
 {"title":"...","description":"...","amenities":["..."]}`;
 
   try {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You rewrite Vietnamese property adverts as clean English copy. Keep Vietnamese place names untranslated. Respond with valid JSON only.',
-          },
-          { role: 'user', content: prompt },
-        ],
-        max_tokens: 600,
-        temperature: 0.4,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(30000),
+    const r = await chat({
+      json: true,
+      maxTokens: 600,
+      timeoutMs: 30_000,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You rewrite Vietnamese property adverts as clean English copy. Keep Vietnamese place names untranslated. Respond with valid JSON only.',
+        },
+        { role: 'user', content: prompt },
+      ],
     });
 
-    if (!resp.ok) {
-      console.warn(`[listing-language] OpenAI ${resp.status}: ${(await resp.text()).substring(0, 200)}`);
+    if (!r.ok) {
+      console.warn(`[listing-language] ${r.error}`);
       return null;
     }
 
-    const data = await resp.json();
     logOpenAIUsage({
       fn: input.fn,
-      model: MODEL,
-      usage: data?.usage,
+      model: r.model,
+      usage: r.usage,
       metadata: { step: 'listing-language', sourceUrl: input.sourceUrl },
     });
 
-    const raw = data.choices?.[0]?.message?.content;
-    if (!raw) return null;
-    const parsed = JSON.parse(String(raw).replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
+    if (!r.text) return null;
+    const parsed = parseJsonReply(r.text) as { title?: unknown; description?: unknown; amenities?: unknown };
 
     const title = clean(parsed.title);
     const description = clean(parsed.description);

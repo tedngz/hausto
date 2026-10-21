@@ -28,6 +28,7 @@ import { toQueryString, type SearchFilters, type SearchResult } from '../_shared
 import { runSearch, searchOnce, type ChatMessage, type SearchDeps } from '../_shared/viewing/search-run.ts';
 import { aiCreditKey } from '../_shared/ai-credits.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { chat, FAST_MODEL, hasClaudeKey, parseJsonReply } from '../_shared/claude.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,46 +37,31 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
 const SITE_URL = Deno.env.get('PUBLIC_SITE_URL') || 'https://hausto.com';
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 
-// The house model - 15 other functions use it, and extracting five fields from
-// a few sentences is not work that needs anything larger.
-const MODEL = 'gpt-4o-mini';
+// The house model (Claude Haiku 5.5) - extracting five fields from a few
+// sentences is not work that needs anything larger.
+const MODEL = FAST_MODEL;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 /** Messages in, the model's JSON out. Throws, so the run un-counts the search. */
 async function extract(messages: ChatMessage[], renterId: string): Promise<unknown> {
-  if (!OPENAI_API_KEY) throw new Error('openai_not_configured');
-  // The budget guard the other OpenAI functions use. A spend cap that one
-  // function ignores is not a spend cap.
+  if (!hasClaudeKey()) throw new Error('model_not_configured');
+  // The budget guard the other model-calling functions use. A spend cap that
+  // one function ignores is not a spend cap.
   if (await isOpenAIBudgetExhausted()) throw new Error('budget_exhausted');
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: MODEL,
-      // Forces valid JSON out, which removes the whole class of "the model
-      // wrapped it in a markdown fence" parsing failures.
-      response_format: { type: 'json_object' },
-      temperature: 0,
-      max_tokens: 200,
-      messages,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    console.error('[viewing-agent-search] openai error:', JSON.stringify(data).slice(0, 300));
-    throw new Error(`llm_failed: ${res.status}`);
+  const r = await chat({ model: MODEL, json: true, maxTokens: 200, timeoutMs: 15_000, messages });
+  if (!r.ok) {
+    console.error('[viewing-agent-search] model error:', r.error);
+    throw new Error(`llm_failed: ${r.status ?? 'network'}`);
   }
-  logOpenAIUsage({ fn: 'viewing-agent-search', model: MODEL, usage: data?.usage, metadata: { renterId } });
-  return JSON.parse(data?.choices?.[0]?.message?.content ?? '{}');
+  logOpenAIUsage({ fn: 'viewing-agent-search', model: MODEL, usage: r.usage, metadata: { renterId } });
+  return parseJsonReply(r.text);
 }
 
 async function search(filters: SearchFilters): Promise<SearchResult[]> {

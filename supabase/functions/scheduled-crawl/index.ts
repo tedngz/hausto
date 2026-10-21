@@ -17,7 +17,9 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+// Vibe analysis runs in analyze-vibe, on Claude; without its key there is no
+// point asking for it.
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL')!;
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!;
 const QSTASH_TOKEN = Deno.env.get('QSTASH_TOKEN');
@@ -62,7 +64,7 @@ const INLINE_VIBE_MS = 40_000;
 //
 // Both still cost one search-page fetch per RUN, and one vision pass per
 // listing. The vision pass is not worth rationing: 1447 calls over 14 days came
-// to $2.12 on gpt-4o-mini.
+// to $2.12 on gpt-4o-mini, and Claude Haiku 5.5 is cheaper per photo.
 //
 // nhatot is held at the same 20 as the others for now, even though its
 // Firecrawl cost would allow far more. Only 6.8% of HCMC nhatot rows ever
@@ -537,7 +539,7 @@ function normalizeLocation(location: string): string {
 
 // Run vibe analysis for a property and update it
 async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: any): Promise<boolean> {
-  if (!OPENAI_API_KEY || !propertyData.images || propertyData.images.length === 0) return false;
+  if (!ANTHROPIC_API_KEY || !propertyData.images || propertyData.images.length === 0) return false;
 
   try {
     // One highlight per photo: analyse the whole stored gallery, not a sample.
@@ -924,7 +926,7 @@ Deno.serve(async (req) => {
   try { body = JSON.parse(rawBody); } catch { /* empty body */ }
 
   // ===== Authorization =====
-  // A run scrapes marketplaces and spends OpenAI budget on vibe analysis, so
+  // A run scrapes marketplaces and spends model budget on vibe analysis, so
   // every caller has to prove it is one of the four legitimate ones:
   //
   //   pg_cron          x-cron-secret header, checked against Vault
@@ -1114,7 +1116,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ===== RAW HARVEST: Use Firecrawl credits, skip OpenAI cost entirely =====
+    // ===== RAW HARVEST: Use Firecrawl credits, skip model cost entirely =====
     if (body.action === 'raw-harvest') {
       const cfg = await getConfig();
       if (cfg.paused) {
@@ -1692,7 +1694,7 @@ Deno.serve(async (req) => {
     // ran anyway, ten seconds ahead of the chained backfill and over the same
     // rows, so the two analysed one listing twice (16:04:38 and 16:04:49 on
     // 2026-10-15) - and the inline copy is what outlived the wall clock.
-    if (OPENAI_API_KEY && scrapeResult?.success && !backfillChained) {
+    if (ANTHROPIC_API_KEY && scrapeResult?.success && !backfillChained) {
       if (msLeft() > INLINE_VIBE_MS) {
         // Fetch more properties to find all that need analysis
         const { data: needsVibe } = await supabase
@@ -1744,7 +1746,7 @@ Deno.serve(async (req) => {
 
     // Trigger backfill-image-highlights for any properties missing image-level
     // highlights - bounded by the time left. It works through up to 20
-    // listings at ~3s per image and waits out the OpenAI rate limit, so it
+    // listings at ~3s per image and waits out the model rate limit, so it
     // routinely needs minutes, and awaiting it whole is what killed the run.
     // It saves listing by listing, and the next run and the vibe queue pick up
     // whatever it had not reached, so being cut short loses nothing.

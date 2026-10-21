@@ -2,9 +2,10 @@
 // listings and a renter question, answer concisely from the listing data.
 // Deliberately separate from chat-ai (conversational search) - the listings are
 // the whole world here. Multi-turn: the client replays the thread as `history`,
-// so the endpoint itself stays stateless and cheap (gpt-4o-mini).
+// so the endpoint itself stays stateless and cheap (Claude Haiku 5.5).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { isOpenAIBudgetExhausted } from '../_shared/openai-usage.ts';
+import { hasClaudeKey } from '../_shared/claude.ts';
 import { identifyCaller, isRateLimited } from '../_shared/rate-limit.ts';
 import { askCompare } from '../_shared/compare-listings.ts';
 
@@ -58,10 +59,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiKey) throw new Error('OPENAI_API_KEY not configured');
+    if (!hasClaudeKey()) throw new Error('ANTHROPIC_API_KEY not configured');
 
-    // The prompt and the OpenAI call live in _shared/compare-listings.ts: the
+    // The prompt and the model call live in _shared/compare-listings.ts: the
     // hub's chat answers the same question when a renter pins listings there,
     // and one comparison should not have two definitions to drift apart.
     const { answer, followups } = await askCompare({
@@ -80,7 +80,6 @@ Deno.serve(async (req) => {
       })),
       preferences,
       history,
-      openaiKey,
       fn: 'compare-listings-ai',
     });
 

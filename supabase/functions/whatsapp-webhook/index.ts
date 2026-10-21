@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
         if (AGENT_ENABLED) console.log(`[whatsapp-webhook] agent passed: ${action.reason}`);
       } else if (action.kind === 'SEARCH') {
         // Dispatched rather than performed here: viewing-agent-search owns the
-        // OpenAI call, the budget guard and the usage logging, and two places
+        // model call, the budget guard and the usage logging, and two places
         // that can spend money is one too many.
         await dispatchSearch(outcome.renterId, outcome.message.id, outcome.requestId);
       } else {

@@ -209,9 +209,8 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiKey) {
-      return new Response(JSON.stringify({ error: 'OPENAI_API_KEY not configured' }), {
+    if (!Deno.env.get('ANTHROPIC_API_KEY')) {
+      return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -240,9 +239,9 @@ serve(async (req) => {
     // queued-only claim query never picks up again. Jobs simply stay queued
     // and resume once the daily cap rolls over.
     if (await isOpenAIBudgetExhausted()) {
-      console.warn('[process-vibe-queue] daily OpenAI budget reached — leaving batch queued');
+      console.warn('[process-vibe-queue] daily AI budget reached — leaving batch queued');
       return new Response(
-        JSON.stringify({ success: true, processed: 0, message: 'daily OpenAI budget reached' }),
+        JSON.stringify({ success: true, processed: 0, message: 'daily AI budget reached' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -307,7 +306,6 @@ serve(async (req) => {
         // down rather than failing the listing.
         const result = await analyzeImagesQualityFirst({
           imageUrls: displayImages,
-          openaiKey,
           targetCount: expectedHighlightCount(displayImages.length),
         });
 

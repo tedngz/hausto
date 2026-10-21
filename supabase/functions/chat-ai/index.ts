@@ -4,6 +4,7 @@ import { Redis } from "https://esm.sh/@upstash/redis@latest";
 import { detectLifestyleIntent, findRelevantKB, formatKBBlock, hasShoppingKeyword } from "../_shared/lifestyle-kb.ts";
 import { askCompare } from "../_shared/compare-listings.ts";
 import { logOpenAIUsage } from "../_shared/openai-usage.ts";
+import { chat, FAST_MODEL, hasClaudeKey } from "../_shared/claude.ts";
 import { MAX_AREA_DISTRICTS, THIN_SEARCH } from "../_shared/viewing/place.ts";
 import { aiCreditKey, creditAllows, CREDITS_USED_REPLY } from "../_shared/ai-credits.ts";
 import { extractAmenities, parseBedrooms, parsePrice, splitAvoidedAreas } from "../_shared/chat-search-parse.ts";
@@ -1030,37 +1031,28 @@ function buildAccumulatedContext(
 }
 
 // Summarize long conversation history into a compact memory block.
-// Uses Lovable AI Gateway with a fast model. Falls back to empty string on failure.
+// Uses the fast model. Falls back to empty string on failure.
 async function summarizeConversation(
   chatHistory: Array<{role: string, content: string}>
 ): Promise<string> {
-  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-  if (!OPENAI_API_KEY || chatHistory.length === 0) return '';
+  if (!hasClaudeKey() || chatHistory.length === 0) return '';
   try {
     const transcript = chatHistory
       .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 400)}`)
       .join('\n');
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'Summarize this rental-property chat into a compact memory the assistant can reuse. Output 4 short bullet sections: Stated preferences, Things rejected/disliked, Properties already discussed (titles only), Open questions still unresolved. Be terse, no filler.'
-          },
-          { role: 'user', content: transcript }
-        ],
-      }),
+    const r = await chat({
+      maxTokens: 600,
+      messages: [
+        {
+          role: 'system',
+          content: 'Summarize this rental-property chat into a compact memory the assistant can reuse. Output 4 short bullet sections: Stated preferences, Things rejected/disliked, Properties already discussed (titles only), Open questions still unresolved. Be terse, no filler.'
+        },
+        { role: 'user', content: transcript }
+      ],
     });
-    if (!resp.ok) return '';
-    const data = await resp.json();
-    logOpenAIUsage({ fn: 'chat-ai:summary', model: 'gpt-4o-mini', usage: data?.usage });
-    return (data.choices?.[0]?.message?.content || '').trim();
+    if (!r.ok) return '';
+    logOpenAIUsage({ fn: 'chat-ai:summary', model: r.model, usage: r.usage });
+    return r.text;
   } catch (e) {
     console.error('[Summary] Failed:', e);
     return '';
@@ -1942,34 +1934,23 @@ Feature Tags: High Ceilings, Natural Light, Open Plan, Walk-in Closet, En-suite 
 
 When analyzing property images, ONLY use tags from the standard list above.`;
 
-      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-      if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+      if (!hasClaudeKey()) throw new Error('ANTHROPIC_API_KEY not configured');
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: message }
-          ],
-          max_tokens: 2000,
-        }),
+      const r = await chat({
+        maxTokens: 2000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ],
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('OpenAI error:', response.status, errorText);
-        throw new Error(`AI service error: ${response.status}`);
+      if (!r.ok) {
+        console.error('[AI] model error:', r.error);
+        throw new Error(`AI service error: ${r.status ?? 'network'}`);
       }
 
-      const data = await response.json();
-      logOpenAIUsage({ fn: 'chat-ai:image-analysis', model: 'gpt-4o-mini', usage: data?.usage });
-      const aiResponse = data.choices[0].message.content;
+      logOpenAIUsage({ fn: 'chat-ai:image-analysis', model: r.model, usage: r.usage });
+      const aiResponse = r.text;
 
       if (canPersist) {
         await supabase.from('chat_messages').insert({
@@ -2055,26 +2036,19 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     if (validImages.length > 0) {
       console.log(`[Image Analysis] Analyzing ${validImages.length} uploaded images for style detection`);
       
-      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-      if (OPENAI_API_KEY) {
+      if (hasClaudeKey()) {
         try {
           const imageContentParts: any[] = validImages.map((img: string) => ({
             type: 'image_url',
             image_url: { url: img }
           }));
           
-          const imageAnalysisResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${OPENAI_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'gpt-4o-mini',
-              messages: [
-                { 
-                  role: 'system', 
-                  content: `You are a property style analyzer. Analyze the uploaded interior/exterior images and identify the design styles, colors, and vibe. 
+          const imageAnalysis = await chat({
+            maxTokens: 300,
+            messages: [
+              { 
+                role: 'system', 
+                content: `You are a property style analyzer. Analyze the uploaded interior/exterior images and identify the design styles, colors, and vibe. 
                   
 RESPOND IN EXACTLY THIS JSON FORMAT (no markdown, no extra text):
 {"styles":["Modern","Minimalist"],"colors":["Neutral","White"],"description":"Brief 1-sentence description of the overall aesthetic"}
@@ -2082,23 +2056,20 @@ RESPOND IN EXACTLY THIS JSON FORMAT (no markdown, no extra text):
 Use ONLY these style options: Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage
 Use ONLY these color options: Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold
 Pick 1-3 styles and 1-2 colors that best match.` 
-                },
-                {
-                  role: 'user',
-                  content: [
-                    { type: 'text', text: 'Analyze these reference images and detect the interior design style, color palette, and overall vibe.' },
-                    ...imageContentParts
-                  ]
-                }
-              ],
-              max_tokens: 300,
-            }),
+              },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'Analyze these reference images and detect the interior design style, color palette, and overall vibe.' },
+                  ...imageContentParts
+                ]
+              }
+            ],
           });
 
-          if (imageAnalysisResponse.ok) {
-            const analysisData = await imageAnalysisResponse.json();
-            logOpenAIUsage({ fn: 'chat-ai:user-image-analysis', model: 'gpt-4o-mini', usage: analysisData?.usage, images: validImages.length });
-            let analysisContent = analysisData.choices?.[0]?.message?.content || '';
+          if (imageAnalysis.ok) {
+            logOpenAIUsage({ fn: 'chat-ai:user-image-analysis', model: imageAnalysis.model, usage: imageAnalysis.usage, images: validImages.length });
+            let analysisContent = imageAnalysis.text;
             analysisContent = normalizeAiResponse(analysisContent);
             
             try {
@@ -2149,7 +2120,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
               console.error('[Image Analysis] Failed to parse analysis result:', analysisContent);
             }
           } else {
-            console.error('[Image Analysis] API call failed:', imageAnalysisResponse.status);
+            console.error('[Image Analysis] API call failed:', imageAnalysis.error);
           }
         } catch (imgError) {
           console.error('[Image Analysis] Error analyzing images:', imgError);
@@ -2618,8 +2589,7 @@ ${scoredPreviousProperties.map((p, i) => `
     // one that says why we don't hand it over, and what we do instead.
     const asksForAgent = /\b(contact|phone|number|call|whatsapp|zalo|owner|landlord|agent|realtor|link|url|listing page)\b/i.test(message);
     if (isSubjectComparison && subjectProperties.length >= 2 && !asksForAgent) {
-      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-      if (OPENAI_API_KEY) {
+      if (hasClaudeKey()) {
         try {
           // Assistant turns are stored as the JSON the UI renders; the engine
           // wants what the renter actually read, so pull the prose back out.
@@ -2650,7 +2620,6 @@ ${scoredPreviousProperties.map((p, i) => `
             })),
             preferences: constraintsSummary.length > 0 ? { requirements: constraintsSummary } : undefined,
             history: compareHistory,
-            openaiKey: OPENAI_API_KEY,
             fn: 'chat-ai:compare',
           });
 
@@ -2872,9 +2841,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
 
 Maximum ${maxResults} properties in results.`;
 
-    // Call OpenAI directly with gpt-4o-mini.
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+    if (!hasClaudeKey()) throw new Error('ANTHROPIC_API_KEY not configured');
 
     // Build messages with history - include images as multimodal content if present
     const userMessageContent: any = validImages.length > 0
@@ -2911,26 +2878,16 @@ Maximum ${maxResults} properties in results.`;
     ];
 
     const t0 = Date.now();
-    console.log(`[AI] Calling OpenAI (gpt-4o-mini, history=${Math.min(chatHistory.length, 10)} turns)`);
+    console.log(`[AI] Calling ${FAST_MODEL} (history=${Math.min(chatHistory.length, 10)} turns)`);
 
-    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: messagesWithHistory,
-        max_tokens: 1500,
-      }),
-    });
+    // 2000 rather than OpenAI's 1500: Claude counts the same text as more
+    // tokens, and a results reply cut off mid-JSON is lost whole.
+    const ai = await chat({ messages: messagesWithHistory, maxTokens: 2000 });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('[AI] OpenAI error:', aiResponse.status, errorText);
+    if (!ai.ok) {
+      console.error('[AI] model error:', ai.error);
 
-      if (aiResponse.status === 429) {
+      if (ai.status === 429 || ai.status === 529) {
         if (spentCreditKey) await redis.decr(spentCreditKey).catch(() => {});
         return new Response(
           JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
@@ -2938,13 +2895,12 @@ Maximum ${maxResults} properties in results.`;
         );
       }
 
-      throw new Error(`AI service error: ${aiResponse.status}`);
+      throw new Error(`AI service error: ${ai.status ?? 'network'}`);
     }
-    console.log(`[AI] OpenAI responded in ${Date.now() - t0}ms`);
+    console.log(`[AI] Model responded in ${Date.now() - t0}ms`);
 
-    const aiData = await aiResponse.json();
-    logOpenAIUsage({ fn: 'chat-ai:main', model: 'gpt-4o-mini', usage: aiData?.usage });
-    let responseContent = aiData.choices[0].message.content || '';
+    logOpenAIUsage({ fn: 'chat-ai:main', model: ai.model, usage: ai.usage });
+    let responseContent = ai.text;
     
     console.log('[AI] Raw response length:', responseContent.length);
     

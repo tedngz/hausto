@@ -38,9 +38,8 @@ serve(async (req) => {
     const { imageUrls, propertyId, propertyInfo } = await req.json();
     console.log('[analyze-vibe] User:', userId, 'images:', imageUrls?.length, 'propertyId:', propertyId);
 
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      return new Response(JSON.stringify({ error: 'OpenAI API key not configured' }), {
+    if (!Deno.env.get('ANTHROPIC_API_KEY')) {
+      return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500,
       });
     }
@@ -52,14 +51,13 @@ serve(async (req) => {
     }
 
     if (await isOpenAIBudgetExhausted()) {
-      return new Response(JSON.stringify({ error: 'Daily OpenAI budget reached — try again tomorrow' }), {
+      return new Response(JSON.stringify({ error: 'Daily AI budget reached — try again tomorrow' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429,
       });
     }
 
     const result = await analyzeImagesQualityFirst({
       imageUrls,
-      openaiKey: openaiApiKey,
       propertyInfo,
     });
 

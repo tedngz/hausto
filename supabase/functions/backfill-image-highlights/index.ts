@@ -21,7 +21,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const openaiKey = Deno.env.get('OPENAI_API_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
     // Auth: accept anon apikey or service-role token
@@ -157,7 +156,7 @@ serve(async (req) => {
 
     if (needsBackfill.length > 0 && await isOpenAIBudgetExhausted()) {
       return new Response(
-        JSON.stringify({ success: false, error: 'daily OpenAI budget reached', total: needsBackfill.length }),
+        JSON.stringify({ success: false, error: 'daily AI budget reached', total: needsBackfill.length }),
         { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -184,7 +183,6 @@ serve(async (req) => {
         const target = expectedHighlightCount(allImages.length);
         const result = await analyzeImagesQualityFirst({
           imageUrls: allImages,
-          openaiKey,
           targetCount: target,
         });
 

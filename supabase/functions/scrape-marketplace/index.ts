@@ -5,6 +5,7 @@ const corsHeaders = {
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { chat, hasClaudeKey, MAX_IMAGE_BYTES, type ChatMessage } from '../_shared/claude.ts';
 import {
   interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl,
   isBatchInventoryListing, isThumbnailUrl, isAnimatedOrVideoBytes,
@@ -19,7 +20,6 @@ import {
   AGENCY_FEED_SOURCES, buildAgencyListing, discoverAgencyListings, extractAgencyListingId, isAgencyFeedSource,
 } from '../_shared/agency-sources.ts';
 
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -176,36 +176,18 @@ function normalizeLocationText(location: string): string {
   return location.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-// ─── AI Call Helper (prefer OpenAI, fallback Gemini via Gateway) ──
-async function callAI(messages: { role: string; content: any }[], maxTokens: number = 2000, temperature: number = 0.2): Promise<string | null> {
-  // Prefer OpenAI
-  if (OPENAI_API_KEY) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages,
-          max_tokens: maxTokens,
-          temperature,
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        logOpenAIUsage({ fn: 'scrape-marketplace', model: 'gpt-4o-mini', usage: data?.usage });
-        return data.choices?.[0]?.message?.content || null;
-      }
-      console.warn('[callAI] OpenAI error:', response.status, await response.text());
-    } catch (e) {
-      console.warn('[callAI] OpenAI failed:', e);
-    }
+// ─── AI Call Helper ─────────────────────────────────────────────
+// Claude Haiku 5.5 through the shared helper. It takes no temperature, so the
+// callers' temperatures are gone; the prompts already pin the output down.
+async function callAI(messages: ChatMessage[], maxTokens: number = 2000): Promise<string | null> {
+  if (!hasClaudeKey()) return null;
+  const r = await chat({ messages, maxTokens });
+  if (!r.ok) {
+    console.warn('[callAI] model error:', r.error);
+    return null;
   }
-  
-  return null;
+  logOpenAIUsage({ fn: 'scrape-marketplace', model: r.model, usage: r.usage });
+  return r.text || null;
 }
 
 // ─── Image URL Filtering (reject videos, unrelated content) ──────
@@ -378,7 +360,9 @@ async function screenPropertyImages(
       const ct = resp.headers.get('content-type') || '';
       const buf = await resp.arrayBuffer();
       const bytes = new Uint8Array(buf);
-      if (bytes.length > 4 * 1024 * 1024) continue;
+      // Claude refuses an image over 5 MB as sent; skip it here, before it is
+      // given an index the prompt's answer refers to.
+      if (bytes.length > MAX_IMAGE_BYTES) continue;
 
       // Video / animated payloads served without a telltale extension
       if (ct.startsWith('video/') || ct.includes('gif') || isAnimatedOrVideoBytes(bytes)) continue;
@@ -460,7 +444,7 @@ Return ONLY valid JSON, indexes 0-based matching shown order:
   const content = await callAI([{
     role: 'user',
     content: [{ type: 'text', text: prompt }, ...imageContent]
-  }], 300, 0.2);
+  }], 300);
 
   if (!content) return null;
 
@@ -992,7 +976,7 @@ async function savePropertiesToDB(
           u.includes('batdongsan.com.vn') ? normalizeBatdongsanImageUrl(u) : u);
 
         if (rawMode) {
-          // Raw mode: skip OpenAI vision interior gate. Keep the whole candidate
+          // Raw mode: skip the vision interior gate. Keep the whole candidate
           // pool; the vibe queue dimension-filters and curates the display set.
           finalImages = validImages.slice(0, STORE_TARGET);
           if (finalImages.length === 0) {
@@ -1486,7 +1470,7 @@ async function extractListingUrls(
   console.log(`[Phase 1] Found ${unique.length} unique listing URLs from link extraction`);
   
   // If regex didn't find enough, use AI to extract URLs from markdown (skipped in raw mode)
-  if (!skipAi && unique.length < 3 && OPENAI_API_KEY) {
+  if (!skipAi && unique.length < 3 && hasClaudeKey()) {
     console.log(`[Phase 1] Using AI fallback to find listing URLs...`);
     try {
       const content = await callAI(
@@ -1495,7 +1479,6 @@ async function extractListingUrls(
           { role: 'user', content: `Extract all individual property listing detail page URLs from this ${marketplace} search results page. Only include URLs that lead to INDIVIDUAL property detail pages, not search/filter pages.\n\nAVAILABLE LINKS:\n${links.slice(0, 100).join('\n')}\n\nPAGE CONTENT (first 4000 chars):\n${markdown.substring(0, 4000)}\n\nReturn JSON: {"listings": [{"url": "...", "title": "...", "price": "..."}]}` }
         ],
         2000,
-        0.1
       );
       
       if (content) {
@@ -1814,7 +1797,6 @@ RESPOND WITH VALID JSON ONLY:
         { role: 'user', content: prompt }
       ],
       2500,
-      0.2
     );
 
     if (!content) {
@@ -1942,7 +1924,6 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         { role: 'user', content: prompt }
       ],
       4000,
-      0.3
     );
 
     if (!content) return [];
@@ -2116,7 +2097,7 @@ Deno.serve(async (req) => {
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
-    if (!rawMode && !OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+    if (!rawMode && !hasClaudeKey()) throw new Error('ANTHROPIC_API_KEY not configured');
 
     // Check cache (skipped in raw mode — always fetch fresh to maximize Firecrawl harvest)
     const cacheKey = `marketplace:v2:${marketplace}:${query}:${location || 'all'}`;
@@ -2537,7 +2518,7 @@ Deno.serve(async (req) => {
       console.log(`[Phase 3] Successfully extracted ${properties.length} properties from detail pages`);
     }
     
-    // ── Fallback: extract from search page if detail scraping yielded few results (skipped in raw mode — costs OpenAI) ──
+    // ── Fallback: extract from search page if detail scraping yielded few results (skipped in raw mode — costs model spend) ──
     // ONLY run for older non-SPA sites. Housingsgn search pages cause massive AI hallucinations, so we skip it.
     //
     // nhatot is skipped for a sharper reason: a search card carries exactly one
