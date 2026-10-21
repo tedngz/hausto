@@ -3,12 +3,14 @@
 // outnumber outdoor ones. Listings crawled before those rules existed never had
 // their images checked this way, so this is the back-catalogue pass.
 //
-// One vision call per listing (gpt-4o-mini, detail:'low', whole gallery in a
-// single message) labels every image; the trimming itself is done in code.
+// One vision call per listing (Claude Haiku 5.5, the whole gallery in one
+// message - split into twenties for a gallery larger than that) labels every
+// image; the trimming itself is done in code.
 // Audited listings are stamped so repeat runs skip them.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage, isOpenAIBudgetExhausted } from '../_shared/openai-usage.ts';
+import { chat, hasClaudeKey, MAX_IMAGE_BYTES, MAX_IMAGES_PER_CALL } from '../_shared/claude.ts';
 import {
   MIN_DISPLAY_IMAGES, interiorMajority,
   isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel, isAnimatedOrVideoBytes,
@@ -22,7 +24,6 @@ const corsHeaders = {
 const MIRROR_BUCKET = 'external-property-images';
 const AUDIT_VERSION = 1;          // bump to force a re-audit of everything
 const DEFAULT_LIMIT = 20;
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function bytesToBase64(bytes: Uint8Array): string {
   let out = '';
@@ -60,8 +61,7 @@ async function fetchImage(url: string, i: number): Promise<Fetched> {
 // label deletes an image, so the label only counts when it can name the drawn
 // elements it saw - and that reason must not itself describe photography.
 // Anything unconvincing is demoted to "outdoor", where the ratio rule decides.
-async function labelGallery(
-  openaiKey: string,
+async function labelBatch(
   items: { i: number; dataUrl: string }[],
 ): Promise<Map<number, { interior: boolean; map: boolean }> | null> {
   const prompt = `You are auditing ${items.length} photos from one rental apartment listing.
@@ -88,31 +88,23 @@ For EACH image, judged only by what is visible in it (never by filename):
 Images are given in order, index 0 first. Return ONLY valid JSON:
 {"images":[{"i":0,"interior":true,"map":false,"why":""}]}`;
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          ...items.map(it => ({ type: 'image_url', image_url: { url: it.dataUrl, detail: 'low' } })),
-        ],
-      }],
-      max_tokens: 400,
-      temperature: 0,
-    }),
-    signal: AbortSignal.timeout(90_000),
+  const r = await chat({
+    maxTokens: 400,
+    timeoutMs: 90_000,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: prompt },
+        ...items.map(it => ({ type: 'image_url' as const, image_url: { url: it.dataUrl } })),
+      ],
+    }],
   });
-  if (!res.ok) {
-    console.warn('[rebalance-galleries] OpenAI', res.status, (await res.text().catch(() => '')).substring(0, 200));
+  if (!r.ok) {
+    console.warn('[rebalance-galleries] model error:', r.error);
     return null;
   }
-  const data = await res.json();
-  logOpenAIUsage({ fn: 'rebalance-galleries', model: 'gpt-4o-mini', usage: data?.usage, images: items.length });
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') return null;
+  logOpenAIUsage({ fn: 'rebalance-galleries', model: r.model, usage: r.usage, images: items.length });
+  const content = r.text;
   const m = content.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
@@ -130,6 +122,22 @@ Images are given in order, index 0 first. Return ONLY valid JSON:
   } catch {
     return null;
   }
+}
+
+// Past twenty images in one request Claude caps each at 2000px a side and
+// rejects the request otherwise, so a larger gallery is labelled in twenties.
+// Any batch failing fails the gallery: half a labelling would trim on half the
+// evidence.
+async function labelGallery(
+  items: { i: number; dataUrl: string }[],
+): Promise<Map<number, { interior: boolean; map: boolean }> | null> {
+  const out = new Map<number, { interior: boolean; map: boolean }>();
+  for (let start = 0; start < items.length; start += MAX_IMAGES_PER_CALL) {
+    const labels = await labelBatch(items.slice(start, start + MAX_IMAGES_PER_CALL));
+    if (!labels) return null;
+    for (const [i, label] of labels) out.set(i, label);
+  }
+  return out.size > 0 ? out : null;
 }
 
 type Gate = { ok: true } | { ok: false; status: number; error: string };
@@ -181,14 +189,13 @@ Deno.serve(async (req) => {
   // Same daily USD ceiling every other AI endpoint respects. A runaway loop
   // here is expensive even when the caller is legitimate.
   if (await isOpenAIBudgetExhausted()) {
-    return new Response(JSON.stringify({ error: 'Daily OpenAI budget reached - try again tomorrow' }), {
+    return new Response(JSON.stringify({ error: 'Daily AI budget reached - try again tomorrow' }), {
       status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  const openaiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!openaiKey) {
-    return new Response(JSON.stringify({ error: 'OPENAI_API_KEY not configured' }), {
+  if (!hasClaudeKey()) {
+    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
@@ -244,7 +251,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const labels = await labelGallery(openaiKey, usable);
+      const labels = await labelGallery(usable);
       if (!labels) {
         summary.failed.push({ id: row.id, reason: 'labelling_failed' });
         continue;

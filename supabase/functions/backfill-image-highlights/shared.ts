@@ -2,23 +2,23 @@
 // and exponential backoff. NO fake/generic highlight fallbacks — failures
 // are surfaced to the caller so the property stays in `pending` state.
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { chat, MAX_IMAGE_BYTES, type ChatMessage } from '../_shared/claude.ts';
 
 import { Image } from 'https://deno.land/x/imagescript@1.2.15/mod.ts';
 
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 
-// gpt-4o-mini with detail:'auto' resizes any image so its shortest side is
-// 768px before tiling, so shipping the full-resolution photo is pure upload
-// egress (and encode time) for bytes the model immediately throws away.
-// Capping the longest side at 1024 keeps the shortest side at ~768 for typical
-// 4:3 shots - i.e. exactly what the model works from - while cutting the
-// base64 we send to OpenAI to a fraction of the original.
-const OPENAI_MAX_EDGE = 1024;
-const OPENAI_JPEG_QUALITY = 82;
+// Claude downsizes any photo larger than it needs before reading it, so
+// shipping the full-resolution file is pure upload egress (and encode time) for
+// bytes the model throws away. 1024px on the longest side is plenty for a vibe
+// read and costs roughly 1,000-1,400 input tokens a photo.
+const MAX_EDGE = 1024;
+const JPEG_QUALITY = 82;
 
-// gpt-4o-mini Tier 1 TPM is 200K. Stay well under 80% to leave room
-// for other functions sharing the key. ~10K tokens per image-call.
+// A self-imposed ceiling on input tokens a minute, shared through Redis by every
+// worker. 10K a call is a generous estimate for one photo plus this prompt; it
+// keeps a burst of workers inside the account's Claude rate limit.
 const TPM_BUDGET = 160_000;
 const PER_CALL_EST_TOKENS = 10_000;
 
@@ -65,17 +65,17 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(b64);
 }
 
-// Shrink to OPENAI_MAX_EDGE on the longest side and re-encode as JPEG. Returns
+// Shrink to MAX_EDGE on the longest side and re-encode as JPEG. Returns
 // null (caller falls back to the original bytes) when the image is already
 // small enough or can't be decoded - e.g. webp, which imagescript doesn't read.
-async function downscaleForOpenAI(bytes: Uint8Array): Promise<{ dataUrl: string } | null> {
+async function downscale(bytes: Uint8Array): Promise<{ dataUrl: string } | null> {
   try {
     const img = await Image.decode(bytes);
     const longest = Math.max(img.width, img.height);
-    if (longest <= OPENAI_MAX_EDGE) return null;
-    const scale = OPENAI_MAX_EDGE / longest;
+    if (longest <= MAX_EDGE) return null;
+    const scale = MAX_EDGE / longest;
     img.resize(Math.round(img.width * scale), Math.round(img.height * scale));
-    const jpeg = await img.encodeJPEG(OPENAI_JPEG_QUALITY);
+    const jpeg = await img.encodeJPEG(JPEG_QUALITY);
     return { dataUrl: `data:image/jpeg;base64,${bytesToBase64(jpeg)}` };
   } catch {
     return null;
@@ -90,10 +90,13 @@ async function fetchAsBase64(url: string): Promise<{ dataUrl: string } | null> {
     const buf = await resp.arrayBuffer();
     const bytes = new Uint8Array(buf);
     if (bytes.length > 5 * 1024 * 1024) return null;
-    // Downscale before OpenAI; pass the original through if it's already small
+    // Downscale before sending; pass the original through if it's already small
     // or in a format we can't decode.
-    const shrunk = await downscaleForOpenAI(bytes);
+    const shrunk = await downscale(bytes);
     if (shrunk) return shrunk;
+    // Claude refuses an image over 5 MB as sent; one we could not shrink and
+    // is still that large cannot be read at all.
+    if (bytes.length > MAX_IMAGE_BYTES) return null;
     let mime = 'image/jpeg';
     if (ct.includes('png')) mime = 'image/png';
     else if (ct.includes('webp')) mime = 'image/webp';
@@ -140,7 +143,6 @@ Return ONLY valid JSON with this exact shape:
 
 interface AnalyzeArgs {
   imageUrls: string[];
-  openaiKey: string;
   propertyInfo?: any;
   // Stop once this many images have been analyzed successfully. Pass the whole
   // gallery with a target of ANALYZE_COUNT and unfetchable images cost nothing
@@ -155,52 +157,43 @@ export interface AnalyzeResult {
   failures: { image_index: number; reason: string }[];
 }
 
-async function callOpenAIWithBackoff(
-  body: any,
-  openaiKey: string,
+async function callModelWithBackoff(
+  messages: ChatMessage[],
   imageIndex: number,
 ): Promise<{ ok: true; content: string } | { ok: false; reason: string }> {
   const delays = [1000, 2000, 4000, 8000];
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     await tpmReserve(PER_CALL_EST_TOKENS);
 
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (resp.ok) {
-      const data = await resp.json();
-      const content = data?.choices?.[0]?.message?.content;
-      logOpenAIUsage({ fn: 'backfill-image-highlights', model: 'gpt-4o-mini', usage: data?.usage, images: 1 });
-      if (typeof content === 'string' && content.trim()) {
-        return { ok: true, content };
-      }
+    // This loop is the retry policy, so the SDK's own retries are off.
+    const r = await chat({ messages, maxTokens: 500, maxRetries: 0 });
+    if (r.ok) {
+      logOpenAIUsage({ fn: 'backfill-image-highlights', model: r.model, usage: r.usage, images: 1 });
+      if (r.text) return { ok: true, content: r.text };
       return { ok: false, reason: 'empty_response' };
     }
 
-    if (resp.status === 429 || resp.status >= 500) {
-      const txt = await resp.text().catch(() => '');
-      const reason = `http_${resp.status}`;
-      console.warn(`[analyze-vibe] image ${imageIndex} attempt ${attempt + 1} failed ${reason}: ${txt.substring(0, 200)}`);
+    // Out of credit is not transient - retrying just burns worker CPU (it
+    // took down scheduled-crawl runs). Fail immediately; vibe_status stays
+    // pending and the queue retries after a top-up.
+    if (r.quota) return { ok: false, reason: 'model_quota_exhausted' };
+
+    if (r.status === null || r.status === 429 || r.status >= 500) {
+      const reason = `http_${r.status ?? 'network'}`;
+      console.warn(`[backfill-image-highlights] image ${imageIndex} attempt ${attempt + 1} failed ${reason}: ${r.error}`);
       if (attempt === delays.length) return { ok: false, reason };
       const jitter = 0.8 + Math.random() * 0.4;
-      await new Promise(r => setTimeout(r, Math.round(delays[attempt] * jitter)));
+      await new Promise(res => setTimeout(res, Math.round(delays[attempt] * jitter)));
       continue;
     }
 
-    const txt = await resp.text().catch(() => '');
-    return { ok: false, reason: `http_${resp.status}: ${txt.substring(0, 100)}` };
+    return { ok: false, reason: `http_${r.status}: ${r.error.substring(0, 100)}` };
   }
   return { ok: false, reason: 'exhausted_retries' };
 }
 
 export async function analyzeImagesQualityFirst(args: AnalyzeArgs): Promise<AnalyzeResult> {
-  const { imageUrls, openaiKey } = args;
+  const { imageUrls } = args;
   const target = args.targetCount ?? imageUrls.length;
   const analyses: any[] = [];
   const failures: { image_index: number; reason: string }[] = [];
@@ -218,20 +211,15 @@ export async function analyzeImagesQualityFirst(args: AnalyzeArgs): Promise<Anal
       .map(a => String(a?.image_highlight || '').trim())
       .filter(Boolean);
 
-    const body = {
-      model: 'gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: buildPrompt(i, imageUrls.length, previousHighlights) },
-          { type: 'image_url', image_url: { url: fetched.dataUrl, detail: 'low' } },
-        ],
-      }],
-      max_tokens: 500,
-      temperature: 0.4,
-    };
+    const messages: ChatMessage[] = [{
+      role: 'user',
+      content: [
+        { type: 'text', text: buildPrompt(i, imageUrls.length, previousHighlights) },
+        { type: 'image_url', image_url: { url: fetched.dataUrl } },
+      ],
+    }];
 
-    const result = await callOpenAIWithBackoff(body, openaiKey, i);
+    const result = await callModelWithBackoff(messages, i);
     if (!result.ok) {
       failures.push({ image_index: i, reason: result.reason });
       continue;

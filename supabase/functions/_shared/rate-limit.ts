@@ -3,7 +3,7 @@
 // An in-memory Map is not a spend control on edge functions: every cold start
 // hands the caller a fresh quota and each concurrent isolate keeps its own
 // counter, so the effective limit is "as much as you like, just reconnect".
-// Redis is already provisioned here for the OpenAI spend counter, and gives one
+// Redis is already provisioned here for the model spend counter, and gives one
 // counter shared by every isolate that survives restarts.
 //
 // Falls back to a per-isolate Map when Redis is unconfigured so local dev still

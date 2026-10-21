@@ -20,7 +20,8 @@ import { formatVnd, hcmcLong } from './format.ts';
 import type { RequestState } from '../viewing-domain.ts';
 import { districtLabel } from './place.ts';
 
-export const REPLY_MODEL = 'gpt-4o-mini';
+/** Claude Sonnet 5.5, as PARSE_MODEL: a renter reads every word, and there are few of them a day. */
+export const REPLY_MODEL = 'claude-sonnet-5-5';
 
 /** One WhatsApp message, and a short one: every message in the window is billed. */
 export const MAX_DRAFT_CHARS = 600;

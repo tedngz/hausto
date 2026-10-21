@@ -197,7 +197,7 @@ export async function performAction(
       return { performed: action.kind, messageId: result.message.id, ref: r.ref };
     }
 
-    // SEARCH is performed by viewing-agent-search, which owns the OpenAI call,
+    // SEARCH is performed by viewing-agent-search, which owns the model call,
     // the budget guard and the usage logging. Duplicating any of that here to
     // save an HTTP hop would mean two places that can spend money.
     return { performed: 'NONE', error: 'SEARCH is dispatched by the caller' };

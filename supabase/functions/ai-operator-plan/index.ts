@@ -23,6 +23,7 @@ import { PARSE_MODEL } from '../_shared/viewing/parse-reply.ts';
 import { callDraftModel } from '../_shared/viewing/reply-call.ts';
 import { REPLY_MODEL } from '../_shared/viewing/renter-reply.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { hasClaudeKey } from '../_shared/claude.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +32,6 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
 
   // Checked once per run. A reply the model cannot read today becomes an
   // escalation, which is what a person would have had to handle anyway.
-  const canSpend = !!OPENAI_API_KEY && !(await isOpenAIBudgetExhausted());
+  const canSpend = hasClaudeKey() && !(await isOpenAIBudgetExhausted());
 
   // Stage 2's locks, read fresh every pass. With AI_OPERATOR_AUTONOMY unset
   // every action is closed and this runs as shadow mode exactly.
@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
     autonomy,
     parse: async ctx => {
       if (!canSpend) return null;
-      const r = await callParseModel(ctx, OPENAI_API_KEY);
+      const r = await callParseModel(ctx);
       if (!r.ok) {
         console.warn('[ai-operator-plan] reply parse failed:', r.error);
         return null;
@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
     },
     draft: async ctx => {
       if (!canSpend) return null;
-      const r = await callDraftModel(ctx, OPENAI_API_KEY);
+      const r = await callDraftModel(ctx);
       if (!r.ok) {
         console.warn('[ai-operator-plan] renter draft failed:', r.error);
         return null;

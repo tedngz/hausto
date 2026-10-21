@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from "../_shared/openai-usage.ts";
+import { chat, FAST_MODEL, hasClaudeKey, parseJsonReply } from "../_shared/claude.ts";
 
 // The deep read behind the Hausto Pass: what this apartment is actually like to
 // live in, written against this renter's preferences, from the listing photos.
@@ -16,7 +17,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MODEL = 'gpt-4o-mini';
+const MODEL = FAST_MODEL;
 // Enough photos to read a floor plan and spot the problems, few enough that one
 // generation stays cheap against a $25 pass with unlimited reads.
 const MAX_IMAGES = 5;
@@ -154,8 +155,7 @@ serve(async (req) => {
       );
     }
 
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiKey) throw new Error("OpenAI API key not configured");
+    if (!hasClaudeKey()) throw new Error("ANTHROPIC_API_KEY not configured");
     if (await isOpenAIBudgetExhausted()) {
       return new Response(
         JSON.stringify({ error: 'BUDGET_EXHAUSTED' }),
@@ -168,39 +168,32 @@ serve(async (req) => {
     const { images: _drop, ...listingData } = listing as Record<string, unknown>;
     logStep("Generating", { propertyId, propertyType, images: images.length });
 
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 900,
-        temperature: 0.4,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: buildPrompt(listingData, prefs ?? null) },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Here are the listing photos. Write the read.' },
-              ...images.map((url) => ({ type: 'image_url', image_url: { url, detail: 'low' } })),
-            ],
-          },
-        ],
-      }),
+    const r = await chat({
+      model: MODEL,
+      json: true,
+      maxTokens: 900,
+      messages: [
+        { role: 'system', content: buildPrompt(listingData, prefs ?? null) },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Here are the listing photos. Write the read.' },
+            ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+          ],
+        },
+      ],
     });
 
-    if (!resp.ok) {
-      const detail = await resp.text();
-      console.error('[deep-vibe-analysis] OpenAI error:', resp.status, detail.slice(0, 300));
-      throw new Error(`AI request failed (${resp.status})`);
+    if (!r.ok) {
+      console.error('[deep-vibe-analysis] model error:', r.error);
+      throw new Error(`AI request failed (${r.status ?? 'network'})`);
     }
 
-    const data = await resp.json();
-    logOpenAIUsage({ fn: 'deep-vibe-analysis', model: MODEL, usage: data?.usage });
+    logOpenAIUsage({ fn: 'deep-vibe-analysis', model: MODEL, usage: r.usage });
 
     let analysis: Record<string, unknown>;
     try {
-      analysis = JSON.parse(data.choices?.[0]?.message?.content?.trim() || '{}');
+      analysis = parseJsonReply(r.text) as Record<string, unknown>;
     } catch {
       console.error('[deep-vibe-analysis] Non-JSON reply');
       throw new Error("The analysis came back malformed - please try again");

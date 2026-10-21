@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
 
   // The same decision the webhook makes, so what you see here is what a real
   // renter would get. SEARCH is the one exception: it is dispatched by the
-  // webhook to a function that spends OpenAI budget, and a mock phone should
+  // webhook to a function that spends model budget, and a mock phone should
   // not quietly do that - it reports the decision instead.
   const action = decideAction({
     enabled: AGENT_ENABLED,

@@ -42,6 +42,12 @@ a new ORM. Everything below is additive.
   and ops mutations all live here.
 - Scheduling: `pg_cron` + a `jobs` table. No Inngest, Trigger.dev, BullMQ, Redis.
   Volume is ~25 requests/day.
+- Models: every text and vision call goes through `chat()` in
+  `_shared/claude.ts` - Claude Haiku 5.5 (`FAST_MODEL`), and Sonnet 5.5 for the
+  AI operator's parse and drafts. It needs the `ANTHROPIC_API_KEY` secret.
+  Embeddings stay on OpenAI (`OPENAI_API_KEY`), which has no other use. Log
+  every call with `logOpenAIUsage` and respect `isOpenAIBudgetExhausted` - the
+  names predate Claude; the cap covers both providers.
 - Renter UI: the existing Lovable SPA. Add shortlist and request-intake screens
   there.
 - Ops console: a separate small Vite + React app behind Supabase Auth with an

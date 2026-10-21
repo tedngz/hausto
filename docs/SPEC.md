@@ -647,7 +647,10 @@ is `PRICE_CHANGED`, slotless, whatever times came with it. It never suggests
 `NO_RESPONSE`. What it suggested is stored on the `OUTCOME_RECORDED` the
 operator writes, as `suggested {outcome, slot_starts, actual_price_vnd,
 confidence, model}`, so agreement with the operator is measurable on live
-traffic. The reducer never reads it.
+traffic. The reducer never reads it. The model is Claude Sonnet 5.5
+(`PARSE_MODEL`; the AI operator's renter drafts use it too, `REPLY_MODEL`),
+called through `_shared/claude.ts` like every other text and vision call -
+suggestions made before 2026-10-21 carry `gpt-4o-mini`.
 
 Slots are not limited to the renter's windows: the operator can add any date
 and time the agent named, in Ho Chi Minh City time, with a length of 30-90
@@ -1416,7 +1419,7 @@ any pending proposal it answers, so work done by hand is counted, not lost.
 
 `ai-operator-plan` runs the planner every 10 minutes (`pg_cron`) and on demand
 from the console for one request; it reads at most 10 replies per pass and
-none once the daily OpenAI cap is reached, escalating instead. The console
+none once the daily AI spend cap is reached, escalating instead. The console
 shows pending proposals on each request, a count in the queue that never
 changes the ranking, and an "AI operator" screen with agreement per action and
 paste-parse accuracy against the PLAN-v3 bar (80% of 30+ real replies).
@@ -1436,7 +1439,7 @@ a new time. Every draft passes `checkOperatorReply` - no phone numbers, no
 "booked" before `CONFIRMED` - or it becomes `ESCALATE` with the reason.
 Nothing is drafted when nothing could be sent: an opted-out renter, a closed
 24-hour window, or two messages already sent since they last wrote. At most 10
-drafts per pass, once per reply, under the daily OpenAI cap.
+drafts per pass, once per reply, under the daily AI spend cap.
 
 ### Stage 2: acting alone on renter replies
 
@@ -1895,7 +1898,7 @@ photo goes onto the unit being captured with one click.
 
 **Suggested units.** "Suggest a unit from this" on an agent's reply calls
 `ops-parse-reply` with `inquiryId`: one model call (`unit-parse.ts`, under the
-daily OpenAI cap) reads the reply into up to five units - bedrooms, area, rent,
+daily AI spend cap) reads the reply into up to five units - bedrooms, area, rent,
 floor, tower, furnishing, pets, move-in - each with the words it came from.
 Every field is held to what the capture form accepts; one that is not (a rent
 of "24", unscaled) is dropped and flagged, as is anything missing and any unit

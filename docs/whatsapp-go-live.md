@@ -90,7 +90,7 @@ replying at all is the wrong answer to "stop messaging me".
 
 `/dev/phone` reads the same flag and takes the same path, so the mock is a
 rehearsal rather than an approximation. The one thing it will not do is
-dispatch a search, because that spends OpenAI budget and a mock phone should
+dispatch a search, because that spends model budget and a mock phone should
 not quietly do that; it reports the decision instead.
 
 ### The trap: `WHATSAPP_BUSINESS_PHONE`

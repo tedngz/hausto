@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { chat, hasClaudeKey, MAX_IMAGE_BYTES, type ChatPart } from '../_shared/claude.ts';
 import { isVideoOrAnimatedUrl, isMapOrDiagramUrl, isThumbnailUrl } from '../_shared/vibe-policy.ts';
 import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 
@@ -214,16 +215,16 @@ function isValidPropertyImageUrl(url: string): boolean {
   return true;
 }
 
-// Analyze property images using OpenAI Vision (prefer OpenAI, fallback Gemini)
+// Analyze property images with Claude Haiku 5.5 vision
 async function analyzePropertyImagesVibe(images: string[]): Promise<{
   vibe: string;
   vibe_analysis: Record<string, any>;
   highlights: string[];
   amenities: string[];
 } | null> {
-  if (!OPENAI_API_KEY) {
+  if (!hasClaudeKey()) {
     if (!images || images.length === 0) return null;
-    console.warn('[vibe-analysis] OPENAI_API_KEY not configured');
+    console.warn('[vibe-analysis] ANTHROPIC_API_KEY not configured');
     return null;
   }
   if (!images || images.length === 0) return null;
@@ -236,7 +237,7 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
     console.log(`[vibe-analysis] Analyzing ${imagesToAnalyze.length} images with per-image highlights...`);
     
     // Build image content array for vision API
-    const imageContent = [];
+    const imageContent: ChatPart[] = [];
     const validImageIndexes: number[] = [];
     for (let imgIdx = 0; imgIdx < imagesToAnalyze.length; imgIdx++) {
       const imageUrl = imagesToAnalyze[imgIdx];
@@ -254,8 +255,8 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
         const imageBuffer = await imgResponse.arrayBuffer();
         const imageBytes = new Uint8Array(imageBuffer);
         
-        // Skip very large images (>5MB)
-        if (imageBytes.length > 5 * 1024 * 1024) continue;
+        // Skip images Claude would refuse (over 5 MB once base64-encoded)
+        if (imageBytes.length > MAX_IMAGE_BYTES) continue;
         
         let base64String = '';
         const chunk = 8192;
@@ -281,24 +282,14 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
     
     if (imageContent.length === 0) return null;
     
-    const apiUrl = 'https://api.openai.com/v1/chat/completions';
-    const apiKey = OPENAI_API_KEY;
-    const model = 'gpt-4o-mini';
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Analyze these ${imageContent.length} rental property images. For EACH image, provide a unique lifestyle highlight.
+    const r = await chat({
+      maxTokens: 1200,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Analyze these ${imageContent.length} rental property images. For EACH image, provide a unique lifestyle highlight.
 
 Return a JSON object with:
 
@@ -324,23 +315,19 @@ Return ONLY valid JSON:
   ],
   "amenities": ["Air Conditioning", "WiFi", "Balcony"]
 }`
-            },
-            ...imageContent,
-          ]
-        }],
-        max_tokens: 1200,
-        temperature: 0.3,
-      }),
+          },
+          ...imageContent,
+        ],
+      }],
     });
-    
-    if (!response.ok) {
-      console.error('[vibe-analysis] AI error:', await response.text());
+
+    if (!r.ok) {
+      console.error('[vibe-analysis] AI error:', r.error);
       return null;
     }
-    
-    const data = await response.json();
-    logOpenAIUsage({ fn: 'crawl-external-properties:vibe', model: 'gpt-4o-mini', usage: data?.usage });
-    const content = data.choices?.[0]?.message?.content || '';
+
+    logOpenAIUsage({ fn: 'crawl-external-properties:vibe', model: r.model, usage: r.usage });
+    const content = r.text;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     
@@ -431,7 +418,7 @@ Deno.serve(async (req) => {
   // gates. This path writes listings live with none of them (no image floor,
   // no interior gate, no vibe queue), so it answers admins only - it used to
   // answer any signed-in account, which let a renter spend Firecrawl and
-  // OpenAI budget and put ungated listings on browse.
+  // model budget and put ungated listings on browse.
   const { data: adminRole } = await createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     .from('user_roles')
     .select('role')
