@@ -101,7 +101,7 @@ export async function askCompare(opts: {
 
   const r = await chat({
     json: true,
-    maxTokens: 500,
+    maxTokens: 1000,
     messages: [
       { role: 'system', content: buildCompareSystemPrompt(opts.listings, opts.preferences) },
       ...priorTurns,

@@ -1041,7 +1041,7 @@ async function summarizeConversation(
       .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 400)}`)
       .join('\n');
     const r = await chat({
-      maxTokens: 600,
+      maxTokens: 1000,
       messages: [
         {
           role: 'system',
@@ -2044,7 +2044,7 @@ When analyzing property images, ONLY use tags from the standard list above.`;
           }));
           
           const imageAnalysis = await chat({
-            maxTokens: 300,
+            maxTokens: 600,
             messages: [
               { 
                 role: 'system', 

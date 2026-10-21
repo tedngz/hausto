@@ -171,7 +171,7 @@ serve(async (req) => {
     const r = await chat({
       model: MODEL,
       json: true,
-      maxTokens: 900,
+      maxTokens: 2000,
       messages: [
         { role: 'system', content: buildPrompt(listingData, prefs ?? null) },
         {

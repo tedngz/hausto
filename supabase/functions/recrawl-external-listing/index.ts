@@ -150,7 +150,7 @@ function detectMarketplace(source: string, url: string): string {
   return source || 'unknown';
 }
 
-async function callAI(messages: ChatMessage[], maxTokens = 2500): Promise<string | null> {
+async function callAI(messages: ChatMessage[], maxTokens = 4000): Promise<string | null> {
   if (!hasClaudeKey()) throw new Error('ANTHROPIC_API_KEY not configured');
   const r = await chat({ messages, maxTokens, timeoutMs: 60_000 });
   if (!r.ok) {

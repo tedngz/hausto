@@ -55,7 +55,7 @@ async function extract(messages: ChatMessage[], renterId: string): Promise<unkno
   // one function ignores is not a spend cap.
   if (await isOpenAIBudgetExhausted()) throw new Error('budget_exhausted');
 
-  const r = await chat({ model: MODEL, json: true, maxTokens: 200, timeoutMs: 15_000, messages });
+  const r = await chat({ model: MODEL, json: true, maxTokens: 600, timeoutMs: 15_000, messages });
   if (!r.ok) {
     console.error('[viewing-agent-search] model error:', r.error);
     throw new Error(`llm_failed: ${r.status ?? 'network'}`);

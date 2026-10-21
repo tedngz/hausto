@@ -69,7 +69,7 @@ RESPOND WITH VALID JSON ONLY:
   try {
     const r = await chat({
       json: true,
-      maxTokens: 600,
+      maxTokens: 1200,
       timeoutMs: 30_000,
       messages: [
         {

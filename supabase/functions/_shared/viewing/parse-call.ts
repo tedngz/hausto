@@ -52,7 +52,7 @@ export type ParseCallResult =
   | { ok: false; error: string };
 
 export async function callParseModel(ctx: ParseContext): Promise<ParseCallResult> {
-  const r = await callJson(PARSE_MODEL, PARSE_PROMPT, buildParseInput(ctx), 300);
+  const r = await callJson(PARSE_MODEL, PARSE_PROMPT, buildParseInput(ctx), 800);
   return r.ok ? { ok: true, suggestion: interpretParse(r.json, ctx), usage: r.usage } : r;
 }
 
@@ -62,6 +62,6 @@ export type UnitParseCallResult =
 
 /** Up to five units, each a dozen short fields - a bigger answer than paste-parse's. */
 export async function callUnitParseModel(ctx: UnitParseContext): Promise<UnitParseCallResult> {
-  const r = await callJson(UNIT_PARSE_MODEL, UNIT_PARSE_PROMPT, buildUnitParseInput(ctx), 900);
+  const r = await callJson(UNIT_PARSE_MODEL, UNIT_PARSE_PROMPT, buildUnitParseInput(ctx), 2000);
   return r.ok ? { ok: true, suggestion: interpretUnitParse(r.json, ctx), usage: r.usage } : r;
 }
