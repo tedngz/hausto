@@ -51,7 +51,7 @@ export function OpenAIUsagePanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>OpenAI Usage & Cost</CardTitle>
+        <CardTitle>AI Usage & Cost</CardTitle>
         <CardDescription>
           Estimated spend over the last {days} days · Total: <b>${totalUsd.toFixed(4)}</b>
         </CardDescription>
