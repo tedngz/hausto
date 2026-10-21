@@ -31,6 +31,7 @@ import { ASSISTANT_COMPARE_EVENT, listSubjects, type AssistantCompareDetail } fr
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANE_CENTRED, HUB_PANEL_POSITION } from '@/lib/hubLayout';
 import { ListingPreviewDialog } from '@/components/ListingPreviewDialog';
+import { getNormalizedAmenities } from '@/lib/amenities';
 import type { Apartment } from '@/types';
 import { useCurrency, VND_TO_USD_RATE } from '@/contexts/CurrencyContext';
 
@@ -841,16 +842,22 @@ export const BrowseTable = ({
                       ))}
                     </dl>
 
-                    {(r.amenities && r.amenities.length > 0) && (
-                      <div className="flex flex-wrap gap-1 mt-auto pt-2 border-t border-border">
-                        {r.amenities.slice(0, 8).map((a) => (
-                          <span key={a} className="rounded-full bg-secondary px-2 py-0.5 text-[10px]">{a}</span>
-                        ))}
-                        {r.amenities.length > 8 && (
-                          <span className="text-[10px] text-muted-foreground self-center">+{r.amenities.length - 8}</span>
-                        )}
-                      </div>
-                    )}
+                    {/* The same names, folding and order as the listing's page,
+                        so a place compared here reads as it does there. */}
+                    {(() => {
+                      const amenities = getNormalizedAmenities(r.amenities, Infinity);
+                      if (amenities.length === 0) return null;
+                      return (
+                        <div className="flex flex-wrap gap-1 mt-auto pt-2 border-t border-border">
+                          {amenities.slice(0, 8).map(({ key, label }) => (
+                            <span key={key} className="rounded-full bg-secondary px-2 py-0.5 text-[10px]">{label}</span>
+                          ))}
+                          {amenities.length > 8 && (
+                            <span className="text-[10px] text-muted-foreground self-center">+{amenities.length - 8}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );
