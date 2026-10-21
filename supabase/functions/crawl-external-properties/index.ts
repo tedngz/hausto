@@ -283,7 +283,7 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
     if (imageContent.length === 0) return null;
     
     const r = await chat({
-      maxTokens: 1200,
+      maxTokens: 3000,
       messages: [{
         role: 'user',
         content: [

@@ -39,6 +39,11 @@ export type ChatResult =
 
 export interface ChatRequest {
   messages: ChatMessage[];
+  /**
+   * A ceiling, not a target: only the tokens written are billed. Size it with
+   * room to spare - Claude writes fuller JSON than gpt-4o-mini did, and the
+   * caps carried over from it cut the photo analyses off mid-object.
+   */
   maxTokens: number;
   model?: string;
   /** Ask for one JSON object back, as OpenAI's json_object mode did. */
@@ -104,6 +109,11 @@ export async function chat(req: ChatRequest): Promise<ChatResult> {
     // model for Haiku, so it is a failure like any other to the caller.
     if (res.stop_reason === 'refusal') {
       return { ok: false, status: 200, quota: false, error: 'claude declined the request' };
+    }
+    // A reply cut off at the cap is usually half a JSON object, which the
+    // caller can only report as unparseable. Say why here, where it is known.
+    if (res.stop_reason === 'max_tokens') {
+      console.warn(`[claude] ${model} reply cut off at max_tokens=${req.maxTokens}`);
     }
     const text = res.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

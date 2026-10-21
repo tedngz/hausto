@@ -444,7 +444,7 @@ Return ONLY valid JSON, indexes 0-based matching shown order:
   const content = await callAI([{
     role: 'user',
     content: [{ type: 'text', text: prompt }, ...imageContent]
-  }], 300);
+  }], 1000);
 
   if (!content) return null;
 
@@ -1478,7 +1478,7 @@ async function extractListingUrls(
           { role: 'system', content: 'Extract individual property listing URLs from search page content. Return JSON only.' },
           { role: 'user', content: `Extract all individual property listing detail page URLs from this ${marketplace} search results page. Only include URLs that lead to INDIVIDUAL property detail pages, not search/filter pages.\n\nAVAILABLE LINKS:\n${links.slice(0, 100).join('\n')}\n\nPAGE CONTENT (first 4000 chars):\n${markdown.substring(0, 4000)}\n\nReturn JSON: {"listings": [{"url": "...", "title": "...", "price": "..."}]}` }
         ],
-        2000,
+        4000,
       );
       
       if (content) {
@@ -1796,7 +1796,7 @@ RESPOND WITH VALID JSON ONLY:
         { role: 'system', content: 'Extract structured property data from a single Vietnamese property listing detail page. Output English. Keep location names in Vietnamese. Respond with valid JSON only.' },
         { role: 'user', content: prompt }
       ],
-      2500,
+      4000,
     );
 
     if (!content) {
@@ -1923,7 +1923,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         { role: 'system', content: 'Extract structured property data from Vietnamese website content. Output English. Keep location/address names in Vietnamese. Valid JSON only. Never hallucinate or duplicate.' },
         { role: 'user', content: prompt }
       ],
-      4000,
+      8000,
     );
 
     if (!content) return [];

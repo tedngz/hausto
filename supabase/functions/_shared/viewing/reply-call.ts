@@ -19,7 +19,7 @@ export async function callDraftModel(ctx: DraftContext): Promise<DraftCallResult
   const r = await chat({
     model: REPLY_MODEL,
     json: true,
-    maxTokens: 400,
+    maxTokens: 800,
     timeoutMs: 25_000,
     messages: [
       { role: 'system', content: REPLY_PROMPT },

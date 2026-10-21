@@ -89,7 +89,7 @@ Images are given in order, index 0 first. Return ONLY valid JSON:
 {"images":[{"i":0,"interior":true,"map":false,"why":""}]}`;
 
   const r = await chat({
-    maxTokens: 400,
+    maxTokens: 2000,
     timeoutMs: 90_000,
     messages: [{
       role: 'user',

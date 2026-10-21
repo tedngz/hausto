@@ -188,7 +188,7 @@ async function callModelWithBackoff(
     await tpmReserve(PER_CALL_EST_TOKENS);
 
     // This loop is the retry policy, so the SDK's own retries are off.
-    const r = await chat({ messages, maxTokens: 500, maxRetries: 0 });
+    const r = await chat({ messages, maxTokens: 1500, maxRetries: 0 });
     if (r.ok) {
       logOpenAIUsage({ fn: 'process-vibe-queue', model: r.model, usage: r.usage, images: 1 });
       if (r.text) return { ok: true, content: r.text };
