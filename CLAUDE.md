@@ -337,9 +337,11 @@ echo "SELECT jobid, jobname, username FROM cron.job ORDER BY jobname;" | bash sc
 ```
 
 If it is not `postgres`, try the dashboard's Cron page, and if that refuses
-too, only Supabase support can remove it: ask them to run
-`SELECT cron.unschedule(<jobid>);` as `supabase_admin`. That is where
-`auto-crawl-v2` (jobid 7) stands - see PLAN-v3 S1 item 2.
+too, only Supabase support can remove it. For `auto-crawl-v2` (jobid 7) they
+answered by making `postgres` the owner (2026-10-17) rather than unscheduling
+it - which is enough, since a migration can then do it
+(`20261022100000_unschedule_orphan_cron_jobs.sql`). Note that a job changing
+owner can start succeeding where it used to fail: check what it calls.
 
 A failing statement aborts the whole push, so **the migrations queued behind it
 never run** - and they are not recorded, so the next push retries them. Wrap
