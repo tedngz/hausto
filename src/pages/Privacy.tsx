@@ -40,7 +40,7 @@ const Privacy = () => (
         name="description"
         content="How Hausto collects, uses and protects personal data for rental viewing coordination in Ho Chi Minh City."
       />
-      <link rel="canonical" href="https://hausto.com/privacy" />
+      <link rel="canonical" href="https://www.hausto.com/privacy" />
     </Helmet>
 
     <main className="max-w-3xl mx-auto px-4 py-12">

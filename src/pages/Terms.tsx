@@ -26,7 +26,7 @@ const Terms = () => (
         name="description"
         content="When the Hausto Pass is refunded: within 7 days if you haven't used it, or if we can't reach the agents within 3 days of your request."
       />
-      <link rel="canonical" href="https://hausto.com/terms" />
+      <link rel="canonical" href="https://www.hausto.com/terms" />
     </Helmet>
 
     <main className="max-w-3xl mx-auto px-4 py-12">

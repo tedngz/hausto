@@ -21,7 +21,7 @@
 - Searching is free, and so is calling an agent yourself where the original ad lists their number.
 - The first viewing Hausto arranges is free: one place, once per WhatsApp number.
 - The Hausto Pass - USD 25 for 30 days, a one-off payment with nothing recurring - is what has Hausto arrange viewings after that, as many places as you like, and ask about availability at any building. It also includes Priority search (Hausto's team finds places that fit), Match alerts on WhatsApp, unlimited AI credits and unlimited Deep Scans.
-- Money back if Hausto can't get you a single viewing while the Pass runs: https://hausto.com/terms
+- Money back if Hausto can't get you a single viewing while the Pass runs: https://www.hausto.com/terms
 
 ## Public Property Search API
 
