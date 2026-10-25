@@ -18,6 +18,7 @@ import { requestPass } from '@/lib/passEvents';
 import { openDeepScan } from '@/lib/deepScanEvents';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
+import type { PropertyType } from '@/hooks/useDeepAnalysis';
 import { RequestViewingModal } from '@/components/RequestViewingModal';
 import { RequestViewingOffer } from '@/components/RequestViewingOffer';
 
@@ -56,6 +57,9 @@ interface PropertyListingCardProps {
    *  requests against `external_properties`, and an internal listing has its
    *  own booking path. */
   shortlistable?: boolean;
+  /** Which ledger the listing lives in. The Deep scan reads the listing from
+   *  that table, so a crawled listing scanned as 'internal' is not found. */
+  propertyType?: PropertyType;
 }
 
 export const PropertyListingCard = ({
@@ -66,6 +70,7 @@ export const PropertyListingCard = ({
   onBookViewing,
   isBooking = false,
   shortlistable = false,
+  propertyType = 'internal',
 }: PropertyListingCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : PLACEHOLDER_IMAGES;
   const [current, setCurrent] = useState(0);
@@ -337,6 +342,7 @@ export const PropertyListingCard = ({
                 bare
                 ctaOnly
                 propertyId={apartment.id}
+                propertyType={propertyType}
                 title={displayTitle}
                 onRequestPass={() => {
                   setScanOpen(false);
@@ -347,7 +353,7 @@ export const PropertyListingCard = ({
                   openDeepScan({
                     propertyId: apartment.id,
                     title: displayTitle,
-                    propertyType: 'internal',
+                    propertyType,
                   });
                 }}
               />
