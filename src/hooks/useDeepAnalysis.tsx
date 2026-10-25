@@ -62,7 +62,13 @@ export const useDeepAnalysis = (propertyId?: string, propertyType: PropertyType 
         body: { propertyId, propertyType },
       });
 
-      const failure = data?.error ?? (error ? 'REQUEST_FAILED' : null);
+      // The function answers its refusals with a 4xx, and supabase-js hands a
+      // non-2xx back as `error` with `data` null - the code is in the body.
+      let failure: string | null = data?.error ?? null;
+      if (!failure && error) {
+        const body = await (error as { context?: Response }).context?.json?.().catch(() => null);
+        failure = body?.error ?? 'REQUEST_FAILED';
+      }
       if (failure) {
         // Each of these wants a different next move from the renter, so none of
         // them collapse into "something went wrong".
