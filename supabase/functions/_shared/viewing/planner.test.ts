@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { planRequest, type PlanItem, type PlanInput, type UnreadReply } from './planner.ts';
+import { planRequest, type HeardTerms, type PlanItem, type PlanInput, type UnreadReply } from './planner.ts';
+import { NO_TERMS, type LeaseTerms } from '../lease-terms.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { NUDGE_AFTER_MS, HOUR_MS } from './reminders.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
@@ -396,5 +397,74 @@ describe('nothing at the renter\'s times', () => {
       ev('OUTCOME_RECORDED', 4 * HOUR_MS, { outcome: 'CONFIRMED', slots: slot('2026-09-29T02:00:00Z') }, 'i3'),
     ];
     expect(byKey(plan(events, { items: items(3), now: T0 + 5 * HOUR_MS }))['DELIVER:r']).toMatchObject({ action: 'DELIVER' });
+  });
+});
+
+describe('terms an agent stated', () => {
+  const said = (t: Partial<LeaseTerms>): LeaseTerms => ({ ...NO_TERMS, fees: [], ...t });
+  const heard = (t: Partial<LeaseTerms>, at = 2 * HOUR_MS, messageId = 'rm1'): HeardTerms => ({
+    itemId: 'i1', messageId, at: new Date(T0 + at).toISOString(), terms: said(t), confidence: 'HIGH',
+  });
+  const contacted = () => [...submitted(1), ev('REALTOR_CONTACTED', 0, {}, 'i1')];
+  const confirmed = () => [...contacted(), ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'CONFIRMED', slots: slot('2026-09-29T02:00:00Z') }, 'i1')];
+  const termsOf = (ps: ReturnType<typeof plan>) => ps.filter(p => p.action === 'LEASE_TERMS');
+
+  it('proposes recording them, keyed on the reply they came in', () => {
+    const ps = plan(confirmed(), { items: items(1), heardTerms: [heard({ depositMonthsMin: 2, depositMonthsMax: 2, petsAllowed: false })] });
+    expect(termsOf(ps)).toEqual([expect.objectContaining({
+      key: 'TERMS:i1:rm1', itemId: 'i1', action: 'LEASE_TERMS', confidence: 'HIGH',
+      input: { itemId: 'i1', replyMessageId: 'rm1', terms: expect.objectContaining({ depositMonthsMin: 2, petsAllowed: false }) },
+    })]);
+    expect(termsOf(ps)[0].rationale).toContain("deposit 2 months' rent; no pets");
+  });
+
+  it('carries what is on file, since the latest record stands whole', () => {
+    const events = [...confirmed(), ev('LEASE_TERMS_RECORDED', HOUR_MS + 1, { deposit_months_min: 2, deposit_months_max: 2 }, 'i1')];
+    const [p] = termsOf(plan(events, { items: items(1), heardTerms: [heard({ petsAllowed: true })] }));
+    expect(p.input.terms).toMatchObject({ depositMonthsMin: 2, petsAllowed: true });
+    expect(p.rationale).toContain('already on file');
+  });
+
+  it('stops once terms are recorded after the reply, by anyone', () => {
+    const events = [...confirmed(), ev('LEASE_TERMS_RECORDED', 3 * HOUR_MS, { min_lease_months: 6 }, 'i1')];
+    expect(termsOf(plan(events, { items: items(1), heardTerms: [heard({ petsAllowed: true })] }))).toEqual([]);
+  });
+
+  it('proposes them beside the outcome when one reply says both', () => {
+    const s: ParseSuggestion = {
+      outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-29T02:00:00.000Z', durationMinutes: 30 }],
+      actualPriceVnd: null, note: 'ok', confidence: 'HIGH', problems: [], model: 'm', terms: said({ minLeaseMonths: 12 }),
+    };
+    const ps = plan(contacted(), {
+      items: items(1), now: T0 + 3 * HOUR_MS,
+      unreadReplies: [{ itemId: 'i1', messageId: 'rm1', suggestion: s }], heardTerms: [heard({ minLeaseMonths: 12 })],
+    });
+    expect(ps.map(p => [p.key, p.action])).toEqual([['OUTCOME:i1:rm1', 'OUTCOME'], ['TERMS:i1:rm1', 'LEASE_TERMS']]);
+  });
+
+  it('needs no person for a reply that only states terms about a place already settled', () => {
+    const s: ParseSuggestion = {
+      outcome: null, slots: [], actualPriceVnd: null, note: 'deposit two months', confidence: 'LOW',
+      problems: ['Only the terms - nothing settled about the viewing yet.'], model: 'm', terms: said({ depositMonthsMin: 2, depositMonthsMax: 2 }),
+    };
+    const unread = [{ itemId: 'i1', messageId: 'rm2', suggestion: s }];
+    const settled = plan(confirmed(), { items: items(1), unreadReplies: unread, heardTerms: [heard({ depositMonthsMin: 2, depositMonthsMax: 2 }, 2 * HOUR_MS, 'rm2')] });
+    expect(settled.map(p => p.action)).toEqual(['LEASE_TERMS', 'DELIVER']);
+    // And the plan, which prints them, says to record them first.
+    expect(settled[1].rationale).toContain('Record the agents\' terms first');
+    // Still waiting on a time: a person decides whether to wait or ask again.
+    const open = plan(contacted(), { items: items(1), unreadReplies: unread, heardTerms: [heard({ depositMonthsMin: 2, depositMonthsMax: 2 }, 2 * HOUR_MS, 'rm2')] });
+    expect(open.map(p => p.action)).toEqual(['ESCALATE', 'LEASE_TERMS']);
+  });
+
+  it('proposes nothing about a closed request, or an item not on it', () => {
+    const closed = [...confirmed(), ev('REQUEST_CANCELLED', 2 * HOUR_MS, { reason: 'DUPLICATE' })];
+    expect(termsOf(plan(closed, { items: items(1), heardTerms: [heard({ petsAllowed: true })] }))).toEqual([]);
+    expect(termsOf(plan(confirmed(), { items: items(1), heardTerms: [{ ...heard({ petsAllowed: true }), itemId: 'i9' }] }))).toEqual([]);
+  });
+
+  it('is never something the AI operator does alone', () => {
+    const [p] = termsOf(plan(confirmed(), { items: items(1), heardTerms: [heard({ petsAllowed: true })] }));
+    expect(autoEligible(p)).toBe(false);
   });
 });

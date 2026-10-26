@@ -383,3 +383,57 @@ describe('where to meet on the day (viewing-day.ts)', () => {
     expect(view().items.i1.details?.sharePhone).toBe(true);
   });
 });
+
+describe('what the agent said about the terms (LEASE_TERMS)', () => {
+  const terms = {
+    depositMonthsMin: 2, depositMonthsMax: 2, minLeaseMonths: 12, petsAllowed: false,
+    availability: null, availableFrom: null,
+    fees: [{ kind: 'MANAGEMENT', label: 'Management fee', included: false, amount: '500,000 VND/month' }],
+  };
+
+  it('records them as a typed event that moves nothing, in any state', async () => {
+    const before = view();
+    const r = await act({ action: 'LEASE_TERMS', itemId: 'i1', terms, note: 'said it twice' });
+    expect(r.status).toBe(200);
+    expect(eventsOf('LEASE_TERMS_RECORDED')[0]).toMatchObject({
+      item_id: 'i1', actor: ACTOR,
+      payload: {
+        deposit_months_min: 2, deposit_months_max: 2, min_lease_months: 12, pets_allowed: false,
+        fees: [{ kind: 'MANAGEMENT', label: 'Management fee', included: false, amount: '500,000 VND/month' }],
+        note: 'said it twice',
+      },
+    });
+    expect(view().state).toBe(before.state);
+    expect(view().items.i1).toMatchObject({ state: 'PENDING', terms: { minLeaseMonths: 12, petsAllowed: false } });
+  });
+
+  it('keeps the reply they came from, when it is this item\'s', async () => {
+    await act({ action: 'REALTOR_REPLY', itemId: 'i1', message: 'Cọc 2 tháng em' });
+    await act({ action: 'REALTOR_REPLY', itemId: 'i2', message: 'Không nuôi thú cưng' });
+    const [mine, theirs] = db.tables.realtor_messages.filter(m => m.direction === 'IN');
+    await act({ action: 'LEASE_TERMS', itemId: 'i1', terms, replyMessageId: mine.id });
+    await act({ action: 'LEASE_TERMS', itemId: 'i1', terms, replyMessageId: theirs.id });
+    const [a, b] = eventsOf('LEASE_TERMS_RECORDED').map(e => e.payload as Record<string, unknown>);
+    expect(a.reply_message_id).toBe(mine.id);
+    expect(b).not.toHaveProperty('reply_message_id');
+  });
+
+  it('refuses terms outside the bounds, and records nothing', async () => {
+    const r = await act({ action: 'LEASE_TERMS', itemId: 'i1', terms: { ...terms, depositMonthsMin: 30 } });
+    expect(r).toMatchObject({ status: 400, body: { error: 'invalid_terms' } });
+    expect((await act({ action: 'LEASE_TERMS', itemId: 'i1', terms: {} })).status).toBe(400);
+    expect((await act({ action: 'LEASE_TERMS', itemId: 'i1' })).status).toBe(400);
+    expect(eventsOf('LEASE_TERMS_RECORDED')).toHaveLength(0);
+  });
+
+  it('refuses a phone number in a fee, since the renter reads them', async () => {
+    for (const fee of [
+      { kind: 'PARKING', label: 'Parking, ask guard 0901 234 567', included: true },
+      { kind: 'OTHER', label: 'Cleaning', included: false, amount: '+44 7700 900123' },
+    ]) {
+      const r = await act({ action: 'LEASE_TERMS', itemId: 'i1', terms: { ...terms, fees: [fee] } });
+      expect(r).toMatchObject({ status: 400, body: { error: 'invalid_terms' } });
+    }
+    expect(eventsOf('LEASE_TERMS_RECORDED')).toHaveLength(0);
+  });
+});

@@ -79,3 +79,26 @@ describe('the agreement rate', () => {
     expect(agreementStats([{ action: 'NUDGE', status: 'PENDING', edited: false }])).toEqual([]);
   });
 });
+
+describe('the terms an agent stated (LEASE_TERMS)', () => {
+  const terms = { depositMonthsMin: 2, petsAllowed: false, fees: [] };
+  const p = proposal({ action: 'LEASE_TERMS', dedupe_key: 'TERMS:i1:rm1', input: { itemId: 'i1', terms } });
+
+  it('agrees when the operator records the same terms, however written, and corrects other ones', () => {
+    expect(settlementFor(p, { action: 'LEASE_TERMS', itemId: 'i1', input: { terms: { ...terms, depositMonthsMax: '2' } } })).toBe('AGREED');
+    expect(settlementFor(p, { action: 'LEASE_TERMS', itemId: 'i1', input: { terms: { ...terms, petsAllowed: true } } })).toBe('CORRECTED');
+  });
+
+  it('is not answered by an outcome, and does not answer one', () => {
+    expect(settlementFor(p, { action: 'OUTCOME', itemId: 'i1', input: { outcome: 'CONFIRMED' } })).toBeNull();
+    const outcome = proposal({ action: 'OUTCOME', dedupe_key: 'OUTCOME:i1:rm1', input: { outcome: 'CONFIRMED' } });
+    expect(settlementFor(outcome, { action: 'LEASE_TERMS', itemId: 'i1', input: { terms } })).toBeNull();
+    const escalation = proposal({ action: 'ESCALATE', dedupe_key: 'OUTCOME:i1:rm1' });
+    expect(settlementFor(escalation, { action: 'LEASE_TERMS', itemId: 'i1', input: { terms } })).toBeNull();
+  });
+
+  it('calls changing the terms on approval a correction', () => {
+    expect(approvalOf(p.input, { terms: { ...terms, petsAllowed: true } }).status).toBe('CORRECTED');
+    expect(approvalOf(p.input, { note: 'agent was sure' })).toMatchObject({ status: 'APPROVED', edited: true });
+  });
+});

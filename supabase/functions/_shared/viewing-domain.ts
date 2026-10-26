@@ -6,6 +6,8 @@
 // across the SPA boundary at deploy time, and the functions are the writers.
 // The file is pure TypeScript with no Deno APIs, so vitest runs it directly.
 
+import { termsFromPayload, type LeaseTerms } from './lease-terms.ts';
+
 // ── Event types (SPEC §3) ───────────────────────────────────────────────────
 export const EVENT_TYPES = [
   'REQUEST_SUBMITTED',
@@ -46,6 +48,13 @@ export const EVENT_TYPES = [
   // their number going to the renter on the day (viewing-day.ts). Per item;
   // the latest stands. Moves no state.
   'VIEWING_DETAILS_RECORDED',
+  // What the agent said about the deposit, the minimum lease, pets, fees and
+  // when the place is free - the first message asks about whatever the ad
+  // leaves out (lease-terms.ts askAgentVi). Payload: the terms under the
+  // listing columns' names (lease-terms.ts termsPayload), with
+  // `reply_message_id?` and `note?`. Per item; the latest stands whole, so a
+  // writer carries what was on file. Moves no state.
+  'LEASE_TERMS_RECORDED',
   // The viewing-day message went out, for one Ho Chi Minh City date. Moves no
   // state; the scheduler reads it so a day is sent once.
   'VIEWING_DAY_SENT',
@@ -248,6 +257,8 @@ export interface ItemView {
   notified?: RealtorDecision;
   /** How the renter finds the viewing on the day (VIEWING_DETAILS_RECORDED). */
   details?: ViewingDetails;
+  /** What the agent said about the terms (LEASE_TERMS_RECORDED), the latest. */
+  terms?: AgentTerms;
   /**
    * How many times the renter's new times sent this item back to be asked
    * again (AVAILABILITY_CHANGED). Keys the AI operator's proposals, so a
@@ -272,6 +283,15 @@ export interface ViewingDetails {
   meetingPoint: string;
   agentFirstName: string | null;
   sharePhone: boolean;
+}
+
+/**
+ * The terms as the agent stated them, and when that was recorded. Theirs, for
+ * this request: the listing's own columns are what its ad states, and are
+ * never written from this (SPEC §0 "Lease terms").
+ */
+export interface AgentTerms extends LeaseTerms {
+  recordedAt: string;
 }
 
 export interface RequestView {
@@ -485,6 +505,17 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
           agentFirstName: typeof p.agent_first_name === 'string' && p.agent_first_name ? p.agent_first_name : null,
           sharePhone: p.share_phone === true,
         };
+        break;
+      }
+
+      case 'LEASE_TERMS_RECORDED': {
+        // What the agent said, not progress: a deposit moves no item. The
+        // latest stands, whatever order the log arrived in - sorted by now -
+        // and it is kept in any state, like a meeting point. A payload stating
+        // nothing valid is ignored rather than clearing what stood.
+        if (!e.item_id) break;
+        const terms = termsFromPayload(p);
+        if (terms) item(e.item_id).terms = { ...terms, recordedAt: e.occurred_at };
         break;
       }
 

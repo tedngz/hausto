@@ -553,3 +553,91 @@ describe('OTHER_DAYS_ASKED: the renter asked for other days', () => {
     expect(reduceRequest(REQ, [...base(), ev('OTHER_DAYS_ASKED', { payload: {} })]).otherDaysAsked).toBeUndefined();
   });
 });
+
+describe('LEASE_TERMS_RECORDED: what the agent said about the terms', () => {
+  const at = (s: number) => `2026-10-26T00:00:${String(s).padStart(2, '0')}.000Z`;
+  const terms = (payload: Record<string, unknown>, s: number, item = 'i1') =>
+    ev('LEASE_TERMS_RECORDED', { item, payload, at: at(s) });
+  const first = { deposit_months_min: 2, deposit_months_max: 2, pets_allowed: false };
+  const second = {
+    deposit_months_min: 2, deposit_months_max: 2, pets_allowed: false, min_lease_months: 12,
+    fees: [{ kind: 'MANAGEMENT', label: 'Management fee', included: false, amount: '500,000 VND/month' }],
+  };
+  const base = () => {
+    seq = 0;
+    return [
+      ev('REQUEST_SUBMITTED', { at: at(1) }),
+      ev('ITEM_ADDED', { item: 'i1', at: at(1) }),
+      ev('REALTOR_CONTACTED', { item: 'i1', at: at(2) }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-10-29T03:00:00Z', duration_minutes: 30 }] }, at: at(5) }),
+    ];
+  };
+
+  it('sets the terms on the item and moves no state', () => {
+    const before = reduceRequest(REQ, base());
+    const view = reduceRequest(REQ, [...base(), terms(first, 6)]);
+    expect(view.state).toBe(before.state);
+    expect(view.items.i1.state).toBe('CONFIRMED');
+    expect(view.items.i1.slots).toEqual(before.items.i1.slots);
+    expect(view.items.i1.terms).toEqual({
+      availability: null, availableFrom: null, minLeaseMonths: null,
+      depositMonthsMin: 2, depositMonthsMax: 2, petsAllowed: false, fees: [], recordedAt: at(6),
+    });
+  });
+
+  it('is kept whatever state the item is in, before an outcome or after', () => {
+    seq = 0;
+    const early = [ev('REQUEST_SUBMITTED', { at: at(1) }), ev('ITEM_ADDED', { item: 'i1', at: at(1) }), terms(first, 2)];
+    expect(reduceRequest(REQ, early).items.i1).toMatchObject({ state: 'PENDING', terms: { depositMonthsMin: 2 } });
+    // New times undo answers about the day, never about the place.
+    const moved = reduceRequest(REQ, [...base(), terms(first, 6), ev('AVAILABILITY_CHANGED', { payload: {}, at: at(7) })]);
+    expect(moved.items.i1).toMatchObject({ state: 'PENDING', terms: { depositMonthsMin: 2 } });
+  });
+
+  it('lets the latest stand, whatever order the log arrives in', () => {
+    const log = [...base(), terms(first, 6), terms(second, 8)];
+    const expected = reduceRequest(REQ, log);
+    expect(expected.items.i1.terms).toMatchObject({ minLeaseMonths: 12, recordedAt: at(8) });
+    expect(expected.items.i1.terms?.fees).toHaveLength(1);
+    for (const order of permutations(log)) {
+      const v = reduceRequest(REQ, order);
+      expect(v.items.i1).toEqual(expected.items.i1);
+      expect(v.state).toBe(expected.state);
+    }
+  });
+
+  it('lets an outcome recorded after the terms leave them standing, in any order', () => {
+    seq = 0;
+    const log = [
+      ev('REQUEST_SUBMITTED', { at: at(1) }),
+      ev('ITEM_ADDED', { item: 'i1', at: at(1) }),
+      ev('REALTOR_CONTACTED', { item: 'i1', at: at(2) }),
+      terms(second, 3),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'ALREADY_RENTED' }, at: at(4) }),
+    ];
+    for (const order of permutations(log)) {
+      const v = reduceRequest(REQ, order);
+      expect(v.items.i1.state).toBe('ALREADY_RENTED');
+      expect(v.items.i1.terms).toMatchObject({ minLeaseMonths: 12, recordedAt: at(3) });
+    }
+  });
+
+  it('ignores a record that states nothing valid, rather than clearing what stood', () => {
+    const view = reduceRequest(REQ, [
+      ...base(), terms(first, 6),
+      terms({ deposit_months_min: 30, min_lease_months: 0, pets_allowed: 'maybe' }, 8),
+      terms({}, 9),
+    ]);
+    expect(view.items.i1.terms).toMatchObject({ depositMonthsMin: 2, recordedAt: at(6) });
+  });
+
+  it('drops a term outside the bounds and keeps the rest', () => {
+    const view = reduceRequest(REQ, [...base(), terms({ deposit_months_min: 30, pets_allowed: true }, 6)]);
+    expect(view.items.i1.terms).toMatchObject({ depositMonthsMin: null, petsAllowed: true });
+  });
+
+  it('ignores one with no item', () => {
+    const view = reduceRequest(REQ, [...base(), ev('LEASE_TERMS_RECORDED', { payload: first, at: at(6) })]);
+    expect(view.items.i1.terms).toBeUndefined();
+  });
+});

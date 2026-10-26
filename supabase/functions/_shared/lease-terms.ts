@@ -93,6 +93,9 @@ const DEFAULT_LABEL: Record<FeeKind, string> = {
   OTHER: 'Other fees',
 };
 
+/** Each fee kind's English name, for a form that offers them. */
+export const FEE_LABELS: Readonly<Record<FeeKind, string>> = DEFAULT_LABEL;
+
 // ── Reading text ─────────────────────────────────────────────────────────────
 
 /** Lowercase, accents folded: "Cọc 2 tháng" -> "coc 2 thang". Matching only. */
@@ -630,6 +633,142 @@ export function termsColumns(t: LeaseTerms, readAt: string): Record<string, unkn
 
 export const TERMS_COLUMNS = 'availability, available_from, min_lease_months, deposit_months_min, deposit_months_max, pets_allowed, fees, terms_read_at';
 
+// ── What an agent said ───────────────────────────────────────────────────────
+//
+// The first message to an agent asks about whatever the ad leaves out
+// (askAgentVi, below), and their answer is recorded as LEASE_TERMS_RECORDED
+// (ops-actions.ts LEASE_TERMS): on the request's log, per item, and never on
+// the listing's columns (SPEC §0 "Lease terms"). The columns say what the ad
+// states; this says what one agent told us, on one day.
+
+/** Anything stated at all. */
+export function hasTerms(t: LeaseTerms | null | undefined): boolean {
+  return !!t && (t.availability !== null || t.minLeaseMonths !== null || t.depositMonthsMin !== null
+    || t.petsAllowed !== null || t.fees.length > 0);
+}
+
+/** The terms as an event's payload: the columns' names, without `terms_read_at`. */
+export function termsPayload(t: LeaseTerms): Record<string, unknown> {
+  const { terms_read_at: _readAt, ...columns } = termsColumns(t, '');
+  return columns;
+}
+
+const inRange = (n: number, [lo, hi]: [number, number]) => n >= lo && n <= hi;
+
+/** More than this is a list pasted in, not what an agent said. */
+const MAX_FEES = 10;
+/** A fee's label and its amount are each a few words. */
+const FEE_TEXT_MAX = 60;
+
+/**
+ * A payload's terms, read as a row is and held to the same bounds: a value
+ * outside them is dropped, not shown. Null when nothing valid is stated. The
+ * reducer reads it, so it never throws.
+ */
+export function termsFromPayload(p: Record<string, unknown> | null | undefined): LeaseTerms | null {
+  const row = termsFromRow({ ...(p ?? {}), terms_read_at: '' });
+  if (!row) return null;
+  const { readAt: _readAt, ...t } = row;
+  const lease = t.minLeaseMonths;
+  const [lo, hi] = [t.depositMonthsMin, t.depositMonthsMax];
+  const depositOk = lo !== null && hi !== null && inRange(lo, DEPOSIT_RANGE) && inRange(hi, DEPOSIT_RANGE) && hi >= lo;
+  const out: LeaseTerms = {
+    availability: t.availability,
+    availableFrom: t.availability === 'AVAILABLE_SOON' && t.availableFrom && /^\d{4}-\d{2}-\d{2}$/.test(t.availableFrom) ? t.availableFrom : null,
+    minLeaseMonths: lease !== null && Number.isInteger(lease) && inRange(lease, LEASE_RANGE) ? lease : null,
+    depositMonthsMin: depositOk ? lo : null,
+    depositMonthsMax: depositOk ? hi : null,
+    petsAllowed: t.petsAllowed,
+    fees: t.fees.slice(0, MAX_FEES),
+  };
+  return hasTerms(out) ? out : null;
+}
+
+export type TermsCheck = { ok: true; value: LeaseTerms } | { ok: false; error: string };
+
+/**
+ * What an operator, or a proposal they approve, says the agent stated. Held
+ * to the bounds the readers keep, and refused rather than trimmed: a deposit
+ * of 30 is a typo, and recording it as "not stated" would hide that. At least
+ * one term, or there is nothing to record.
+ */
+export function checkTerms(raw: unknown): TermsCheck {
+  if (!raw || typeof raw !== 'object') return { ok: false, error: 'Give the terms the agent stated.' };
+  const t = raw as Record<string, unknown>;
+  const isNull = (v: unknown) => v === null || v === undefined || v === '';
+  // A form sends "2"; a boolean is not a number of months.
+  const num = (v: unknown) => (typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN);
+
+  const availability = isNull(t.availability) ? null : String(t.availability);
+  if (availability !== null && !(LISTING_AVAILABILITY as readonly string[]).includes(availability)) {
+    return { ok: false, error: `availability must be one of ${LISTING_AVAILABILITY.join(', ')}, or empty.` };
+  }
+  const availableFrom = isNull(t.availableFrom) ? null : String(t.availableFrom);
+  if (availableFrom !== null) {
+    const real = /^\d{4}-\d{2}-\d{2}$/.test(availableFrom)
+      && new Date(`${availableFrom}T00:00:00Z`).toISOString().slice(0, 10) === availableFrom;
+    if (!real) return { ok: false, error: 'The date it is free from must be a real date, YYYY-MM-DD.' };
+    if (availability !== 'AVAILABLE_SOON') return { ok: false, error: 'A date it is free from goes with "available soon".' };
+  }
+
+  const lease = isNull(t.minLeaseMonths) ? null : num(t.minLeaseMonths);
+  if (lease !== null && !(Number.isInteger(lease) && inRange(lease, LEASE_RANGE))) {
+    return { ok: false, error: `The minimum lease is whole months, ${LEASE_RANGE[0]}-${LEASE_RANGE[1]}.` };
+  }
+
+  const lo = isNull(t.depositMonthsMin) ? null : num(t.depositMonthsMin);
+  const hi = isNull(t.depositMonthsMax) ? lo : num(t.depositMonthsMax);
+  if (lo === null && hi !== null) return { ok: false, error: 'Give the deposit\'s lower figure too.' };
+  const halfMonths = (n: number) => Number.isFinite(n) && Number.isInteger(n * 2) && inRange(n, DEPOSIT_RANGE);
+  if (lo !== null && hi !== null && !(halfMonths(lo) && halfMonths(hi) && hi >= lo)) {
+    return { ok: false, error: `The deposit is in months of rent, ${DEPOSIT_RANGE[0]}-${DEPOSIT_RANGE[1]}, in half months.` };
+  }
+
+  if (!isNull(t.petsAllowed) && typeof t.petsAllowed !== 'boolean') {
+    return { ok: false, error: 'Pets is yes, no, or not said.' };
+  }
+
+  const rawFees = t.fees ?? [];
+  if (!Array.isArray(rawFees)) return { ok: false, error: 'fees must be a list.' };
+  if (rawFees.length > MAX_FEES) return { ok: false, error: `At most ${MAX_FEES} fees.` };
+  const fees: Fee[] = [];
+  for (const f of rawFees as Record<string, unknown>[]) {
+    const kind = String(f?.kind ?? '');
+    if (!(FEE_KINDS as readonly string[]).includes(kind)) return { ok: false, error: `A fee's kind must be one of ${FEE_KINDS.join(', ')}.` };
+    const label = String(f.label ?? '').replace(/\s+/g, ' ').trim() || DEFAULT_LABEL[kind as FeeKind];
+    const amount = isNull(f.amount) ? null : String(f.amount).replace(/\s+/g, ' ').trim();
+    if (label.length > FEE_TEXT_MAX || (amount && amount.length > FEE_TEXT_MAX)) {
+      return { ok: false, error: `Keep each fee's name and amount under ${FEE_TEXT_MAX} characters.` };
+    }
+    if (typeof f.included !== 'boolean') return { ok: false, error: `Say whether the rent covers ${label}.` };
+    fees.push({ kind: kind as FeeKind, label, included: f.included, amount: f.included ? null : amount || null });
+  }
+
+  const value: LeaseTerms = {
+    availability: availability as ListingAvailability | null,
+    availableFrom,
+    minLeaseMonths: lease,
+    depositMonthsMin: lo,
+    depositMonthsMax: hi,
+    petsAllowed: isNull(t.petsAllowed) ? null : t.petsAllowed as boolean,
+    fees: dedupeFees(fees),
+  };
+  if (!hasTerms(value)) return { ok: false, error: 'Nothing to record - fill in at least one term the agent stated.' };
+  return { ok: true, value };
+}
+
+/** The same terms, however they were written down: what scoring an approval against a proposal asks. */
+export function sameTerms(a: unknown, b: unknown): boolean {
+  const x = checkTerms(a);
+  const y = checkTerms(b);
+  if (!x.ok || !y.ok) return false;
+  const key = (t: LeaseTerms) => JSON.stringify({
+    ...termsPayload(t),
+    fees: [...t.fees].sort((f, g) => feeKey(f).localeCompare(feeKey(g))).map(f => [feeKey(f), f.included, f.amount]),
+  });
+  return key(x.value) === key(y.value);
+}
+
 /**
  * The terms of these listings, by id. Read on their own rather than added to
  * a wider select: a failed read (the columns not there yet, a grant missing)
@@ -758,6 +897,16 @@ export function termsForPrompt(t: StoredTerms | null): string {
   }
   if (missing.length > 0) lines.push(`Not stated in the ad: ${missing.join(', ')}.`);
   return lines.join(' ');
+}
+
+/**
+ * What the agent told us about the same terms (LEASE_TERMS_RECORDED), for the
+ * same prompts: dated, and given as the agent's word, which stands over the
+ * ad's where the two differ. Empty when nothing was recorded.
+ */
+export function agentTermsForPrompt(t: (LeaseTerms & { recordedAt: string }) | null | undefined): string {
+  const stated = describeTerms(t ?? null);
+  return stated.length > 0 ? `The agent told us (${dayLabel(t!.recordedAt.slice(0, 10))}): ${stated.join('; ')}.` : '';
 }
 
 // ── Asking the agent ─────────────────────────────────────────────────────────

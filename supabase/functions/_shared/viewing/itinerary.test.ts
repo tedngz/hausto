@@ -10,10 +10,13 @@ import {
   DISTRICT_HOP_MINUTES,
   busySlots,
   clashesWith,
+  stopTerms,
+  termsLine,
   type ItineraryStop,
   type PrioritySearchOffer,
   type StopListing,
 } from './itinerary.ts';
+import { NO_TERMS, type Fee, type LeaseTerms } from '../lease-terms.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 
 let seq = 0;
@@ -499,5 +502,64 @@ describe('a clash, found as each agent answers', () => {
 
   it('never counts a place against itself', () => {
     expect(clashesWith({ startsAt: '2026-09-12T02:00:00.000Z', durationMinutes: 30 }, busy, 'a')).toHaveLength(0);
+  });
+});
+
+describe('the terms line under each stop', () => {
+  const t = (x: Partial<LeaseTerms>): LeaseTerms => ({ ...NO_TERMS, fees: [], ...x });
+  const fee = (kind: Fee['kind'], label: string, included: boolean, amount: string | null = null): Fee => ({ kind, label, included, amount });
+
+  it('says the deposit, the minimum lease, pets and move-in in a few words', () => {
+    expect(termsLine(t({ depositMonthsMin: 2, depositMonthsMax: 2, minLeaseMonths: 12, petsAllowed: false })))
+      .toBe('Deposit 2 months, minimum lease 1 year, no pets');
+    expect(termsLine(t({ depositMonthsMin: 1, depositMonthsMax: 1.5, minLeaseMonths: 6, petsAllowed: true })))
+      .toBe('Deposit 1-1.5 months, minimum lease 6 months, pets allowed');
+    expect(termsLine(t({ depositMonthsMin: 1, depositMonthsMax: 1, availability: 'AVAILABLE_SOON', availableFrom: '2026-12-01' })))
+      .toBe('Deposit 1 month, move in from 1 Dec');
+    expect(termsLine(t({ availability: 'AVAILABLE_NOW', minLeaseMonths: 24 }))).toBe('Minimum lease 2 years, move in now');
+  });
+
+  it('writes money as the plan does, and puts the fees that cost money first, three at most', () => {
+    expect(termsLine(t({ fees: [
+      fee('WATER', 'Water', true),
+      fee('PARKING', 'Motorbike parking', false),
+      fee('ELECTRICITY', 'Electricity', false, '3,500 VND/kWh'),
+      fee('MANAGEMENT', 'Management fee', false, '500,000 VND/month'),
+    ] }))).toBe('Electricity 3.500 ₫/kWh, management fee 500.000 ₫/month, motorbike parking extra');
+    expect(termsLine(t({ fees: [fee('ELECTRICITY', 'Electricity', false, 'government rate'), fee('INTERNET', 'Internet', true)] })))
+      .toBe('Electricity at the government rate, internet included');
+  });
+
+  it('is nothing when nothing is known', () => {
+    expect(termsLine(null)).toBeNull();
+    expect(termsLine(t({}))).toBeNull();
+  });
+
+  it('takes the agent\'s word over the ad\'s, and never the ad\'s move-in', () => {
+    const ad = t({ depositMonthsMin: 2, depositMonthsMax: 2, availability: 'AVAILABLE_NOW', fees: [fee('WATER', 'Water', true)] });
+    const agent = t({ depositMonthsMin: 3, depositMonthsMax: 3, petsAllowed: false });
+    expect(stopTerms(agent, ad)).toMatchObject({ depositMonthsMin: 3, petsAllowed: false, availability: null, fees: [fee('WATER', 'Water', true)] });
+    expect(stopTerms(null, ad)).toMatchObject({ depositMonthsMin: 2, availability: null });
+    expect(stopTerms(null, t({ availability: 'AVAILABLE_NOW' }))).toBeNull();
+    expect(stopTerms(null, null)).toBeNull();
+  });
+
+  it('prints one line under the price, for the stops that have one', () => {
+    seq = 0;
+    const events = [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', {}, 'i1'), ev('ITEM_ADDED', {}, 'i2'),
+      ev('OUTCOME_RECORDED', confirmed('2026-09-15T02:00:00Z'), 'i1'),
+      ev('OUTCOME_RECORDED', confirmed('2026-09-15T04:00:00Z'), 'i2'),
+      ev('LEASE_TERMS_RECORDED', { min_lease_months: 6, pets_allowed: true }, 'i1'),
+    ];
+    const listings: StopListing[] = [
+      { itemId: 'i1', listingTitle: 'Flat 1', districtCode: 'D1', priceVndAtRequest: 15_000_000, terms: t({ depositMonthsMin: 2, depositMonthsMax: 2 }) },
+      { itemId: 'i2', listingTitle: 'Flat 2', districtCode: 'D1', priceVndAtRequest: 15_000_000 },
+    ];
+    const { stops } = assembleItinerary(reduceRequest('r', events), listings, ['i1', 'i2']);
+    const text = renderItinerary({ ref: 'HV-1', stops, requestedCount: 2 });
+    expect(text).toContain('   15.000.000 ₫/month - District 1\n   Deposit 2 months, minimum lease 6 months, pets allowed\n2.');
+    expect(text.split('\n').filter(l => /deposit|lease|pets/i.test(l))).toHaveLength(1);
   });
 });

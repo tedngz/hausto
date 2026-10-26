@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { supabase, invokeFailure } from './supabase';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
+import { describeTerms, type LeaseTerms } from '../../supabase/functions/_shared/lease-terms';
 
 export interface ProposalRow {
   id: string;
@@ -29,6 +30,7 @@ const LABEL: Record<string, string> = {
   CONTACTED: 'Message the agent',
   NUDGE: 'Chase the agent',
   OUTCOME: 'Record an outcome',
+  LEASE_TERMS: 'Record the terms',
   NOTIFY_REALTOR: 'Tell the agent',
   // The plan, other times, a question about days, or nothing left - the
   // rationale says which (planner.ts), as deliver() decides it.
@@ -93,6 +95,8 @@ function summary(p: ProposalRow, titleFor: (id: string) => string): string {
   if (p.action === 'DELIVER' && Array.isArray(i.order)) {
     return (i.order as string[]).map((id, n) => `${n + 1}. ${titleFor(id)}`).join('  ');
   }
+  // What would be on file: what was there, with the reply's terms over it.
+  if (p.action === 'LEASE_TERMS') return describeTerms(i.terms as LeaseTerms).join('; ');
   if (p.action === 'NOTIFY_REALTOR') return String(i.decision).toLowerCase();
   if (p.action === 'CANCEL_REQUEST') return String(i.reason).toLowerCase().replace(/_/g, ' ');
   return '';

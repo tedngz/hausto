@@ -36,8 +36,16 @@ import {
   releaseDraft,
 } from '../../supabase/functions/_shared/realtor/drafts';
 import { agentUnit } from '../../supabase/functions/_shared/realtor/unit';
-import { describeTerms, loadTerms, unknownTerms, type StoredTerms } from '../../supabase/functions/_shared/lease-terms';
+import {
+  describeTerms,
+  hasTerms,
+  loadTerms,
+  unknownTerms,
+  type LeaseTerms,
+  type StoredTerms,
+} from '../../supabase/functions/_shared/lease-terms';
 import { OutcomeForm } from './OutcomeForm';
+import { LeaseTermsForm } from './LeaseTermsForm';
 import { Deliver } from './Deliver';
 import { Tasks } from './Tasks';
 import { RenterThread, type Thread } from './RenterThread';
@@ -240,6 +248,8 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
             listingTitle: i.listing_title ?? 'A place',
             districtCode: i.district_code,
             priceVndAtRequest: i.price_vnd_at_request,
+            // So the preview carries the terms line the renter will read.
+            terms: terms.get(i.listing_id) ?? null,
           }))}
           onDelivered={load}
         />
@@ -295,6 +305,8 @@ function ItemCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
+  // Terms paste-parse read in the reply just pasted, offered to the terms form.
+  const [suggestedTerms, setSuggestedTerms] = useState<LeaseTerms | null>(null);
 
   // What the agent is told: where the unit is and the link to their ad, never
   // our English title, which they would not recognise.
@@ -358,6 +370,18 @@ function ItemCard({
         {!terms ? 'Terms not read from the ad yet.' : stated.length > 0 ? `Ad says: ${stated.join('; ')}.` : 'The ad states no terms.'}
         {unstated.length > 0 && ` Asked in the first message: ${unstated.map(t => t.toLowerCase().replace('_', ' ')).join(', ')}.`}
       </p>
+
+      <LeaseTermsForm
+        key={JSON.stringify([state?.terms ?? null, suggestedTerms])}
+        busy={busy}
+        recorded={state?.terms ?? null}
+        suggested={suggestedTerms}
+        onSave={async (t, note) => {
+          const ok = await post({ action: 'LEASE_TERMS', terms: t, note });
+          if (ok) setSuggestedTerms(null);
+          return ok;
+        }}
+      />
 
       {(!item.realtor_phone || editingContact) && (
         <ContactForm
@@ -430,6 +454,7 @@ function ItemCard({
               if (reason) setError(reason);
               return null;
             }
+            setSuggestedTerms(hasTerms(payload.suggestion.terms) ? payload.suggestion.terms! : null);
             return payload.suggestion;
           }}
         />
