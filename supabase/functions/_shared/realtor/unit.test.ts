@@ -112,4 +112,19 @@ describe('every message to an agent', () => {
       .not.toContain('vào ở');
     expect(draftForRealtor({ unit, priceVnd: 15_000_000, availability })).not.toContain('vào ở');
   });
+
+  it('asks what the ad leaves unsaid, after the two questions asked every time', () => {
+    const availability = [{ date: '2026-10-15', part: 'MORNING' }];
+    const draft = draftForRealtor({ unit, priceVnd: 15_000_000, availability, askTerms: ['DEPOSIT', 'PETS'] });
+    expect(draft).toContain('Căn còn trống và giá còn đúng như trên không ạ?\nAnh/chị cho em hỏi thêm: cọc mấy tháng và có cho nuôi thú cưng không ạ?');
+    // Nothing about who is asking: a pet question is not "the renter has a dog".
+    expect(draft).not.toMatch(/khách (có|nuôi)/i);
+  });
+
+  it('asks nothing more when the ad said it all, or when the agent was asked before', () => {
+    const availability = [{ date: '2026-10-15', part: 'MORNING' }];
+    expect(draftForRealtor({ unit, priceVnd: 15_000_000, availability, askTerms: [] })).not.toContain('hỏi thêm');
+    expect(draftForRealtor({ unit, priceVnd: 15_000_000, availability })).not.toContain('hỏi thêm');
+    expect(draftForRealtor({ unit, priceVnd: 15_000_000, availability, askTerms: ['FEES'], rescheduled: true })).not.toContain('hỏi thêm');
+  });
 });

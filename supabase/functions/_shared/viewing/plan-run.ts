@@ -13,6 +13,7 @@ import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { planRequest, AGENT_VERSION, type PlanItem, type UnreadReply, type RenterDraft } from './planner.ts';
 import type { BusySlot } from './itinerary.ts';
 import { agentUnit } from '../realtor/unit.ts';
+import { loadTerms, termsForPrompt, unknownTerms } from '../lease-terms.ts';
 import type { ParseContext, ParseSuggestion } from './parse-reply.ts';
 import { describeStatus, type DraftContext, type DraftResult, type ListingFacts, type ThreadLine } from './renter-reply.ts';
 import { waitingReplies } from './thread.ts';
@@ -92,6 +93,8 @@ export async function runPlanner(
 
     const events = (evs ?? []) as DomainEvent[];
     const view = reduceRequest(req.id, events);
+    // What each ad leaves unsaid is asked in the first message to its agent.
+    const terms = await loadTerms(db, ((rows ?? []) as Record<string, unknown>[]).map(r => String(r.listing_id)));
     const items: PlanItem[] = ((rows ?? []) as Record<string, unknown>[]).map(r => ({
       itemId: String(r.id),
       listingTitle: String(r.listing_title ?? 'the unit'),
@@ -105,6 +108,7 @@ export async function runPlanner(
       districtCode: (r.district_code as string) ?? null,
       priceVnd: Number(r.price_vnd_at_request ?? 0),
       hasContact: !!r.realtor_phone,
+      askTerms: unknownTerms(terms.get(String(r.listing_id)) ?? null),
     }));
     const keys = new Set(((existing ?? []) as { dedupe_key: string }[]).map(p => p.dedupe_key));
 
@@ -286,12 +290,13 @@ async function draftContext(
   now: Date,
 ): Promise<DraftContext> {
   const listingIds = rows.map(r => String(r.listing_id));
-  const [{ data: facts }, { data: msgs }] = await Promise.all([
+  const [{ data: facts }, { data: msgs }, terms] = await Promise.all([
     db.from('external_properties')
       .select('id, title, location, district_code, bedrooms, area_sqm, price_vnd, amenities, description')
       .in('id', listingIds),
     db.from('messages').select('direction, body, template_name, created_at')
       .eq('request_id', req.id).order('created_at', { ascending: true }),
+    loadTerms(db, listingIds),
   ]);
   const byId = new Map(((facts ?? []) as Record<string, unknown>[]).map(f => [String(f.id), f]));
 
@@ -308,6 +313,7 @@ async function draftContext(
       areaSqm: f.area_sqm != null ? Number(f.area_sqm) : null,
       amenities: Array.isArray(f.amenities) ? (f.amenities as unknown[]).map(String) : [],
       description: (f.description as string) ?? null,
+      terms: termsForPrompt(terms.get(String(r.listing_id)) ?? null) || null,
       status: describeStatus(item?.state ?? 'PENDING', item?.slots ?? [], item?.actualPriceVnd),
     };
   });

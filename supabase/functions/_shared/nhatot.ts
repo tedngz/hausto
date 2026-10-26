@@ -8,6 +8,7 @@
 // free and without spending a Firecrawl fetch, so it is the source of truth
 // for nhatot media.
 import { isVideoOrAnimatedUrl, isMapOrDiagramUrl } from './vibe-policy.ts';
+import { type LeaseTerms, readTermsFromText } from './lease-terms.ts';
 
 // A video the source listing carries. Stored alongside the gallery; not
 // mirrored, since these are HLS manifests on the source's own CDN.
@@ -109,10 +110,22 @@ export interface NhatotListing {
   videos: PropertyVideo[];
   description: string;
   amenities: string[];
+  /** Read from the seller's own text, before it is rewritten in English. */
+  terms: LeaseTerms;
   sourceProviderName?: string;
   sourceAgentId?: string;
   latitude?: number;
   longitude?: number;
+}
+
+/**
+ * The terms the seller wrote. The payload has no field for any of them -
+ * its `parameters` are address, size, rooms and furnishing - so they are read
+ * from the headline and the advert ("cọc 2 tháng", "không nuôi thú cưng").
+ */
+export function nhatotTerms(ad: NhatotAd, now = new Date()): LeaseTerms {
+  const text = [ad.subject, ad.body].filter((s: unknown): s is string => typeof s === 'string').join('\n');
+  return readTermsFromText(text, now);
 }
 
 function roomsLabel(rooms: unknown): string {
@@ -156,6 +169,7 @@ export function buildNhatotListing(ad: NhatotAd, url: string): NhatotListing | n
     videos,
     description: typeof ad.body === 'string' ? ad.body.trim() : '',
     amenities: [],
+    terms: nhatotTerms(ad),
     sourceProviderName: typeof ad.account_name === 'string' ? ad.account_name : undefined,
     // The durable per-broker join key. `phone` on this payload is masked
     // ("098890****") and is deliberately not read - a masked number stored as a
