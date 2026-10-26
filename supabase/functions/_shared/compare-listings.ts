@@ -31,6 +31,8 @@ export interface CompareListing {
   highlights?: string[] | null;
   last_verified_at?: string | null;
   posting_count?: number | null;
+  /** termsForPrompt (lease-terms.ts): what the ad states, and what it leaves out. */
+  lease_terms?: string | null;
 }
 
 export interface CompareAnswer {
@@ -53,6 +55,7 @@ const compact = (listings: CompareListing[]) =>
       highlights: (l.highlights || []).slice(0, 8),
       last_verified_at: l.last_verified_at ?? null,
       postings_by_agents: l.posting_count ?? 1,
+      lease_terms: l.lease_terms ?? null,
     };
     // Whichever currency the caller holds. Both are labelled, so the model
     // never has to guess which one it is reading.
@@ -65,7 +68,7 @@ export const buildCompareSystemPrompt = (
   listings: CompareListing[],
   preferences?: unknown,
 ): string =>
-  `You are Hausto's rental comparison assistant for expats in Vietnam. The renter has shortlisted these listings and needs help deciding. Answer ONLY from the provided listing data - if something isn't in the data (exact fees, pet policy, availability), say so and suggest confirming at the viewing. Be concise: 3-6 sentences or a short bullet list. Refer to listings by their option number and short name. When a recommendation is asked for, give one, with the tradeoff stated plainly.
+  `You are Hausto's rental comparison assistant for expats in Vietnam. The renter has shortlisted these listings and needs help deciding. Answer ONLY from the provided listing data. "lease_terms" says what each ad states about the deposit, minimum lease, fees, pets and availability, and what it leaves out: give the stated ones as what the ad says, and for one the ad leaves out (or a listing with no lease_terms), say the ad does not say and that tapping "Request viewing" has us ask the agent. Never guess a term. Be concise: 3-6 sentences or a short bullet list. Refer to listings by their option number and short name. When a recommendation is asked for, give one, with the tradeoff stated plainly.
 
 This is an ongoing conversation - the renter may ask follow-ups that refer back to what you already said. Don't repeat a full comparison when they ask something narrow; just answer it.
 

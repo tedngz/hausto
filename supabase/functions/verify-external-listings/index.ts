@@ -1,9 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { assessVerification } from '../_shared/crawl-telemetry.ts';
-import { fetchNhatotAd, buildNhatotListing, type NhatotAd } from '../_shared/nhatot.ts';
+import { fetchNhatotAd, buildNhatotListing, nhatotTerms, type NhatotAd } from '../_shared/nhatot.ts';
 import { normalizeListingCopy } from '../_shared/listing-language.ts';
 import { repricedCopy } from '../_shared/repriced-copy.ts';
 import { AGENCY_FEED_SOURCES, agencySourceOf, verifyAgencyListing } from '../_shared/agency-sources.ts';
+import { type LeaseTerms, termsColumns } from '../_shared/lease-terms.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +43,10 @@ const BATDONGSAN_DAILY_CHECKS = 4;
 // on offer at this price", which is the only version ops can act on. `ad` is
 // the payload it was read from, kept so a re-price can rewrite the description
 // without a second fetch (_shared/repriced-copy.ts).
-type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePrice?: number; liveDisplay?: string; ad?: NhatotAd };
+// `terms` (lease-terms.ts) come the same way, from the agency feeds'
+// verifiers, and nhatot's are read off `ad`. A verifier that cannot re-read
+// them leaves the stored ones as they are.
+type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePrice?: number; liveDisplay?: string; ad?: NhatotAd; terms?: LeaseTerms };
 
 // Sources whose price can be re-read during verification, and which are
 // therefore subject to the freshness decay below. nhatot's ad payload carries
@@ -311,6 +315,7 @@ async function resurrectNhatotAds(supabase: any, summary: { resurrected: number 
       price_confirmed_at: now,
       images: listing.images,
       videos: listing.videos,
+      ...termsColumns(listing.terms, now),
       ...(copy ?? {}),
       updated_at: now,
     }).eq('id', row.id);
@@ -516,6 +521,11 @@ Deno.serve(async (req) => {
           last_verification_reason: null,
           verification_failures: 0,
         };
+
+        // The terms move as the unit's date nears - "available from 1 Nov"
+        // becomes "available now" - so every read refreshes them whole.
+        const terms = result.terms ?? (result.ad ? nhatotTerms(result.ad) : null);
+        if (terms) Object.assign(update, termsColumns(terms, now));
 
         if (typeof result.livePrice === 'number') {
           // Reading the price back is the point of the exercise, so record when

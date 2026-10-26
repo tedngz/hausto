@@ -7,10 +7,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import { chat, hasClaudeKey, type ChatMessage } from '../_shared/claude.ts';
 import { isVideoOrAnimatedUrl, isMapOrDiagramUrl, STORE_TARGET } from '../_shared/vibe-policy.ts';
-import { fetchNhatotMedia, type PropertyVideo } from '../_shared/nhatot.ts';
+import { fetchNhatotAd, mediaFromAd, nhatotTerms, type PropertyVideo } from '../_shared/nhatot.ts';
 import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
 import { agencySourceOf, buildAgencyListing } from '../_shared/agency-sources.ts';
 import { normalizeListingCopy } from '../_shared/listing-language.ts';
+import { type LeaseTerms, MODEL_TERMS_RULE, MODEL_TERMS_SHAPE, termsColumns, termsFromModel } from '../_shared/lease-terms.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -180,6 +181,7 @@ INSTRUCTIONS:
 5. LOCATION: full address (street, ward, district, city) in Vietnamese.
 6. ROOMS: must be one of "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room".
 7. IMAGES: include only listing photos from the IMAGES list (not logos/icons).
+8. ${MODEL_TERMS_RULE}
 
 Respond with VALID JSON only:
 {
@@ -193,7 +195,8 @@ Respond with VALID JSON only:
   "description": "...",
   "amenities": ["...", ...],
   "contactName": "...",
-  "contactPhone": "..."
+  "contactPhone": "...",
+  ${MODEL_TERMS_SHAPE}
 }`;
   const content = await callAI([
     { role: 'system', content: 'Extract structured property data. Output English. Keep location names Vietnamese. Respond with valid JSON only.' },
@@ -268,6 +271,7 @@ Deno.serve(async (req) => {
         contact_name: fresh.sourceProviderName ?? null,
         ...(fresh.sourceProviderPhone ? { contact_phone: fresh.sourceProviderPhone } : {}),
         ...(typeof fresh.latitude === 'number' ? { latitude: fresh.latitude, longitude: fresh.longitude } : {}),
+        ...termsColumns(fresh.terms, now),
         raw_data: { ...(row.raw_data || {}), original_image_urls: images, recrawled_at: now },
         vibe_status: 'pending',
         vibe_analysis: {},
@@ -319,12 +323,18 @@ Deno.serve(async (req) => {
 
     let scrapedImages = extractImages(html, marketplace);
     let scrapedVideos: PropertyVideo[] = [];
+    // The model reads the terms off everything but nhatot, whose seller text
+    // the crawler and verification read with lease-terms.ts - so a recrawl
+    // reads it the same way, rather than disagreeing with the next check.
+    let nhatotRead: LeaseTerms | null = null;
     // nhatot's gallery is client-rendered, so the fetched HTML holds one
     // preview image at best. Its public ad API holds the whole gallery.
     if (marketplace === 'nhatot') {
-      const media = await fetchNhatotMedia(row.source_url);
+      const ad = await fetchNhatotAd(row.source_url);
+      const media = ad ? mediaFromAd(ad) : { images: [], videos: [] };
       if (media.images.length > 0) scrapedImages = media.images;
       scrapedVideos = media.videos;
+      if (ad) nhatotRead = nhatotTerms(ad);
     }
     // For housingsgn, deterministically keep only THIS listing's gallery images
     // (matched by property code) so we never mix in "Similar Properties" photos.
@@ -390,6 +400,9 @@ Deno.serve(async (req) => {
       videos: marketplace === 'nhatot' ? scrapedVideos : undefined,
       contact_name: extracted.contactName || undefined,
       contact_phone: extracted.contactPhone || undefined,
+      ...(marketplace !== 'nhatot'
+        ? termsColumns(termsFromModel(extracted.terms), new Date().toISOString())
+        : nhatotRead ? termsColumns(nhatotRead, new Date().toISOString()) : {}),
       raw_data: newRaw,
       // Re-queue vibe analysis on the fresh images
       vibe_status: 'pending',

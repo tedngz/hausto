@@ -21,6 +21,7 @@ import {
   decodeEntities, districtKey, fetchJson, fetchPage, firstTelLink, htmlToText,
   parseAmount, prioritise, rentToVnd, roomsLabel,
 } from './agency-feeds.ts';
+import { type LeaseTerms, depositFromField, mergeTerms, readTermsFromText } from './lease-terms.ts';
 
 export const RENTAPARTMENT_ORIGIN = 'https://rentapartment.vn';
 const API = `${RENTAPARTMENT_ORIGIN}/wp-json/wp/v2`;
@@ -34,6 +35,11 @@ export const LABEL_RENTED = 51;
 // `property_type` 5 is Office. The other four (Apartment, Serviced Apartment,
 // House, Villa) are homes.
 const TYPE_OFFICE = 5;
+
+// `property_feature` 23 is "Pet Allowed" (/wp-json/wp/v2/property_feature,
+// 2026-10-26: on 231 listings). Its absence says nothing - most listings
+// carry no tag for pets either way.
+const FEATURE_PET_ALLOWED = 23;
 
 // `property_state` is the agency's district taxonomy. Keyed by the crawl
 // rotation's districts (scheduled-crawl CRAWL_LOCATIONS); Thủ Đức covers what
@@ -65,17 +71,23 @@ const TERM_NAMES: Record<number, string> = {
 
 // The meta keys a listing is built from. Asked for by name: the full
 // `property_meta` carries per-day view counters and runs to ~20 KB a listing.
+// It also carries `fave_private_note` - the agency's own note, with the
+// landlord's number and the agency's commission - which is never asked for.
+//
+// `fave_property_garage_size` is the deposit. Houzez has no deposit field, so
+// the agency uses the garage one, and the page labels it "Deposit" ("1 month",
+// "2 months" on 96 of the newest 100, 2026-10-26).
 const META_KEYS = [
   'fave_property_id', 'fave_property_price', 'fave_property_price_postfix',
   'fave_property_size', 'fave_property_size_prefix', 'fave_property_bedrooms',
   'fave_property_bathrooms', 'fave_property_address', 'fave_property_map_address',
   'houzez_geolocation_lat', 'houzez_geolocation_long', 'fave_property_images',
-  'fave_multi_units',
+  'fave_multi_units', 'fave_property_garage_size',
 ];
 
 const RECORD_FIELDS = [
   'id', 'date_gmt', 'modified_gmt', 'link', 'slug', 'title', 'content',
-  'property_label', 'property_type', 'property_state',
+  'property_label', 'property_type', 'property_state', 'property_feature',
   ...META_KEYS.map((k) => `property_meta.${k}`),
 ].join(',');
 
@@ -236,6 +248,27 @@ function locationOf(record: RentapartmentRecord): string {
   return [street, named ? '' : district, 'Ho Chi Minh City'].filter(Boolean).join(', ');
 }
 
+/**
+ * The deposit field and the "Pet Allowed" tag, completed by the description,
+ * which is where the agency lists fees ("Services: Electricity: 3,900 vnd/kWh,
+ * Water: 100,000 vnd/person ..."). Every unit the feed returns is labelled
+ * Available, so it is free now by the agency's word.
+ */
+export function rentapartmentTerms(record: RentapartmentRecord, now = new Date()): LeaseTerms {
+  const deposit = depositFromField(meta(record, 'fave_property_garage_size'));
+  const features = Array.isArray(record?.property_feature) ? record.property_feature.map(Number) : [];
+  const text = readTermsFromText(htmlToText(String(record?.content?.rendered ?? '')), now);
+  // "Available" is the label on everything the agency has not let, so a date
+  // the description gives ("available from 1 Dec") is the more exact of the two.
+  const labelled = labelsOf(record).includes(LABEL_AVAILABLE) && text.availability !== 'AVAILABLE_SOON';
+  return mergeTerms({
+    availability: labelled ? 'AVAILABLE_NOW' : null,
+    depositMonthsMin: deposit?.[0] ?? null,
+    depositMonthsMax: deposit?.[1] ?? null,
+    petsAllowed: features.includes(FEATURE_PET_ALLOWED) ? true : null,
+  }, text);
+}
+
 function coordinate(raw: string, min: number, max: number): number | undefined {
   const n = parseFloat(raw);
   return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
@@ -280,6 +313,7 @@ export function buildRentapartmentListing(
       description: htmlToText(String(record?.content?.rendered ?? '')),
       amenities: [],
       availability: 'AVAILABLE_NOW',
+      terms: rentapartmentTerms(record),
       sourceProviderName: 'Rentapartment Agency',
       sourceProviderPhone: phone ?? undefined,
       latitude: coordinate(meta(record, 'houzez_geolocation_lat'), 8, 24),
@@ -326,9 +360,10 @@ export async function verifyRentapartment(url: string): Promise<AgencyVerificati
     if (labelsOf(record).includes(LABEL_RENTED)) return { status: 'dead', reason: 'source_rented' };
     const amount = parseAmount(meta(record, 'fave_property_price'));
     const rent = amount !== null ? rentToVnd(amount) : null;
+    const terms = rentapartmentTerms(record);
     return rent
-      ? { status: 'alive', livePrice: rent.price, liveDisplay: rent.priceDisplay }
-      : { status: 'alive' };
+      ? { status: 'alive', livePrice: rent.price, liveDisplay: rent.priceDisplay, terms }
+      : { status: 'alive', terms };
   } catch (e) {
     return { status: 'error', reason: (e as Error).message };
   }

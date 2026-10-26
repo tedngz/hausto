@@ -19,6 +19,7 @@
 // the edited text again on the way out.
 
 import { unitLink, type AgentUnit } from './unit.ts';
+import { askAgentVi, type AskableTerm } from '../lease-terms.ts';
 
 const PART_VI: Record<string, string> = {
   MORNING: 'buổi sáng',
@@ -52,6 +53,12 @@ export function draftForRealtor(opts: {
   moveInDate?: string | null;
   /** Asked before, at times the renter has since changed (AVAILABILITY_CHANGED). */
   rescheduled?: boolean;
+  /**
+   * The terms the ad leaves unsaid (lease-terms.ts unknownTerms) - asked once,
+   * in the first message, so the renter's questions are answered with the
+   * times rather than in a second round. Absent where nobody looked.
+   */
+  askTerms?: readonly AskableTerm[];
 }): string {
   const windows = opts.availability
     .map(w => `${dayMonth(w.date)} ${PART_VI[w.part] ?? w.part.toLowerCase()}`)
@@ -77,6 +84,9 @@ export function draftForRealtor(opts: {
     // The two questions worth asking every time, because they are the two that
     // waste a trip: the unit is gone, or the price moved.
     'Căn còn trống và giá còn đúng như trên không ạ?',
+    // Then what the ad does not say, which renters ask next. Not on a
+    // reschedule: the agent was asked the first time.
+    ...(!opts.rescheduled && opts.askTerms ? [askAgentVi(opts.askTerms)].filter((l): l is string => !!l) : []),
     '',
     'Em cảm ơn anh/chị.',
   ].join('\n');

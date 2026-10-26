@@ -36,6 +36,7 @@ import {
   releaseDraft,
 } from '../../supabase/functions/_shared/realtor/drafts';
 import { agentUnit } from '../../supabase/functions/_shared/realtor/unit';
+import { describeTerms, loadTerms, unknownTerms, type StoredTerms } from '../../supabase/functions/_shared/lease-terms';
 import { OutcomeForm } from './OutcomeForm';
 import { Deliver } from './Deliver';
 import { Tasks } from './Tasks';
@@ -98,6 +99,8 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
   const [thread, setThread] = useState<Thread | null>(null);
   const [transcript, setTranscript] = useState<RealtorMessage[]>([]);
   const [proposals, setProposals] = useState<ProposalRow[]>([]);
+  // What each ad states about deposit, lease, fees and pets, by listing id.
+  const [terms, setTerms] = useState<Map<string, StoredTerms | null>>(new Map());
   // Which way messages to agents leave: by hand, or through the Zalo device.
   // Read from what the planner last saw, since the console cannot read secrets.
   const [bridge, setBridge] = useState(false);
@@ -127,6 +130,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
     setThread((th as Thread) ?? null);
     setTranscript((rm ?? []) as RealtorMessage[]);
     setProposals((pr ?? []) as ProposalRow[]);
+    setTerms(await loadTerms(supabase, ((rows ?? []) as Item[]).map(r => r.listing_id)));
     const { data: controls } = await supabase.from('ai_operator_controls').select('last_state').eq('id', 'singleton').maybeSingle();
     setBridge((controls?.last_state as { realtorChannel?: string } | null)?.realtorChannel === 'bridge');
     setError(null);
@@ -214,6 +218,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           view={view}
           availability={request.availability ?? []}
           moveInDate={request.move_in_date ?? null}
+          terms={terms.get(item.listing_id) ?? null}
           transcript={transcript.filter(m => m.item_id === item.id)}
           owed={owed.get(item.id) ?? null}
           bridge={bridge}
@@ -252,6 +257,7 @@ function ItemCard({
   view,
   availability,
   moveInDate,
+  terms,
   transcript,
   owed,
   bridge,
@@ -262,6 +268,8 @@ function ItemCard({
   view: RequestView;
   availability: { date: string; part: string }[];
   moveInDate: string | null;
+  /** What the ad states (lease-terms.ts). Null when it was never read - every term is then asked. */
+  terms: StoredTerms | null;
   transcript: RealtorMessage[];
   owed: RealtorDecision | null;
   bridge: boolean;
@@ -313,6 +321,8 @@ function ItemCard({
 
   const settled = state && state.state !== 'PENDING' && state.state !== 'CONTACTED';
   const firstSlot = (state?.slots[0] as { starts_at?: string } | undefined)?.starts_at ?? null;
+  const stated = describeTerms(terms);
+  const unstated = unknownTerms(terms);
 
   return (
     <div className="card">
@@ -342,6 +352,12 @@ function ItemCard({
           <button className="link" onClick={() => setEditingContact(true)}>change number</button>
         )}
       </div>
+
+      {/* What the renter can be told already, and what the first message asks. */}
+      <p className="small muted" style={{ margin: '6px 0 0' }}>
+        {!terms ? 'Terms not read from the ad yet.' : stated.length > 0 ? `Ad says: ${stated.join('; ')}.` : 'The ad states no terms.'}
+        {unstated.length > 0 && ` Asked in the first message: ${unstated.map(t => t.toLowerCase().replace('_', ' ')).join(', ')}.`}
+      </p>
 
       {(!item.realtor_phone || editingContact) && (
         <ContactForm
@@ -376,6 +392,7 @@ function ItemCard({
             availability,
             moveInDate,
             rescheduled: reask,
+            askTerms: unstated,
           })}
           label={sendLabel}
           onSend={message => post({ action: 'CONTACTED', channel: 'ZALO', message })}

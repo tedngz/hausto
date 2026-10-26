@@ -22,9 +22,10 @@
 
 import {
   type Availability, type AgencyListing, type AgencyVerification, type BuildResult, type FeedCandidate,
-  decodeEntities, districtKey, fetchPage, firstTelLink, htmlToText, parseAmount, prioritise,
+  decodeEntities, districtKey, fetchPage, firstTelLink, htmlToText, listingAvailability, parseAmount, prioritise,
   rentToVnd, roomsLabel,
 } from './agency-feeds.ts';
+import { type LeaseTerms, mergeTerms, readTermsFromText } from './lease-terms.ts';
 
 export const VNRENTHOME_ORIGIN = 'https://vnrenthome.com';
 
@@ -230,12 +231,26 @@ export function vnrenthomeDistrict(typeHref: string, typeText: string, street: s
 }
 
 /**
+ * The offer's availability, and the rest from the description: most listings
+ * end on "Available: Immediately / Minimum lease: 12 months", and some say
+ * more about pets and utilities in the prose above. A date the text gives
+ * beats the offer's bare "in stock" or "pre-order".
+ */
+export function vnrenthomeTerms(availability: Availability, description: string, now = new Date()): LeaseTerms {
+  const text = readTermsFromText(description, now);
+  return mergeTerms(
+    text.availability === 'AVAILABLE_SOON' && text.availableFrom ? {} : { availability: listingAvailability(availability) },
+    text,
+  );
+}
+
+/**
  * One detail page as a listing - or why it is not one.
  *
  * Rejected rather than stored: a unit the page says is rented, anything filed
  * under "For Sale", and anything with no rent.
  */
-export function parseVnrenthomeDetail(html: string, url: string): BuildResult {
+export function parseVnrenthomeDetail(html: string, url: string, now = new Date()): BuildResult {
   const ld = listingJsonLd(html);
   const offer: JsonLd | undefined = Array.isArray(ld?.offers) ? ld?.offers[0] : ld?.offers;
   const availability = availabilityOfOffer(offer);
@@ -280,6 +295,7 @@ export function parseVnrenthomeDetail(html: string, url: string): BuildResult {
     ? html.slice(agentAt, agentAt + 3000).match(/<p class="font-bold[^"]*"[^>]*>\s*([^<]+?)\s*<\/p>/i)?.[1]
     : undefined;
 
+  const description = descriptionOf(html) || String(ld?.description ?? '');
   const listing: AgencyListing = {
     title: title || 'Rental Property',
     location,
@@ -288,9 +304,10 @@ export function parseVnrenthomeDetail(html: string, url: string): BuildResult {
     size: sqm ? `${sqm} m²` : 'N/A',
     rooms: roomsLabel(beds ? Number(beds[1]) : null, isStudio),
     images: vnrenthomeGallery(html, url, ld),
-    description: descriptionOf(html) || String(ld?.description ?? ''),
+    description,
     amenities,
     availability,
+    terms: vnrenthomeTerms(availability, description, now),
     sourceProviderName: agentName ? decodeEntities(agentName) : 'Vietnam Rent Home',
     // The agent named on the listing first; the site-wide number otherwise.
     sourceProviderPhone: (agentAt >= 0 ? firstTelLink(html, agentAt) : null) ?? firstTelLink(html) ?? undefined,
@@ -319,7 +336,7 @@ export async function verifyVnrenthome(url: string): Promise<AgencyVerification>
         ? { status: 'dead', reason: built.rejected }
         : { status: 'alive' };
     }
-    return { status: 'alive', livePrice: built.listing.price, liveDisplay: built.listing.priceDisplay };
+    return { status: 'alive', livePrice: built.listing.price, liveDisplay: built.listing.priceDisplay, terms: built.listing.terms };
   } catch (e) {
     return { status: 'error', reason: (e as Error).message };
   }

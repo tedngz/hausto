@@ -16,6 +16,7 @@
 // that re-reads availability and price for verify-external-listings.
 
 import { USD_TO_VND } from './price-mentions.ts';
+import type { LeaseTerms, ListingAvailability } from './lease-terms.ts';
 
 export const AGENCY_FEED_SOURCES = ['rentapartment', 'vnrenthome', 'jhouse'] as const;
 export type AgencyFeedSource = typeof AGENCY_FEED_SOURCES[number];
@@ -96,10 +97,17 @@ export interface AgencyListing {
   description: string;
   amenities: string[];
   availability: Availability;
+  /** Deposit, minimum lease, fees, pets and when it is free, as the agency states them (lease-terms.ts). */
+  terms: LeaseTerms;
   sourceProviderName?: string;
   sourceProviderPhone?: string;
   latitude?: number;
   longitude?: number;
+}
+
+/** Ours, as stored: UNCONFIRMED says nothing, and a RENTED unit is never stored. */
+export function listingAvailability(a: Availability): ListingAvailability | null {
+  return a === 'AVAILABLE_NOW' || a === 'AVAILABLE_SOON' ? a : null;
 }
 
 /** A listing, or the reason it is not one we store - logged to crawler_rejections. */
@@ -111,6 +119,8 @@ export interface AgencyVerification {
   reason?: string;
   livePrice?: number;
   liveDisplay?: string;
+  /** The terms as the agency states them today - they change as the unit's date nears. */
+  terms?: LeaseTerms;
 }
 
 // ─── Shared parsing helpers ──────────────────────────────────────────────

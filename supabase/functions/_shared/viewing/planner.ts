@@ -26,6 +26,7 @@ import { NUDGES_BEFORE_NO_RESPONSE } from './outcomes.ts';
 import { assembleItinerary, busySlots, clashesWith, freeOnOtherDays, type BusySlot } from './itinerary.ts';
 import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft, clashDraft } from '../realtor/drafts.ts';
 import type { AgentUnit } from '../realtor/unit.ts';
+import type { AskableTerm } from '../lease-terms.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
 import type { DraftResult } from './renter-reply.ts';
 import { DAY_PART_HOURS, type DayPart } from './intake.ts';
@@ -48,6 +49,8 @@ export interface PlanItem {
   priceVnd: number;
   /** Whether a dialable agent number is resolved. The number itself is not needed here. */
   hasContact: boolean;
+  /** What the ad leaves unsaid, asked in the first message (lease-terms.ts). */
+  askTerms?: AskableTerm[];
 }
 
 /** An agent reply stored after the item's last outcome - read by nobody yet. */
@@ -320,7 +323,7 @@ export function planRequest(p: PlanInput): Proposal[] {
             itemId: item.itemId, channel: 'ZALO',
             message: draftForRealtor({
               unit: item.unit, priceVnd: item.priceVnd, availability: p.availability,
-              moveInDate: p.moveInDate ?? null, rescheduled: reask,
+              moveInDate: p.moveInDate ?? null, rescheduled: reask, askTerms: item.askTerms,
             }),
           },
           rationale: reask

@@ -1,7 +1,8 @@
 # SPEC - viewing coordination domain model
 
 Status: authoritative, and built. Written 2026-09-10 alongside
-`docs/PLAN-v3.md`; last brought up to date with the code on 2026-09-28.
+`docs/PLAN-v3.md`; last brought up to date with the code on 2026-09-28. §0's
+lease terms added 2026-10-26.
 
 A renter shortlists 1-5 crawled rentals and requests viewings. An operator -
 a person, and since stage 2 of §10 an AI operator acting within locks -
@@ -37,6 +38,12 @@ Do not restructure it. Add only:
 | `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification **confirms** the unit is gone - the listing's own source saying so, twice - or when it goes 21 days without a price confirmation. A URL that merely failed to resolve sets `deactivated_at` only; on nhatot that is routinely wrong, since expired ads come back under the same id when the seller reposts. |
 | `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it, and the agency feeds rentapartment, vnrenthome and jhouse - see "Sources" below), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
 | `contact_phone_e164` | `text` | Generated: `normalize_vn_phone(contact_phone)`, stored. NULL for a masked value (`0775 924 ***`) rather than a number nobody can ring, so it is what "has a dialable contact" means. `extract-phone` works through active rows where it is NULL. |
+| `availability`, `available_from` | `text`, `date` | `AVAILABLE_NOW` / `AVAILABLE_SOON`, and the date with the latter where the source gives one. NULL when the source does not say. See "Lease terms" below. |
+| `min_lease_months` | `smallint` | The shortest lease the source states, 1-60. A contract length offered at a discount ("hợp đồng 2 năm giá 16tr") is not a minimum and is never read as one. |
+| `deposit_months_min`, `deposit_months_max` | `numeric(3,1)` | The deposit in months of rent, 0.5-6, a range because sources write "1-2 months"; equal when they give one figure. A deposit quoted as an amount ("cọc 30 triệu") is not read. |
+| `pets_allowed` | `boolean` | Only when said plainly. "Subject to approval", "small pets", "under 5kg" are NULL. |
+| `fees` | `jsonb` | `[{kind, label, included, amount}]`: what the rent covers (`included`) and what is paid on top, at `amount` as the source prices it ("4,000 VND/kWh", "government rate") or null. `kind` is one of `FEE_KINDS` in `_shared/lease-terms.ts`. Rates, not money we compute with, so they stay text. NULL when the source names no fee. |
+| `terms_read_at` | `timestamptz` | When the source was last read for the six above. What tells "the source does not say" (read, NULL) from "never looked" (NULL). |
 
 `price_vnd`, `bedrooms` and `district_code` are NOT NULL for any row that can
 be requested, and `price_confidence` is not `LOW` (`screenCandidates`, §1).
@@ -94,6 +101,55 @@ English trips it on single units. `verify-external-listings` re-reads the
 agency's label and rent, so these rows re-price, decay after 21 days
 unconfirmed, and are delisted when the agency marks them rented
 (`source_rented`).
+
+**Lease terms** (`_shared/lease-terms.ts`, 2026-10-26). Availability, the
+minimum lease, the deposit, the fees and pets are what renters ask after the
+photos and the price, and the AI answering them can only repeat what it is
+given. So they are read where the listing is read and stored as the columns
+above, not left in a description since rewritten to three sentences. What each
+source publishes, measured on 2026-10-26:
+
+| Source | Read from | What it gives |
+|---|---|---|
+| jhouse | The CRM's own fields: `status`/`available_from`, `minimum_lease_months`, `deposit_months`, `pet_policy`, `included_services`, `excluded_fees` | All five, on every unit (96 of 96) |
+| rentapartment | `fave_property_garage_size` (the theme's garage field, labelled "Deposit" on the page), the "Pet Allowed" `property_feature`, the "Available" label, and the description's fee lines | Deposit 195 of 200, fees 76, pets 8, never a minimum lease |
+| vnrenthome | The offer's schema.org availability, and the description's closing "Available: / Minimum lease:" lines | Minimum lease 46 of 48, rarely pets or fees, never a deposit |
+| nhatot | The seller's headline and advert - the payload has no field for any of them | Few: deposit 5 of 52, availability 9 |
+| batdongsan, housingsgn | The detail extraction model, asked for a `terms` object beside the rest and checked against the reader's bounds (`termsFromModel`) | Whatever the page states |
+
+Typed fields win over text, and text fills what they leave out
+(`mergeTerms`). The text reader, `readTermsFromText`, reads English and
+Vietnamese like `price-mentions.ts` reads rents, and for the same reason it is
+built to under-report: a term it misses only means the agent is asked, and a
+term it invents is a promise to a renter nobody made. A sentence that hedges
+says nothing; a figure counts only beside the word for what it is; "nước" and
+"điện" count only beside a price or each other; "bảo vệ" (a guard) is not
+"bao" (covers); and a list a management fee covers is not the rent's.
+
+`verify-external-listings` refreshes them whole on every read of a source that
+can be re-read (the agency feeds, nhatot's payload), because they move -
+"available from 1 Nov" becomes "available now". batdongsan and housingsgn keep
+what their crawl read.
+
+Where they are used:
+
+- **chat-ai** (pinned listings and listings shown earlier) and **the comparison
+  engine** (`compare-listings.ts`) are given `termsForPrompt`: what the ad
+  states, when it was read, and what it leaves out. They answer from the first
+  as "the ad says", and for the second say the ad does not say and that
+  "Request viewing" has us ask the agent.
+- **The AI operator's drafts to renters** (`renter-reply.ts`) carry the same
+  line per place; a term the ad leaves out is "not in the facts", so the draft
+  says we will check and is marked as needing the agent.
+- **The first message to each agent** (`draftForRealtor`) asks about whatever
+  the ad leaves out (`unknownTerms`, `askAgentVi`): "Anh/chị cho em hỏi thêm:
+  cọc mấy tháng, ...". Availability is not on that list - it is asked every
+  time already - and a re-ask after new times does not repeat it. The ops
+  console shows each place's stated terms on its card.
+
+Everything reads these columns on its own query (`loadTerms`) and treats a
+failed read as "not stated", because edge functions and the migration that
+adds them deploy in parallel. `ops_request_items_view` is not extended.
 
 `vibe` is gone from the `public-property-search` response (#117). It was
 non-null on 28 of 115 active rows and carried no signal `style_tags` does not.

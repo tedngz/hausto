@@ -81,6 +81,24 @@ describe('shadow mode', () => {
     expect(db.tables.events).toHaveLength(eventsBefore);
   });
 
+  it('asks the agent, in the first message, only what the ad leaves unsaid', async () => {
+    Object.assign(db.tables.external_properties[0], {
+      terms_read_at: '2026-09-26T00:00:00Z', availability: 'AVAILABLE_NOW', available_from: null,
+      deposit_months_min: 2, deposit_months_max: 2, pets_allowed: false, min_lease_months: null, fees: null,
+    });
+    await plan();
+    const message = String((byKey('CONTACT:i1').input as { message: string }).message);
+    expect(message).toContain('Anh/chị cho em hỏi thêm: hợp đồng tối thiểu bao lâu và phí quản lý, điện nước tính thế nào ạ?');
+    expect(message).not.toMatch(/cọc|thú cưng/);
+  });
+
+  it('asks all four when the ad was never read for them', async () => {
+    await plan();
+    expect(String((byKey('CONTACT:i1').input as { message: string }).message)).toContain(
+      'Anh/chị cho em hỏi thêm: cọc mấy tháng, hợp đồng tối thiểu bao lâu, có cho nuôi thú cưng không và phí quản lý, điện nước tính thế nào ạ?',
+    );
+  });
+
   it('does not propose the same thing twice across passes', async () => {
     await plan();
     const second = await plan();

@@ -8,6 +8,7 @@ import { chat, FAST_MODEL, hasClaudeKey } from "../_shared/claude.ts";
 import { MAX_AREA_DISTRICTS, THIN_SEARCH } from "../_shared/viewing/place.ts";
 import { aiCreditKey, creditAllows, CREDITS_USED_REPLY } from "../_shared/ai-credits.ts";
 import { extractAmenities, parseBedrooms, parsePrice, splitAvoidedAreas } from "../_shared/chat-search-parse.ts";
+import { loadTerms, termsForPrompt, termsFromRow } from "../_shared/lease-terms.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1171,6 +1172,8 @@ interface PropertyWithScore {
   isExternal?: boolean;
   source?: string;
   sourceUrl?: string;
+  /** What the ad states about deposit, lease, fees, pets and availability, and what it leaves out (lease-terms.ts). */
+  leaseTerms?: string | null;
 }
 
 
@@ -1476,9 +1479,10 @@ function filterAndScoreProperties(
       isExactSubAreaMatch,
       isExternal: !!p._isExternal,
       source: p._source || null,
+      leaseTerms: p._leaseTerms ?? null,
     });
   }
-  
+
   return scored.sort(byRank);
 }
 
@@ -1819,6 +1823,7 @@ serve(async (req) => {
       longitude: ext.longitude,
       _isExternal: true, // Internal flag for later use
       _source: ext.source,
+      _leaseTerms: termsForPrompt(termsFromRow(ext)),
     }));
     
     // Realtor listings carry their source contact and link as columns; nothing
@@ -2395,7 +2400,8 @@ ${scoredPreviousProperties.map((p, i) => `
    Location: ${p.location}
    Price: ${(p.price/1000000).toFixed(1)}M VND/month
    Amenities: ${p.amenities.join(', ') || 'None listed'}
-   Styles: ${p.styles.join(', ') || 'Not specified'}
+   Styles: ${p.styles.join(', ') || 'Not specified'}${p.leaseTerms ? `
+   Lease terms: ${p.leaseTerms}` : ''}
    Has requested features: ${accContext.amenities.length > 0 ? accContext.amenities.map(a => `${a}: ${p.amenities.some(pa => pa.toLowerCase().includes(a.toLowerCase())) ? '✓ YES' : '✗ NO'}`).join(', ') : 'N/A'}
 `).join('\n')}
 
@@ -2568,7 +2574,13 @@ ${scoredPreviousProperties.map((p, i) => `
           .select('id, name, city, district, developer, management_company, year_completed, description, pet_policy, amenities, average_rent_brackets, insider_pros, insider_cons, commute_times, tags')
           .in('id', subjectIds),
       ]);
-      subjectProperties = [...(internalSubjects ?? []), ...(externalSubjects ?? [])];
+      // A crawled listing carries the terms its ad states, and what it leaves
+      // out - which is what "Request viewing" has us ask the agent.
+      const subjectTerms = await loadTerms(supabase, (externalSubjects ?? []).map((p: any) => String(p.id)));
+      subjectProperties = [
+        ...(internalSubjects ?? []),
+        ...(externalSubjects ?? []).map((p: any) => ({ ...p, leaseTerms: termsForPrompt(subjectTerms.get(String(p.id)) ?? null) })),
+      ];
       subjectComplexes = complexSubjects ?? [];
     }
 
@@ -2617,6 +2629,7 @@ ${scoredPreviousProperties.map((p, i) => `
               vibe: p.vibe ?? null,
               amenities: (p.amenities as string[]) ?? [],
               highlights: (p.highlights as string[]) ?? [],
+              lease_terms: p.leaseTerms ?? null,
             })),
             preferences: constraintsSummary.length > 0 ? { requirements: constraintsSummary } : undefined,
             history: compareHistory,
@@ -2671,16 +2684,20 @@ Answer about these buildings from the data above. They are BUILDINGS, not indivi
     const subjectBlock = subjectProperties.length === 0 ? '' : `
 📌 LISTINGS THE USER IS ASKING ABOUT (they pinned these to the conversation):
 ${subjectProperties.map((p, i) => {
-  return `Subject ${i + 1} [id ${p.id}]: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? 'size n/a'}, rooms: ${p.rooms ?? 'n/a'}. Vibe: ${p.vibe ?? 'n/a'}. Highlights: ${((p.highlights as string[]) || []).join(', ')}. Amenities: ${((p.amenities as string[]) || []).join(', ')}.${p.description ? ` Description: ${String(p.description).slice(0, 300)}` : ''}`;
+  return `Subject ${i + 1} [id ${p.id}]: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? 'size n/a'}, rooms: ${p.rooms ?? 'n/a'}. Vibe: ${p.vibe ?? 'n/a'}. Highlights: ${((p.highlights as string[]) || []).join(', ')}. Amenities: ${((p.amenities as string[]) || []).join(', ')}.${p.leaseTerms ? ` Lease terms: ${p.leaseTerms}` : ''}${p.description ? ` Description: ${String(p.description).slice(0, 300)}` : ''}`;
 }).join('\n')}
 
 When the user says "this one", "it", "these", or asks a question without naming a property, they mean these.
+
+LEASE TERMS (deposit, minimum lease, fees and utilities, pets, when it is free):
+- Answer from "Lease terms" above, as what the ad says ("the ad says a 2-month deposit"), never as a promise - the agent has the final word, and a free-now date can pass.
+- For anything under "Not stated in the ad", say plainly that the ad does not say. Then tell them that if they tap "Request viewing", we ask the agent about it along with availability and times, and come back to them. Never guess a deposit, a lease, a fee or a pet policy, and never fill a gap with what is typical in the building or the city.
 
 ⚠️ A question about pinned listings is NOT a search. Comparing them, weighing tradeoffs, checking which suits the user, answering anything about them - all of these are answered in "blocks" with a "text" block, and you MUST NOT include a "results" array. Adding listings they did not ask for buries the answer they did ask for. Return "results" only if they explicitly ask you to find something NEW ("find me similar", "show me other options", "what else is there").
 
 AGENTS' CONTACT DETAILS AND THE ORIGINAL LISTING:
 - You are not given agents' or owners' numbers, names or the original listing; never write a phone number, an agent's name or a listing URL, and never guess one.
-- When the user asks for one, or the answer needs the agent (live availability, price negotiation, deposit or contract terms, move-in dates): answer what you can from the data, then give them the two ways. Tapping "Request viewing" on the listing has us ask the agent for them - availability, price and times - and set the viewing up, and the agent never gets their number. Or, where the original ad lists the agent's number, tapping "Request viewing" also offers a signed-in renter that number, to call the agent themselves. Do not say whether a particular listing has one - you do not know.
+- When the user asks for one, or the answer needs the agent (live availability, price negotiation, a deposit, lease, fee or pet question the ad leaves open, move-in dates): answer what you can from the data, then give them the two ways. Tapping "Request viewing" on the listing has us ask the agent for them - availability, price and times - and set the viewing up, and the agent never gets their number. Or, where the original ad lists the agent's number, tapping "Request viewing" also offers a signed-in renter that number, to call the agent themselves. Do not say whether a particular listing has one - you do not know.
 ` ;
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.

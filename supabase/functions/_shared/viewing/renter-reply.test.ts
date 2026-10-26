@@ -42,6 +42,15 @@ describe('what the model is shown', () => {
     expect(input).toContain('my number is [number hidden]');
   });
 
+  it('carries what the ad states about the lease, and what it leaves out', () => {
+    const withTerms = buildDraftInput({
+      ...ctx,
+      listings: [{ ...ctx.listings[0], terms: "Terms the ad states (read 26 Sep 2026): deposit 2 months' rent. Not stated in the ad: the pet policy." }],
+    });
+    expect(withTerms).toContain("Lease terms: Terms the ad states (read 26 Sep 2026): deposit 2 months' rent. Not stated in the ad: the pet policy.");
+    expect(input).not.toContain('Lease terms');
+  });
+
   it('leaves prices and refs alone when masking', () => {
     expect(maskPhones('15000000 and HV-4KX9 and 15.000.000')).toBe('15000000 and HV-4KX9 and 15.000.000');
   });

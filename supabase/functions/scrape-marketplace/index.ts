@@ -14,6 +14,7 @@ import {
 import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo } from '../_shared/nhatot.ts';
 import { looksVietnamese, normalizeListingCopy } from '../_shared/listing-language.ts';
+import { type LeaseTerms, MODEL_TERMS_RULE, MODEL_TERMS_SHAPE, termsColumns, termsFromModel } from '../_shared/lease-terms.ts';
 import { normalizeLocationForEnglishDisplay } from '../_shared/location-language.ts';
 import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
 import {
@@ -916,6 +917,9 @@ async function savePropertiesToDB(
         ...(typeof (property as { longitude?: number }).longitude === 'number'
           ? { longitude: (property as { longitude?: number }).longitude }
           : {}),
+        // Only from a path that read them. The search-page fallback never
+        // does, and must not blank what a detail read stored.
+        ...(property.terms ? termsColumns(property.terms, now) : {}),
       };
 
       if (existing) {
@@ -1102,6 +1106,8 @@ interface ExternalProperty {
   sourceUrl: string;
   sourceProviderName?: string;
   sourceProviderPhone?: string;
+  /** What the source states about deposit, lease, fees, pets and availability. Absent where a path did not read them. */
+  terms?: LeaseTerms;
   vibe?: string;
   vibe_analysis?: {
     style?: string;
@@ -1774,6 +1780,7 @@ CRITICAL INSTRUCTIONS:
 8. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. Keep the Vietnamese location names as-is (do NOT translate location names).
 9. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 10. **PRICE**: The numeric price MUST be the full numeric value in VND. If the price is listed in USD (e.g., "$700"), you MUST convert it to VND by multiplying the USD amount by ${USD_TO_VND} (e.g. 700 * ${USD_TO_VND} = ${(700 * USD_TO_VND).toLocaleString('en-US').replace(/,/g, '')}). Keep the priceDisplay as the ORIGINAL text (e.g. "$700/month").
+11. ${MODEL_TERMS_RULE}
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -1787,7 +1794,8 @@ RESPOND WITH VALID JSON ONLY:
   "description": "2-3 sentences on how the place feels to live in",
   "amenities": ["Air Conditioning", "WiFi", ...],
   "contactName": "...",
-  "contactPhone": "..."
+  "contactPhone": "...",
+  ${MODEL_TERMS_SHAPE}
 }`;
 
   try {
@@ -1872,6 +1880,9 @@ RESPOND WITH VALID JSON ONLY:
       sourceUrl,
       sourceProviderName: p.contactName,
       sourceProviderPhone: p.contactPhone,
+      // batdongsan and housingsgn are read by this model alone; the terms are
+      // checked against the reader's own bounds before they are kept.
+      terms: termsFromModel(p.terms),
       vibe: undefined,
       vibe_analysis: undefined,
     };
@@ -2442,6 +2453,7 @@ Deno.serve(async (req) => {
               sourceUrl: listing.url,
               sourceProviderName: agencyListing.sourceProviderName,
               sourceProviderPhone: agencyListing.sourceProviderPhone,
+              terms: agencyListing.terms,
               latitude: agencyListing.latitude,
               longitude: agencyListing.longitude,
               vibe: undefined,

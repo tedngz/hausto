@@ -23,9 +23,13 @@
 
 import {
   type Availability, type AgencyListing, type AgencyVerification, type BuildResult, type FeedCandidate,
-  decodeEntities, districtKey, fetchJson, fetchPage, firstTelLink, htmlToText, prioritise,
+  decodeEntities, districtKey, fetchJson, fetchPage, firstTelLink, htmlToText, listingAvailability, prioritise,
   rentToVnd, roomsLabel,
 } from './agency-feeds.ts';
+import {
+  type Fee, type LeaseTerms,
+  depositFromField, feeAmountFromField, feeKindOf, hcmcDay, mergeTerms, petsFromField, readTermsFromText,
+} from './lease-terms.ts';
 import { normalizeLocationForEnglishDisplay } from './location-language.ts';
 
 export const JHOUSE_ORIGIN = 'https://jhouse.vn';
@@ -270,6 +274,41 @@ function amenitiesOf(unit: JhouseUnit): string[] {
   });
 }
 
+/**
+ * The unit's terms from the CRM's own fields (checked on 2026-10-26 across 96
+ * units on offer): `minimum_lease_months` (12, or 6 for serviced units),
+ * `deposit_months` as text ("2", "1.5", "1-2"), `pet_policy` as a Vietnamese
+ * sentence ("Không cho nuôi thú cưng"), and two fee lists - `included_services`
+ * the rent covers, `excluded_fees` charged on top, each priced where the agency
+ * says ("Government price", "4,000 VND/kWh") and null where it does not. The
+ * description fills any field left blank.
+ */
+export function jhouseTerms(unit: JhouseUnit, now = new Date()): LeaseTerms {
+  const availability = listingAvailability(jhouseAvailability(unit, now));
+  const from = typeof unit?.available_from === 'string' ? unit.available_from.slice(0, 10) : '';
+  const lease = Number(unit?.minimum_lease_months);
+  const deposit = depositFromField(unit?.deposit_months);
+  const included: Fee[] = (Array.isArray(unit?.included_services) ? unit.included_services : [])
+    .filter((s: unknown): s is string => typeof s === 'string' && s.trim() !== '')
+    .map((s: string) => ({ kind: feeKindOf(s), label: s.trim(), included: true, amount: null }));
+  const extra: Fee[] = (Array.isArray(unit?.excluded_fees) ? unit.excluded_fees : [])
+    .filter((f: JhouseUnit) => typeof f?.label === 'string' && f.label.trim() !== '')
+    .map((f: JhouseUnit) => ({
+      kind: feeKindOf(f.label), label: f.label.trim(), included: false, amount: feeAmountFromField(f.value),
+    }));
+  return mergeTerms({
+    availability,
+    // Only a date still ahead: an "upcoming" unit whose date has passed is
+    // free soon by the CRM's word, and a past date would say otherwise.
+    availableFrom: availability === 'AVAILABLE_SOON' && /^\d{4}-\d{2}-\d{2}$/.test(from) && from > hcmcDay(now) ? from : null,
+    minLeaseMonths: Number.isInteger(lease) && lease >= 1 && lease <= 60 ? lease : null,
+    depositMonthsMin: deposit?.[0] ?? null,
+    depositMonthsMax: deposit?.[1] ?? null,
+    petsAllowed: petsFromField(unit?.pet_policy),
+    fees: [...included, ...extra],
+  }, readTermsFromText(descriptionOf(unit), now));
+}
+
 const MEDIA = /^https:\/\/media\.jhouse\.vn\/[^\s"']+\.(?:jpe?g|png|webp)$/i;
 
 /** The unit's own gallery, cover first. `same_building_units` and `similar_units` carry photos too, and are never read. */
@@ -322,6 +361,7 @@ export function buildJhouseListing(unit: JhouseUnit, phone?: string | null, now 
     description: descriptionOf(unit),
     amenities: amenitiesOf(unit),
     availability,
+    terms: jhouseTerms(unit, now),
     sourceProviderName: 'J.House',
     sourceProviderPhone: phone ?? undefined,
   };
@@ -347,7 +387,8 @@ export async function verifyJhouse(url: string): Promise<AgencyVerification> {
     if (!unit) return { status: 'error', reason: `http_${status}` };
     if (jhouseAvailability(unit) === 'RENTED') return { status: 'dead', reason: 'source_rented' };
     const rent = rentOf(unit);
-    return rent ? { status: 'alive', livePrice: rent.price, liveDisplay: rent.priceDisplay } : { status: 'alive' };
+    const terms = jhouseTerms(unit);
+    return rent ? { status: 'alive', livePrice: rent.price, liveDisplay: rent.priceDisplay, terms } : { status: 'alive', terms };
   } catch (e) {
     return { status: 'error', reason: (e as Error).message };
   }
