@@ -1,13 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
-import { browserlessEnabled } from "../_shared/browserless.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const EXCLUDE_NUMBERS = ['19001881', '1900', '19006263'];
@@ -55,7 +53,8 @@ function detectMarketplace(url: string): string | null {
   return null;
 }
 
-// `blocked` means the site refused us - 403/429/5xx, a BQL error, a timeout.
+// `blocked` means nothing was learned - the site refused us (403/429/5xx, a
+// timeout), or the source has no free path to try.
 // It is deliberately separate from "we loaded the page and there was no phone
 // on it", because only the second is evidence about the listing.
 interface PhoneResult {
@@ -81,133 +80,8 @@ function gapForSource(source: string): number {
   return SOURCE_GAP_MS[source] ?? DEFAULT_GAP_MS;
 }
 
-function getCookieString(marketplace: string): string {
-  if (marketplace === 'batdongsan') return Deno.env.get('BATDONGSAN_COOKIES') || '';
-  if (marketplace === 'nhatot') return Deno.env.get('NHATOT_COOKIES') || '';
-  return '';
-}
-
-// NOTE THE String.raw. This script is a string that gets evaluated in a remote
-// browser, and a plain template literal eats the backslashes in its regexes
-// before it is ever sent: `\d` is not a recognised escape, so it becomes `d`.
-//
-// What Browserless actually received was
-//   /(?:+84|84|0)[3-9]d[s.-]?d{3}[s.-]?d{4}/g
-// which is not merely wrong but invalid - `(?:+` is "nothing to repeat" - so
-// the script threw on its first use and every extraction returned
-// `{"phone":null,"method":"no_result"}`, for every source, on every run.
-//
-// There are no ${} interpolations here, so String.raw changes nothing else.
-function buildExtractJS(): string {
-  return String.raw`(async () => {
-    const revealTexts = ['Hiện số', 'Xem SĐT', 'Xem số', 'Bấm để hiện', 'Hiện số điện thoại', 'Show phone'];
-    const clickSelectors = [
-      '.re__btn-short-info-phone',
-      '.js__phone-btn',
-      '.js__phone',
-      '.re__contact-phone button',
-      '.re__contact-phone a',
-      '[data-aut-id="btnPhone"]',
-      'button[class*="phone"]',
-      'button[class*="Phone"]',
-      '[class*="phone-button"]'
-    ];
-    const readSelectors = [
-      'a[href^="tel:"]',
-      '.re__contact-phone',
-      '[class*="phone-number"]',
-      '[class*="PhoneNumber"]',
-      '[class*="phone__number"]',
-      '[class*="ContactPhone"]',
-      '[class*="phone"]',
-      '[class*="Phone"]'
-    ];
-
-    const normalize = (value) => {
-      if (!value || value.includes('*')) return null;
-      let cleaned = value.replace(/[^\d+]/g, '');
-      if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
-      if (cleaned.startsWith('84') && cleaned.length > 10) cleaned = '0' + cleaned.slice(2);
-      if (/^0\d{9,10}$/.test(cleaned)) return cleaned;
-      if (/^\d{9,10}$/.test(cleaned)) return '0' + cleaned;
-      return null;
-    };
-
-    const readPhoneFromText = (value) => {
-      if (!value) return null;
-      const matches = value.match(/(?:\+84|84|0)[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g) || [];
-      for (const match of matches) {
-        const phone = normalize(match);
-        if (phone) return phone;
-      }
-      return null;
-    };
-
-    const extractFromDom = () => {
-      for (const selector of readSelectors) {
-        const nodes = document.querySelectorAll(selector);
-        for (const node of nodes) {
-          const href = node.getAttribute?.('href') || '';
-          const phone = normalize(href.replace('tel:', '')) || readPhoneFromText(node.textContent || '');
-          if (phone) return phone;
-        }
-      }
-      return readPhoneFromText(document.body?.innerText || '');
-    };
-
-    const initial = extractFromDom();
-    if (initial) return JSON.stringify({ phone: initial, method: 'browserless_dom_initial' });
-
-    const clickTargets = document.querySelectorAll('button, a, span, div, [role="button"]');
-    for (const node of clickTargets) {
-      const label = (node.textContent || '').trim();
-      if (revealTexts.some((text) => label.includes(text))) {
-        node.click?.();
-      }
-    }
-    for (const selector of clickSelectors) {
-      for (const node of document.querySelectorAll(selector)) {
-        node.click?.();
-      }
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const afterClick = extractFromDom();
-    return JSON.stringify({
-      phone: afterClick,
-      method: afterClick ? 'browserless_dom_after_click' : 'browserless_dom_miss',
-    });
-  })()`;
-}
-
-function parseCookieStringToArray(cookieStr: string, domain: string): Array<{name: string; value: string; domain: string; path: string}> {
-  if (!cookieStr) return [];
-  return cookieStr.split(';').map(pair => {
-    const eqIdx = pair.indexOf('=');
-    if (eqIdx === -1) return null;
-    const name = pair.substring(0, eqIdx).trim();
-    const value = pair.substring(eqIdx + 1).trim();
-    if (!name) return null;
-    return { name, value, domain, path: '/' };
-  }).filter(Boolean) as Array<{name: string; value: string; domain: string; path: string}>;
-}
-
-function parsePhoneResult(resultStr: string | undefined | null): { phone: string | null; method: string; debug?: Record<string, unknown> } {
-  if (!resultStr) return { phone: null, method: 'no_result' };
-  try {
-    const data = JSON.parse(resultStr);
-    if (data.phone) {
-      const phone = cleanPhoneNumber(data.phone);
-      if (phone) return { phone, method: data.method };
-    }
-    return { phone: null, method: data.method || 'parse_no_phone', debug: data.debug || { title: data.title, bodyLen: data.bodyLen, url: data.url } };
-  } catch {
-    return { phone: null, method: 'parse_error' };
-  }
-}
-
-// Layer 1 (Batdongsan): parse phone from HTML response (JSON-LD, __NUXT__, embedded scripts)
-// — no Browserless cost. Returns null if nothing found in HTML.
+// Batdongsan: parse phone from the HTML response (JSON-LD, __NUXT__, embedded scripts).
+// Returns null if nothing found in the HTML.
 async function tryBatdongsanHTMLParse(listingUrl: string): Promise<{ phone: string | null; method: string }> {
   try {
     const cookieStr = Deno.env.get('BATDONGSAN_COOKIES') || '';
@@ -461,138 +335,29 @@ function deepFindPhoneInObject(obj: unknown, depth = 0): string | null {
 }
 
 async function extractPhoneForListing(listingUrl: string, marketplace: string): Promise<PhoneResult> {
-  // For Nhatot: try direct HTTP fetch first (no browser needed, faster & free)
-  if (marketplace === 'nhatot') {
-    const directResult = await tryNhatotDirectFetch(listingUrl);
-    // For Nhatot, don't fall back to Browserless (Cloudflare blocks it too)
-    return directResult;
-  }
+  // For Nhatot: the chotot gateway, no browser needed.
+  if (marketplace === 'nhatot') return await tryNhatotDirectFetch(listingUrl);
 
-  // Batdongsan Layer 1: try HTML parse first (free, no Browserless)
+  // Batdongsan: the page's own HTML, and nothing past it. A number the page
+  // does not print is left for the person who checks listings by hand -
+  // revealing it through a browser cost a Cloudflare captcha solve each, and
+  // stopped on 2026-10-27 (owner's decision).
+  //
+  // A refused or failed fetch says nothing about the listing, so it is
+  // `blocked` and keeps its retries. A page that loaded without a number is a
+  // real miss and counts as one.
   if (marketplace === 'batdongsan') {
     const htmlResult = await tryBatdongsanHTMLParse(listingUrl);
     if (htmlResult.phone) {
       console.log(`[extract-phone] BDS HTML parse hit (${htmlResult.method}): ${htmlResult.phone}`);
       return htmlResult;
     }
-    console.log(`[extract-phone] BDS HTML parse miss (${htmlResult.method}), falling back to Browserless click`);
+    console.log(`[extract-phone] BDS HTML parse miss (${htmlResult.method})`);
+    return { ...htmlResult, blocked: /^bds_html_(403|429|5\d\d|error)$/.test(htmlResult.method) };
   }
 
-  // Paused, the reveal was never attempted, so it says nothing about the
-  // listing: `blocked` keeps its retries intact (_shared/browserless.ts).
-  if (!browserlessEnabled()) {
-    console.log(`[extract-phone] Browserless paused - skipping the reveal for ${listingUrl}`);
-    return { phone: null, method: 'browserless_paused', blocked: true };
-  }
-
-  if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
-
-  const cookieStr = getCookieString(marketplace);
-  const domain = marketplace === 'batdongsan' ? '.batdongsan.com.vn' : '.nhatot.com';
-  const cookies = parseCookieStringToArray(cookieStr, domain);
-  const hasCookies = cookies.length > 0;
-
-  const jsCode = buildExtractJS();
-
-  try {
-    console.log(`[extract-phone] Extracting from ${listingUrl} (cookies: ${hasCookies ? cookies.length : 'none'})`);
-
-    // Use Browserless /function API which supports setting cookies via puppeteer-like interface
-    // BQL approach: use two-step - first set cookies via a blank page, then navigate
-    let query: string;
-    const variables: Record<string, unknown> = { url: listingUrl, jsCode };
-
-    if (hasCookies) {
-      // Navigate to domain root first, inject cookies client-side, then go to listing
-      // Use verify to handle Cloudflare "Are you human?" interstitials
-      const domainUrl = marketplace === 'batdongsan' ? 'https://batdongsan.com.vn/' : 'https://www.nhatot.com/';
-      const setCookieJS = `(async () => {
-        var pairs = ${JSON.stringify(cookieStr)}.split('; ');
-        for (var i = 0; i < pairs.length; i++) document.cookie = pairs[i] + '; path=/';
-        return pairs.length;
-      })()`;
-      
-      query = `mutation ExtractPhone($url: String!, $jsCode: String!) {
-  domainPage: goto(url: "${domainUrl}", waitUntil: domContentLoaded) { status }
-  verifyDomain: verify(type: cloudflare) { found solved }
-  setCookies: evaluate(content: ${JSON.stringify(setCookieJS)}, timeout: 5000) { value }
-  gotoListing: goto(url: $url, waitUntil: networkIdle) { status url }
-  verifyListing: verify(type: cloudflare) { found solved }
-  phoneData: evaluate(content: $jsCode, timeout: 45000) { value }
-}`;
-    } else {
-      query = `mutation ExtractPhone($url: String!, $jsCode: String!) {
-  goto(url: $url, waitUntil: networkIdle) { status url }
-  verifyPage: verify(type: cloudflare) { found solved }
-  reloadAfterVerify: goto(url: $url, waitUntil: networkIdle) { status url }
-  phoneData: evaluate(content: $jsCode, timeout: 45000) { value }
-}`;
-    }
-
-    const response = await fetch(`https://production-sfo.browserless.io/chromium/bql?token=${BROWSERLESS_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables }),
-      signal: AbortSignal.timeout(90000),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[extract-phone] Browserless error [${response.status}]: ${errorText.substring(0, 300)}`);
-      return { phone: null, method: `browserless_error_${response.status}` };
-    }
-
-    const result = await response.json();
-    
-    // Log full BQL response for debugging
-    console.log(`[extract-phone] BQL response keys: ${JSON.stringify(Object.keys(result.data || {}))}`);
-    if (result.data?.gotoListing) {
-      console.log(`[extract-phone] Goto listing: status=${result.data.gotoListing.status}, url=${result.data.gotoListing.url}`);
-    }
-    if (result.data?.goto) {
-      console.log(`[extract-phone] Goto: status=${result.data.goto.status}, url=${result.data.goto.url}`);
-    }
-    if (result.data?.verifyDomain) {
-      console.log(`[extract-phone] Verify domain: found=${result.data.verifyDomain.found}, solved=${result.data.verifyDomain.solved}`);
-    }
-    if (result.data?.verifyListing) {
-      console.log(`[extract-phone] Verify listing: found=${result.data.verifyListing.found}, solved=${result.data.verifyListing.solved}`);
-    }
-    if (result.data?.verifyPage) {
-      console.log(`[extract-phone] Verify page: found=${result.data.verifyPage.found}, solved=${result.data.verifyPage.solved}`);
-    }
-    if (result.data?.reloadAfterVerify) {
-      console.log(`[extract-phone] Reload after verify: status=${result.data.reloadAfterVerify.status}, url=${result.data.reloadAfterVerify.url}`);
-    }
-    
-    if (result.errors) {
-      console.error(`[extract-phone] BQL errors: ${JSON.stringify(result.errors).substring(0, 500)}`);
-    }
-    if (hasCookies && result.data?.setCookies?.value) {
-      console.log(`[extract-phone] Cookie injection: ${result.data.setCookies.value}`);
-    }
-    
-    const rawValue = result?.data?.phoneData?.value;
-    console.log(`[extract-phone] Raw evaluate value: ${typeof rawValue === 'string' ? rawValue.substring(0, 500) : rawValue}`);
-    
-    const phoneResult = parsePhoneResult(rawValue);
-
-    // Being refused is not the same as finding nothing. A 403, a 429, a 5xx or a
-    // BQL error means the site would not show us the page - which says nothing
-    // about whether the seller published a number. Counting those as failed
-    // attempts retires listings for our own infrastructure problems: two
-    // batdongsan rows hit the cap in a single afternoon of testing that way.
-    const pageStatus = (result.data?.gotoListing?.status ?? result.data?.reloadAfterVerify?.status ?? result.data?.goto?.status) as number | undefined;
-    const blocked = (typeof pageStatus === 'number' && (pageStatus === 403 || pageStatus === 429 || pageStatus >= 500)) || !!result.errors;
-    if (blocked) console.log(`[extract-phone] Blocked (status ${pageStatus ?? 'n/a'}) - not counting this as an attempt`);
-
-    console.log(`[extract-phone] Result: ${JSON.stringify(phoneResult).substring(0, 500)}`);
-    return { ...phoneResult, blocked };
-  } catch (error) {
-    // A throw here is a timeout or a transport failure - ours, not theirs.
-    console.error(`[extract-phone] Error:`, error);
-    return { phone: null, method: 'error', blocked: true };
-  }
+  // No other source has a free path, so nothing was tried.
+  return { phone: null, method: 'no_free_path', blocked: true };
 }
 
 serve(async (req) => {
@@ -636,12 +401,6 @@ serve(async (req) => {
           });
         }
       }
-    }
-
-    if (!BROWSERLESS_API_KEY && browserlessEnabled()) {
-      return new Response(JSON.stringify({ error: 'BROWSERLESS_API_KEY not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     const body = await req.json();
@@ -770,15 +529,14 @@ serve(async (req) => {
       // ('Not provided', 'N/A', '25 listings'). contact_phone_e164 is generated
       // from normalize_vn_phone, so a single IS NULL covers all three and any
       // fourth shape the crawlers invent.
-      let missingQuery = supabase
+      // Only the sources with a free path are worth a slot: any other is
+      // skipped as blocked, and would hold the newest slots every hour.
+      const { data: missingPhone } = await supabase
         .from('external_properties').select('id, source_url, source, phone_extraction_attempts')
         .is('contact_phone_e164', null)
         .eq('is_active', true)
-        .lt('phone_extraction_attempts', 3);
-      // Paused, only the sources with a free path are worth a slot: any other
-      // source is skipped as blocked, and would hold the newest slots every hour.
-      if (!browserlessEnabled()) missingQuery = missingQuery.in('source', ['nhatot', 'batdongsan']);
-      const { data: missingPhone } = await missingQuery
+        .in('source', ['nhatot', 'batdongsan'])
+        .lt('phone_extraction_attempts', 3)
         .order('created_at', { ascending: false }).limit(limit);
 
       if (!missingPhone || missingPhone.length === 0) {
