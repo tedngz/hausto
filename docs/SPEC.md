@@ -131,6 +131,18 @@ can be re-read (the agency feeds, nhatot's payload), because they move -
 "available from 1 Nov" becomes "available now". batdongsan and housingsgn keep
 what their crawl read.
 
+**For those sources, a listing is due a check from its last read, not its last
+sighting** (`_shared/verify-due.ts`, 2026-10-27). A crawl that finds a listing
+already stored stamps `last_verified_at` - it is still in the feed - and that
+stamp used to make it "recently verified". A unit still on the feed every day
+was then never checked: no price read back (so the 21-day decay would delist it
+while the agency still showed it), no terms read. On 2026-10-27 no listing at
+all was due under the old rule, with 266 stamped but unread for 5 days or more.
+Now the cadence for nhatot and the agency feeds runs on `price_confirmed_at`
+(falling back to `crawled_at`, as the decay sweep does), and a listing never
+read for terms is due at once. Other sources keep the sighting rule, since a
+check can establish no more than that for them.
+
 Where they are used:
 
 - **chat-ai** (pinned listings and listings shown earlier) and **the comparison
