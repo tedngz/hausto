@@ -5,14 +5,14 @@
 // Cloudflare solve. Off by default so the pause takes effect on deploy, with
 // no secret to set first; resuming is one secret in the dashboard.
 //
-// While paused, nothing that needs a browser runs, and nothing it would have
-// decided is decided instead:
-//   - verify-external-listings leaves batdongsan rows alone (their checks are
-//     Browserless-only), and nhatot keeps its gateway error rather than falling
-//     back. Rows keep their state; the 45-day age cap still applies to them.
-//   - extract-phone still tries the free paths (nhatot direct, batdongsan HTML
-//     parse) and reports a miss behind them as `blocked`, so no listing spends
-//     a retry on our pause.
+// It governs listing verification only. Phone reveals no longer use a browser
+// at all, whatever this says: since 2026-10-27 (owner's decision) a number a
+// source does not publish for free is found by hand, so extract-phone has no
+// Browserless path to switch back on.
+//
+// While paused, verify-external-listings leaves batdongsan rows alone (their
+// checks are Browserless-only), and nhatot keeps its gateway error rather than
+// falling back. Rows keep their state; the 45-day age cap still applies to them.
 export function browserlessEnabled(): boolean {
   return (Deno.env.get('BROWSERLESS_ENABLED') ?? '').trim().toLowerCase() === 'true';
 }

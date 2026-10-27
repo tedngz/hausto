@@ -46,7 +46,6 @@ function explainVerificationReason(reason: string | null | undefined): string {
   if (reason === 'redirect_expired') return 'Redirected to "expired" page';
   if (reason === 'tiny_response') return 'Empty / notice page returned';
   if (reason === 'no_browserless_key') return 'Browserless key missing';
-  if (reason === 'browserless_paused') return 'Browserless paused';
   if (reason.startsWith('browserless_')) return `Browserless error (${reason.replace('browserless_', '')})`;
   if (reason.startsWith('keyword:')) {
     const kw = reason.slice('keyword:'.length);

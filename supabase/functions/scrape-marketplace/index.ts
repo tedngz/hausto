@@ -703,7 +703,7 @@ export function normalizeVnPhone(raw?: string | null): string | null {
 //
 // Unresolved listings stay searchable on purpose. A contact is only needed once
 // someone wants to view the place, and chasing full coverage up front spends
-// Browserless reveals on listings nobody asks about.
+// effort on listings nobody asks about.
 // deno-lint-ignore no-explicit-any
 async function resolveRealtorId(
   supabase: any,
@@ -898,7 +898,7 @@ async function savePropertiesToDB(
         contact_phone: property.sourceProviderPhone || null,
         // The source's own id for the seller. Free on nhatot (`account_oid`),
         // and the durable half of realtor identity: the phone behind it usually
-        // has to be bought with a Browserless reveal, but this arrives with the
+        // has to be found by hand, but this arrives with the
         // ad and never changes, so one resolution attaches every future listing
         // from that broker.
         ...((property as { sourceAgentId?: string }).sourceAgentId
@@ -2628,7 +2628,8 @@ Deno.serve(async (req) => {
       console.log(`[scrape-marketplace] DirectSave result:`, JSON.stringify(saveResult));
 
       // Trigger phone extraction for newly saved properties missing phone numbers
-      // Skip phone extraction in raw mode to also save Browserless credits
+      // Skipped in raw mode. extract-phone only reads what a source publishes
+      // for free; a number it cannot read is left for the manual check.
       if (!rawMode && saveResult.newListings > 0) {
         try {
           const extractPhoneUrl = `${SUPABASE_URL}/functions/v1/extract-phone`;
@@ -2638,7 +2639,7 @@ Deno.serve(async (req) => {
             // exactly the listings that needed a reveal - 404 of them, carrying
             // things like "0775 924 ***" - from ever being offered one.
             .filter(p => !normalizeVnPhone(p.sourceProviderPhone) && p.sourceUrl)
-            .slice(0, 5) // Limit to 5 per crawl to manage Browserless credits
+            .slice(0, 5) // 5 per crawl keeps the source fetches polite
             .map(p => ({
               source_url: normalizeSourceUrl(p.sourceUrl),
               source: marketplace,

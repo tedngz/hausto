@@ -333,6 +333,10 @@ is persisted for every source that exposes one.
 active listings resolve to a dialable number. Nothing about that is achievable
 by normalization - it needs the batdongsan reveal path working, which is what
 `extract-phone`'s Browserless branch was built for and has never done.
+That branch is gone (2026-10-27, owner's decision): it spent a captcha solve per
+reveal, and a number a source does not publish for free is now found by hand.
+`extract-phone` keeps only the free paths - the chotot gateway and batdongsan's
+own HTML.
 
 `/ops/resolve` moves to S5, where the console it lives in gets built.
 
