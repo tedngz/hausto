@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { browserlessEnabled } from "../_shared/browserless.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -477,6 +478,13 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
     console.log(`[extract-phone] BDS HTML parse miss (${htmlResult.method}), falling back to Browserless click`);
   }
 
+  // Paused, the reveal was never attempted, so it says nothing about the
+  // listing: `blocked` keeps its retries intact (_shared/browserless.ts).
+  if (!browserlessEnabled()) {
+    console.log(`[extract-phone] Browserless paused - skipping the reveal for ${listingUrl}`);
+    return { phone: null, method: 'browserless_paused', blocked: true };
+  }
+
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
 
   const cookieStr = getCookieString(marketplace);
@@ -630,7 +638,7 @@ serve(async (req) => {
       }
     }
 
-    if (!BROWSERLESS_API_KEY) {
+    if (!BROWSERLESS_API_KEY && browserlessEnabled()) {
       return new Response(JSON.stringify({ error: 'BROWSERLESS_API_KEY not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -710,8 +718,8 @@ serve(async (req) => {
         });
       }
 
-      const { phone, method } = await extractPhoneForListing(sourceUrl, marketplace);
-      await recordResult(propertyId, phone);
+      const { phone, method, blocked } = await extractPhoneForListing(sourceUrl, marketplace);
+      await recordResult(propertyId, phone, blocked);
       if (phone) console.log(`[extract-phone] Updated ${propertyId} with ${phone}`);
       return new Response(JSON.stringify({ success: true, phone, method, propertyId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -762,11 +770,15 @@ serve(async (req) => {
       // ('Not provided', 'N/A', '25 listings'). contact_phone_e164 is generated
       // from normalize_vn_phone, so a single IS NULL covers all three and any
       // fourth shape the crawlers invent.
-      const { data: missingPhone } = await supabase
+      let missingQuery = supabase
         .from('external_properties').select('id, source_url, source, phone_extraction_attempts')
         .is('contact_phone_e164', null)
         .eq('is_active', true)
-        .lt('phone_extraction_attempts', 3)
+        .lt('phone_extraction_attempts', 3);
+      // Paused, only the sources with a free path are worth a slot: any other
+      // source is skipped as blocked, and would hold the newest slots every hour.
+      if (!browserlessEnabled()) missingQuery = missingQuery.in('source', ['nhatot', 'batdongsan']);
+      const { data: missingPhone } = await missingQuery
         .order('created_at', { ascending: false }).limit(limit);
 
       if (!missingPhone || missingPhone.length === 0) {
