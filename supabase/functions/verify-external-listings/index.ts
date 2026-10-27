@@ -5,6 +5,7 @@ import { normalizeListingCopy } from '../_shared/listing-language.ts';
 import { repricedCopy } from '../_shared/repriced-copy.ts';
 import { AGENCY_FEED_SOURCES, agencySourceOf, verifyAgencyListing } from '../_shared/agency-sources.ts';
 import { type LeaseTerms, termsColumns } from '../_shared/lease-terms.ts';
+import { browserlessEnabled } from '../_shared/browserless.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -387,7 +388,7 @@ async function verifyListing(source: string, url: string, externalId?: string): 
       // Gateway API first (definitive); Browserless only as a fallback when
       // the gateway itself errors.
       const viaApi = await verifyViaChototApi(url);
-      if (viaApi.status !== 'error') return viaApi;
+      if (viaApi.status !== 'error' || !browserlessEnabled()) return viaApi;
       return await verifyViaBrowserless(url, NHATOT_DEAD_KEYWORDS);
     }
     // Batdongsan is Cloudflare-protected — go through Browserless
@@ -479,7 +480,9 @@ Deno.serve(async (req) => {
       .gte('last_verified_at', new Date(nowMs - dayMs).toISOString());
     if (bdsCountError) throw bdsCountError;
 
-    const bdsBudget = Math.max(0, BATDONGSAN_DAILY_CHECKS - (bdsUsed ?? 0));
+    // Every batdongsan check is a Browserless session, so a pause leaves them
+    // unchecked rather than recording an error against each (_shared/browserless.ts).
+    const bdsBudget = browserlessEnabled() ? Math.max(0, BATDONGSAN_DAILY_CHECKS - (bdsUsed ?? 0)) : 0;
     let bds: typeof tiered = [];
     if (bdsBudget > 0) {
       const bdsReverifyCutoff = new Date(nowMs - BATDONGSAN_REVERIFY_DAYS * dayMs).toISOString();
