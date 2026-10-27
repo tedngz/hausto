@@ -56,8 +56,10 @@ Three, switched by state rather than a router:
   count of pending AI operator proposals that never changes the ranking.
 - **A request** - one card per listing: the agent's contact, the Vietnamese
   draft, the broker transcript, the paste-parse box (`ops-parse-reply`, which
-  suggests an outcome and never records one), the seven outcomes, and any
-  message queued for or failed on the Zalo bridge. Above them, the renter's
+  suggests an outcome and never records one), the seven outcomes, what the ad
+  states about the lease and what the agent said (`LeaseTermsForm`, recorded
+  as `LEASE_TERMS` and printed in the renter's plan), and any message queued
+  for or failed on the Zalo bridge. Above them, the renter's
   thread and reply box, the itinerary builder, and the AI operator's proposals
   for this request, each with approve, reject, and - for one that will run
   alone - **Hold**.

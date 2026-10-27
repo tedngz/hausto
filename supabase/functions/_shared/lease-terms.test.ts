@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   askAgentVi, depositFromField, describeTerms, mergeTerms, petsFromField, readTermsFromText,
   termsColumns, termsForPrompt, termsFromModel, termsFromRow, unknownTerms, NO_TERMS,
+  agentTermsForPrompt, checkTerms, hasTerms, sameTerms, termsFromPayload, termsPayload,
 } from './lease-terms.ts';
 import { jhouseTerms } from './jhouse.ts';
 import { rentapartmentTerms } from './rentapartment.ts';
@@ -332,5 +333,90 @@ describe('combining, storing and saying', () => {
     expect(askAgentVi(['PETS'])).toBe('Anh/chị cho em hỏi thêm: có cho nuôi thú cưng không ạ?');
     expect(askAgentVi(['FEES', 'DEPOSIT'])).toBe('Anh/chị cho em hỏi thêm: cọc mấy tháng và phí quản lý, điện nước tính thế nào ạ?');
     expect(askAgentVi([])).toBeNull();
+  });
+});
+
+describe('what an agent said (LEASE_TERMS)', () => {
+  const said = {
+    availability: 'AVAILABLE_SOON', availableFrom: '2026-12-01', minLeaseMonths: 12,
+    depositMonthsMin: 2, depositMonthsMax: null, petsAllowed: false,
+    fees: [
+      { kind: 'ELECTRICITY', label: '', included: false, amount: '3,500 VND/kWh' },
+      { kind: 'MANAGEMENT', label: 'Management fee', included: true, amount: '500,000 VND' },
+    ],
+  };
+
+  it('checks a record and fills in what a form leaves implied', () => {
+    const r = checkTerms(said);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value).toMatchObject({ depositMonthsMin: 2, depositMonthsMax: 2, minLeaseMonths: 12, availableFrom: '2026-12-01' });
+    // A blank label takes the kind's name; an included fee has no amount to pay.
+    expect(r.value.fees).toEqual([
+      { kind: 'ELECTRICITY', label: 'Electricity', included: false, amount: '3,500 VND/kWh' },
+      { kind: 'MANAGEMENT', label: 'Management fee', included: true, amount: null },
+    ]);
+  });
+
+  it('takes numbers as a form sends them', () => {
+    const r = checkTerms({ depositMonthsMin: '1.5', depositMonthsMax: '2', minLeaseMonths: '6' });
+    expect(r).toMatchObject({ ok: true, value: { depositMonthsMin: 1.5, depositMonthsMax: 2, minLeaseMonths: 6 } });
+  });
+
+  it.each([
+    [{ depositMonthsMin: 30 }, /deposit/],
+    [{ depositMonthsMin: 1.3 }, /half months/],
+    [{ depositMonthsMin: 2, depositMonthsMax: 1 }, /deposit/],
+    [{ depositMonthsMax: 2 }, /lower figure/],
+    [{ minLeaseMonths: 0 }, /minimum lease/],
+    [{ minLeaseMonths: 6.5 }, /minimum lease/],
+    [{ minLeaseMonths: true }, /minimum lease/],
+    [{ petsAllowed: 'yes' }, /Pets/],
+    [{ availability: 'LATER' }, /availability/],
+    [{ availability: 'AVAILABLE_NOW', availableFrom: '2026-12-01' }, /available soon/],
+    [{ availability: 'AVAILABLE_SOON', availableFrom: '2026-02-31' }, /real date/],
+    [{ fees: [{ kind: 'GYM', included: true }] }, /kind/],
+    [{ fees: [{ kind: 'WATER' }] }, /covers Water/],
+    [{ fees: [{ kind: 'OTHER', label: 'x'.repeat(61), included: true }] }, /under 60/],
+    [{}, /Nothing to record/],
+    [null, /Give the terms/],
+  ])('refuses %j rather than trimming it', (raw, error) => {
+    const r = checkTerms(raw);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(error);
+  });
+
+  it('round-trips through the event payload under the columns\' names', () => {
+    const r = checkTerms(said);
+    if (!r.ok) throw new Error(r.error);
+    const payload = termsPayload(r.value);
+    expect(payload).toMatchObject({ deposit_months_min: 2, min_lease_months: 12, pets_allowed: false, available_from: '2026-12-01' });
+    expect(payload).not.toHaveProperty('terms_read_at');
+    expect(termsFromPayload(payload)).toEqual(r.value);
+  });
+
+  it('reads a payload leniently: bad values dropped, nothing stated is null', () => {
+    expect(termsFromPayload({ deposit_months_min: 9, pets_allowed: true })).toMatchObject({ depositMonthsMin: null, petsAllowed: true });
+    expect(termsFromPayload({ availability: 'AVAILABLE_NOW', available_from: '2026-12-01' })).toMatchObject({ availableFrom: null });
+    expect(termsFromPayload({ min_lease_months: 400 })).toBeNull();
+    expect(termsFromPayload({})).toBeNull();
+    expect(termsFromPayload(null)).toBeNull();
+    expect(hasTerms(NO_TERMS)).toBe(false);
+  });
+
+  it('calls two records the same when only their writing differs', () => {
+    const a = { depositMonthsMin: 2, fees: [{ kind: 'WATER', included: true }, { kind: 'ELECTRICITY', included: false, amount: '3,500 VND/kWh' }] };
+    const b = { depositMonthsMin: '2', depositMonthsMax: 2, fees: [{ kind: 'ELECTRICITY', label: 'Electricity', included: false, amount: '3,500 VND/kWh' }, { kind: 'WATER', label: 'Water', included: true }] };
+    expect(sameTerms(a, b)).toBe(true);
+    expect(sameTerms(a, { ...a, depositMonthsMin: 3 })).toBe(false);
+    expect(sameTerms(a, { depositMonthsMin: 30 })).toBe(false);
+  });
+
+  it('gives a prompt the agent\'s word, dated', () => {
+    const r = checkTerms({ depositMonthsMin: 2, petsAllowed: false });
+    if (!r.ok) throw new Error(r.error);
+    expect(agentTermsForPrompt({ ...r.value, recordedAt: '2026-10-26T09:00:00Z' }))
+      .toBe("The agent told us (26 Oct 2026): deposit 2 months' rent; no pets.");
+    expect(agentTermsForPrompt(null)).toBe('');
   });
 });

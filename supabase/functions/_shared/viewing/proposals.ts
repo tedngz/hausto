@@ -10,6 +10,8 @@
 // Pure, so the scoring is tested - it is the number stage 2 is gated on, and a
 // scoring bug would open that gate by accident.
 
+import { sameTerms } from '../lease-terms.ts';
+
 export type ProposalStatus =
   | 'PENDING' | 'APPROVED' | 'AGREED' | 'CORRECTED' | 'REJECTED' | 'SUPERSEDED'
   // Stage 2: run by the AI operator itself, and later marked wrong by a person.
@@ -50,6 +52,14 @@ export function settlementFor(p: ProposalRow, done: DoneAction): 'AGREED' | 'COR
 
   if (p.item_id) {
     if (done.itemId !== p.item_id) return null;
+    // The terms an agent stated sit beside what happens to the viewing, not
+    // in it: recording an outcome says nothing about a proposed deposit, and
+    // recording a deposit says nothing about a proposed outcome. Only a record
+    // of the terms answers a proposal of them - the same terms, or others.
+    if (p.action === 'LEASE_TERMS' || done.action === 'LEASE_TERMS') {
+      if (p.action !== done.action) return null;
+      return sameTerms(p.input.terms, done.input.terms) ? 'AGREED' : 'CORRECTED';
+    }
     // An escalation about an item is agreed with by any person acting on it,
     // including the preparatory steps - finding a number is exactly what
     // "no working number, a person has to find one" asked for.

@@ -43,6 +43,7 @@ import { freeViewingAvailable, hasPassCover, planPassCover } from './lock-in-run
 import { prioritySearchPath, REPLY_WITHIN_HOURS } from './place.ts';
 import { VIEWINGS_PATH } from './renter-view.ts';
 import { SITE_URL } from './watch.ts';
+import { loadTerms } from '../lease-terms.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -106,11 +107,14 @@ export async function deliver(
   const [{ data: events }, { data: items }] = await Promise.all([
     db.from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
       .eq('request_id', opts.requestId).order('occurred_at', { ascending: true }),
-    db.from('ops_request_items_view').select('id, listing_title, district_code, price_vnd_at_request')
+    db.from('ops_request_items_view').select('id, listing_id, listing_title, district_code, price_vnd_at_request')
       .eq('request_id', opts.requestId),
   ]);
 
   const view = reduceRequest(opts.requestId, (events ?? []) as DomainEvent[]);
+  // What each ad states about the lease, under what its agent told us (the
+  // view's `terms`) - one line per stop. A failed read is "not stated".
+  const adTerms = await loadTerms(db, (items ?? []).map((i: Record<string, unknown>) => String(i.listing_id)));
   // A place the renter removed is not one they asked about any more, so it is
   // neither a stop nor counted in "3 of the 5 places you asked about".
   const listings: StopListing[] = (items ?? [])
@@ -120,6 +124,7 @@ export async function deliver(
       listingTitle: String(i.listing_title ?? 'A place'),
       districtCode: (i.district_code as string) ?? null,
       priceVndAtRequest: Number(i.price_vnd_at_request ?? 0),
+      terms: adTerms.get(String(i.listing_id)) ?? null,
     }));
 
   let text: string;

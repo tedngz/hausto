@@ -171,6 +171,26 @@ describe('dress rehearsal', () => {
     record(itemIds[3], { outcome: 'ALREADY_RENTED' });
     record(itemIds[4], { outcome: 'PRICE_CHANGED', actualPriceVnd: 25_000_000 });
 
+    // The terms. The first ad states its deposit and that water is in the
+    // rent, so its agent was asked the rest and answered (LEASE_TERMS); the
+    // second's ad states a minimum lease and no pets, and its agent said
+    // nothing more; nobody has said anything about the third.
+    Object.assign(db.tables.external_properties[0], {
+      terms_read_at: '2026-09-15T00:00:00Z', deposit_months_min: 2, deposit_months_max: 2,
+      fees: [{ kind: 'WATER', label: 'Water', included: true, amount: null }],
+    });
+    Object.assign(db.tables.external_properties[1], {
+      terms_read_at: '2026-09-15T00:00:00Z', min_lease_months: 6, pets_allowed: false,
+    });
+    db.tables.events.push({
+      request_id: requestId, item_id: itemIds[0], type: 'LEASE_TERMS_RECORDED',
+      payload: {
+        min_lease_months: 12, pets_allowed: true,
+        fees: [{ kind: 'ELECTRICITY', label: 'Electricity', included: false, amount: '3,500 VND/kWh' }],
+      },
+      actor: opsActor('ops-user-1'), occurred_at: new Date().toISOString(),
+    });
+
     const s = summarise(view());
     log(`\n  Ops recorded 5 outcomes: ${s.confirmed} confirmed, ${s.total - s.confirmed} not.`);
     expect(s).toMatchObject({ total: 5, confirmed: 3, isPartial: true });
@@ -197,6 +217,11 @@ describe('dress rehearsal', () => {
     expect(String(outbound[0].body)).toContain(`https://hausto.com/lock-in/${ref}`);
     expect(String(outbound[0].body)).toContain('Your first viewing is on us');
     expect(String(outbound[0].body)).not.toContain('Reply YES');
+    // One line of terms per stop that has any: the agent's over the ad's.
+    expect(String(outbound[0].body)).toContain('   Deposit 2 months, minimum lease 1 year, pets allowed, electricity 3.500 ₫/kWh, water included\n');
+    expect(String(outbound[0].body)).toContain('   Minimum lease 6 months, no pets\n');
+    expect(String(outbound[0].body).match(/minimum lease/gi)).toHaveLength(2);
+    expect(String(outbound[0].body)).not.toMatch(/book/i);
 
     // 4. A "yes" anyway. It cannot lock the plan in - the free viewing is one
     // place they choose, the Pass is a payment - so the one answer is where to.

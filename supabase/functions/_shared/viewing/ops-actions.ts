@@ -21,6 +21,8 @@
 //   NOTIFY_REALTOR  telling the broker the renter's decision
 //   VIEWING_DETAILS where to meet, the agent's first name, and whether their
 //                   number may go to the renter on the day (viewing-day.ts)
+//   LEASE_TERMS     what the agent said about the deposit, the minimum lease,
+//                   pets, fees and when it is free (lease-terms.ts)
 //
 // Request actions - the renter side:
 //   REPLY           a free-text answer on WhatsApp, inside the 24h window
@@ -55,6 +57,8 @@ import { validateBuildingAgent } from './roster.ts';
 import { isInquiryAction, performInquiryAction } from './inquiry-actions.ts';
 import { deliver } from './deliver.ts';
 import { validateViewingDetails } from './viewing-day.ts';
+import { containsInternationalNumber, containsPhoneNumber } from './privacy.ts';
+import { checkTerms, termsPayload } from '../lease-terms.ts';
 import { settlementFor, approvalOf, type ProposalRow, type DoneAction } from './proposals.ts';
 import { AUTONOMOUS_ACTIONS } from './autonomy.ts';
 import { REALTOR_MEDIA, type RealtorChannel, type RealtorMedium } from '../realtor/channel.ts';
@@ -89,7 +93,7 @@ const refuse = (status: number, error: string, message?: string): OpsResult =>
   ({ status, body: { error, ...(message ? { message } : {}) } });
 
 export const ITEM_ACTIONS = [
-  'CONTACTED', 'NUDGE', 'REALTOR_REPLY', 'OUTCOME', 'RECORD_CONTACT', 'NOTIFY_REALTOR', 'VIEWING_DETAILS',
+  'CONTACTED', 'NUDGE', 'REALTOR_REPLY', 'OUTCOME', 'RECORD_CONTACT', 'NOTIFY_REALTOR', 'VIEWING_DETAILS', 'LEASE_TERMS',
 ] as const;
 export const REQUEST_ACTIONS = ['REPLY', 'ACK_REPLIES', 'CANCEL_REQUEST', 'DELIVER'] as const;
 
@@ -638,6 +642,41 @@ async function dispatch(
         actor,
       });
       return failed ?? done({ recorded: 'VIEWING_DETAILS_RECORDED' });
+    }
+
+    case 'LEASE_TERMS': {
+      // What the agent said about the terms, typed (invariant 2): the
+      // renter's plan prints them (itinerary.ts), so nothing may have to be
+      // read back out of a note. Free text goes in `note`, which nothing
+      // reads. The latest record stands whole, so the console and the planner
+      // both send what was on file with what is new.
+      const checked = checkTerms(input.terms);
+      if (!checked.ok) return refuse(400, 'invalid_terms', checked.error);
+      // A fee's name and amount reach the renter. No number in them, of
+      // anyone's (invariant 4) - the same rule as a meeting point.
+      const printed = checked.value.fees.flatMap(f => [f.label, f.amount ?? '']);
+      if (printed.some(s => containsPhoneNumber(s) || containsInternationalNumber(s))) {
+        return refuse(400, 'invalid_terms', 'Leave phone numbers out of the fees - the renter reads them.');
+      }
+      // The reply they came from, when it is this item's: the pair is what a
+      // later reading is measured against, as an outcome's is.
+      const replyId = str(input.replyMessageId);
+      const { data: reply } = replyId
+        ? await db.from('realtor_messages').select('id').eq('id', replyId).eq('item_id', item.id).eq('direction', 'IN').maybeSingle()
+        : { data: null };
+      const note = str(input.note).slice(0, 2000);
+      const failed = await insertEvent(db, {
+        request_id: item.request_id,
+        item_id: item.id,
+        type: 'LEASE_TERMS_RECORDED',
+        payload: {
+          ...termsPayload(checked.value),
+          ...(reply ? { reply_message_id: reply.id } : {}),
+          ...(note ? { note } : {}),
+        },
+        actor,
+      });
+      return failed ?? done({ recorded: 'LEASE_TERMS_RECORDED' });
     }
   }
   return refuse(400, `Unknown action: ${action}`);

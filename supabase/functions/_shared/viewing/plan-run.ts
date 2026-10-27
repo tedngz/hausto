@@ -10,10 +10,10 @@
 // in-memory database in tests, with the model call passed in.
 
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
-import { planRequest, AGENT_VERSION, type PlanItem, type UnreadReply, type RenterDraft } from './planner.ts';
+import { planRequest, AGENT_VERSION, type PlanItem, type UnreadReply, type RenterDraft, type HeardTerms } from './planner.ts';
 import type { BusySlot } from './itinerary.ts';
 import { agentUnit } from '../realtor/unit.ts';
-import { loadTerms, termsForPrompt, unknownTerms } from '../lease-terms.ts';
+import { agentTermsForPrompt, hasTerms, loadTerms, termsForPrompt, unknownTerms, type LeaseTerms } from '../lease-terms.ts';
 import type { ParseContext, ParseSuggestion } from './parse-reply.ts';
 import { describeStatus, type DraftContext, type DraftResult, type ListingFacts, type ThreadLine } from './renter-reply.ts';
 import { waitingReplies } from './thread.ts';
@@ -124,8 +124,24 @@ export async function runPlanner(
       if (e.type === 'REALTOR_CONTACTED' && e.item_id) lastWrote.set(e.item_id, e.occurred_at);
     }
 
+    // Terms an agent stated, heard on an earlier pass and still waiting: the
+    // proposal made of them then is what this pass knows of them, since a
+    // reply is read once. One decided already needs nothing more.
+    const heardTerms: HeardTerms[] = [];
+    const replyRows = (replies ?? []) as { id: string; item_id: string | null; body: string; created_at: string }[];
+    for (const p of (existing ?? []) as ExistingProposal[]) {
+      if (p.status !== 'PENDING' || p.action !== 'LEASE_TERMS' || !p.dedupe_key.startsWith('TERMS:')) continue;
+      const [, itemId, messageId] = p.dedupe_key.split(':');
+      const reply = replyRows.find(r => r.id === messageId);
+      if (!reply) continue;
+      heardTerms.push({
+        itemId, messageId, at: reply.created_at, terms: p.input.terms as LeaseTerms,
+        confidence: p.confidence === 'LOW' ? 'LOW' : 'HIGH',
+      });
+    }
+
     const unreadReplies: UnreadReply[] = [];
-    for (const r of (replies ?? []) as { id: string; item_id: string | null; body: string; created_at: string }[]) {
+    for (const r of replyRows) {
       if (!r.item_id) continue;
       const after = lastOutcome.get(r.item_id);
       if (after && r.created_at <= after) continue;
@@ -134,14 +150,23 @@ export async function runPlanner(
       if (wrote && r.created_at < wrote) continue;
       const item = items.find(i => i.itemId === r.item_id);
       if (!item) continue;
+      const readOutcome = keys.has(`OUTCOME:${r.item_id}:${r.id}`);
+      // Read before, and it only stated terms about a place already settled:
+      // its terms proposal is all it ever needed, and nothing is left to read.
+      if (!readOutcome && keys.has(`TERMS:${r.item_id}:${r.id}`)) continue;
       let suggestion: ParseSuggestion | null = null;
       // Read once. A proposal already made for this reply keeps its key alive
       // without paying for a second reading.
-      if (!keys.has(`OUTCOME:${r.item_id}:${r.id}`) && result.parsed < MAX_PARSES_PER_RUN) {
+      if (!readOutcome && result.parsed < MAX_PARSES_PER_RUN) {
         result.parsed += 1;
         suggestion = await opts.parse({
           reply: r.body, listingTitle: item.listingTitle, priceVnd: item.priceVnd, availability, now: opts.now,
         });
+        if (suggestion && hasTerms(suggestion.terms)) {
+          heardTerms.push({
+            itemId: r.item_id, messageId: r.id, at: r.created_at, terms: suggestion.terms!, confidence: suggestion.confidence,
+          });
+        }
       }
       unreadReplies.push({ itemId: r.item_id, messageId: r.id, suggestion });
     }
@@ -180,7 +205,7 @@ export async function runPlanner(
 
     const proposals = planRequest({
       requestId: req.id, view, events, items, availability, moveInDate: req.move_in_date ?? null,
-      unreadReplies, renterDraft, proposedSlots,
+      unreadReplies, heardTerms, renterDraft, proposedSlots,
       now: opts.now.getTime(),
     });
 
@@ -313,7 +338,9 @@ async function draftContext(
       areaSqm: f.area_sqm != null ? Number(f.area_sqm) : null,
       amenities: Array.isArray(f.amenities) ? (f.amenities as unknown[]).map(String) : [],
       description: (f.description as string) ?? null,
-      terms: termsForPrompt(terms.get(String(r.listing_id)) ?? null) || null,
+      // What the ad states, then what the agent told us on this request.
+      terms: [termsForPrompt(terms.get(String(r.listing_id)) ?? null), agentTermsForPrompt(item?.terms)]
+        .filter(Boolean).join(' ') || null,
       status: describeStatus(item?.state ?? 'PENDING', item?.slots ?? [], item?.actualPriceVnd),
     };
   });

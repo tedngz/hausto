@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { interpretParse, buildParseInput, PRICE_TOLERANCE, type ParseContext } from './parse-reply.ts';
+import { interpretParse, buildParseInput, PARSE_PROMPT, PRICE_TOLERANCE, type ParseContext } from './parse-reply.ts';
 import { withinWindows } from './intake.ts';
 
 // Sunday 27 Sep 2026, 10:00 in Ho Chi Minh City.
@@ -135,5 +135,61 @@ describe('what the model is told', () => {
 
   it('carries nothing about the renter, because it is given nothing', () => {
     expect(buildParseInput(ctx)).not.toMatch(/\+84|renter/i);
+  });
+});
+
+describe('the terms the agent states', () => {
+  // "Thứ 3 10h được em. Cọc 2 tháng, HĐ tối thiểu 1 năm, không nuôi thú cưng,
+  // phí quản lý 500k, điện 3.5k/số" - the first message asked about all four.
+  const terms = {
+    available_from: null, min_lease_months: 12, deposit_months: 2, pets: 'NOT_ALLOWED',
+    fees: [
+      { name: 'Management fee', included: false, amount: '500,000 VND/month' },
+      { name: 'Electricity', included: false, amount: '3,500 VND/kWh' },
+    ],
+  };
+
+  it('reads them beside the outcome, without touching it', () => {
+    const s = read({ reading: 'AVAILABLE', times: ['2026-09-29 10:00'], terms });
+    expect(s.outcome).toBe('CONFIRMED');
+    expect(s.confidence).toBe('HIGH');
+    expect(s.terms).toMatchObject({ depositMonthsMin: 2, depositMonthsMax: 2, minLeaseMonths: 12, petsAllowed: false });
+    expect(s.terms!.fees.map(f => [f.kind, f.amount])).toEqual([
+      ['MANAGEMENT', '500,000 VND/month'], ['ELECTRICITY', '3,500 VND/kWh'],
+    ]);
+  });
+
+  it('holds them to the bounds the listing readers keep', () => {
+    const s = read({ reading: 'AVAILABLE', times: ['2026-09-29 10:00'],
+      terms: { deposit_months: 30, min_lease_months: 0, pets: 'MAYBE', available_from: 'soon' } });
+    expect(s.terms).toMatchObject({ depositMonthsMin: null, minLeaseMonths: null, petsAllowed: null, availability: null });
+  });
+
+  it('drops a fee that carries a phone number, and lets the outcome stand', () => {
+    const s = read({ reading: 'AVAILABLE', times: ['2026-09-29 10:00'], terms: {
+      fees: [{ name: 'Parking - call 0901 234 567', included: false, amount: null },
+        { name: 'Water', included: false, amount: '100,000 VND/person' }],
+    } });
+    expect(s.terms!.fees.map(f => f.kind)).toEqual(['WATER']);
+    expect(s.problems).toEqual([]);
+    expect(s.confidence).toBe('HIGH');
+  });
+
+  it('says when a reply is only terms, rather than that it settles nothing', () => {
+    const s = read({ reading: 'UNCLEAR', terms });
+    expect(s.outcome).toBeNull();
+    expect(s.problems).toEqual(['Only the terms - nothing settled about the viewing yet.']);
+  });
+
+  it('reports none when the model gave none, or garbage', () => {
+    for (const raw of [{ reading: 'ALREADY_RENTED' }, { reading: 'AVAILABLE', terms: 'cọc 2 tháng' }]) {
+      const s = read(raw);
+      expect(s.terms).toMatchObject({ depositMonthsMin: null, fees: [] });
+    }
+  });
+
+  it('asks the model for the shape termsFromModel reads', () => {
+    expect(PARSE_PROMPT).toContain('"deposit_months": number | [min, max] | null');
+    expect(PARSE_PROMPT).toContain('"pets": "ALLOWED" | "NOT_ALLOWED" | null');
   });
 });

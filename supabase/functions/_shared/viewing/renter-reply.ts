@@ -36,7 +36,11 @@ export interface ListingFacts {
   areaSqm: number | null;
   amenities: string[];
   description: string | null;
-  /** What the ad states about deposit, lease, fees, pets and availability, and what it leaves out (lease-terms.ts termsForPrompt). */
+  /**
+   * What the ad states about deposit, lease, fees, pets and availability, and
+   * what it leaves out (lease-terms.ts termsForPrompt), then what the agent
+   * told us on this request (agentTermsForPrompt).
+   */
   terms?: string | null;
   /** Where this unit stands, in words: "confirmed for Tue 29 Sep, 09:00", "already rented". */
   status: string;
@@ -82,7 +86,8 @@ Return JSON only:
 Write the reply:
 - In English, plain and friendly, at most 4 short sentences. One message only.
 - Answer only from the facts given. If the answer is not in the facts, say we will check with the agent and come back, and set needs_agent true.
-- Lease terms (deposit, minimum lease, fees, pets, when it is free) are what the ad stated when we read it: give them as "the ad says", never as agreed. One listed under "Not stated in the ad" is not in the facts.
+- Lease terms (deposit, minimum lease, fees, pets, when it is free) are what the ad stated when we read it: give them as "the ad says", never as agreed. One listed under "Not stated in the ad" is not in the facts, unless "The agent told us" gives it.
+- "The agent told us" is what the agent said when we asked: give it as "the agent says", never as agreed. Where it differs from the ad, it stands.
 - If they ask to move a viewing or suggest new times, acknowledge the times they gave, say we will ask the agents, and set needs_agent true. Never say a new time is agreed.
 - Never promise a unit, a price or a time that the facts do not show as confirmed.
 - Do not explain why a place fell through unless the renter asks about it.

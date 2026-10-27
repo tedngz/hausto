@@ -52,7 +52,9 @@ export type ParseCallResult =
   | { ok: false; error: string };
 
 export async function callParseModel(ctx: ParseContext): Promise<ParseCallResult> {
-  const r = await callJson(PARSE_MODEL, PARSE_PROMPT, buildParseInput(ctx), 800);
+  // The terms' fees are the long part of the answer; a cap that cut them off
+  // would lose the outcome with them.
+  const r = await callJson(PARSE_MODEL, PARSE_PROMPT, buildParseInput(ctx), 1200);
   return r.ok ? { ok: true, suggestion: interpretParse(r.json, ctx), usage: r.usage } : r;
 }
 

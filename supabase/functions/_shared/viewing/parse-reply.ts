@@ -19,11 +19,18 @@
 //     is PRICE_CHANGED, which is terminal and slotless, whatever times came
 //     with it.
 //
+// The same reading reports the lease terms the agent states - the first
+// message asks about whatever the ad leaves out (lease-terms.ts askAgentVi) -
+// held to the bounds the listing readers keep (`termsFromModel`). They are no
+// part of the outcome: they are recorded apart, as LEASE_TERMS (SPEC §4).
+//
 // Pure, so it is tested without a model. The edge function (ops-parse-reply)
 // is the I/O around it.
 
 import { OUTCOMES, validateOutcome, type Outcome, type Slot } from './outcomes.ts';
 import { withinWindows, DAY_PART_HOURS, type DayPart } from './intake.ts';
+import { MODEL_TERMS_SHAPE, termsFromModel, hasTerms, type LeaseTerms } from '../lease-terms.ts';
+import { containsInternationalNumber, containsPhoneNumber } from './privacy.ts';
 
 /**
  * Claude Sonnet 5.5 (CAREFUL_MODEL in _shared/claude.ts, spelled out here
@@ -67,6 +74,11 @@ export interface ParseSuggestion {
   /** Why the operator should look twice. Empty when there is nothing to flag. */
   problems: string[];
   model: string;
+  /**
+   * The lease terms the agent stated, for LEASE_TERMS - never part of the
+   * outcome. Absent on suggestions stored before agents were asked.
+   */
+  terms?: LeaseTerms;
 }
 
 export const PARSE_PROMPT = `You read one reply from a Vietnamese real-estate agent (môi giới) on Zalo.
@@ -80,7 +92,8 @@ Return JSON only:
   "duration_minutes": number | null,
   "price_vnd": integer | null,
   "summary": "one short English sentence saying what the agent said",
-  "confident": true | false
+  "confident": true | false,
+  ${MODEL_TERMS_SHAPE}
 }
 
 reading:
@@ -98,6 +111,13 @@ times: local Ho Chi Minh City time, 24-hour, resolved against "Today" below to t
 - Leave "times" empty when no time is named or implied.
 
 price_vnd: the monthly rent the agent quoted in this reply, as an integer in dong. "tr" / "triệu" = million, "15tr5" = 15500000, "15,5tr" = 15500000, "k" = thousand. Null when no price is mentioned, or when it is quoted in another currency.
+
+terms: what the agent states in this reply about this unit's lease - we may have asked about the deposit, the minimum lease, pets and fees. Only what they say, never what is typical. Use null and [] for anything they do not say.
+- deposit_months: in months of rent. "cọc 2 tháng" = 2, "cọc 1-2 tháng" = [1, 2], "cọc 1 đóng 3" (one month's deposit, three months paid ahead) = 1. A deposit given as an amount ("cọc 30tr") is null.
+- min_lease_months: their answer to how long the shortest lease is - "tối thiểu 6 tháng", "HĐ 1 năm em", "thuê ít nhất 6 tháng" = 6, 12, 6. A lower price offered for a longer lease is not a minimum.
+- pets: "cho nuôi thú cưng", "nuôi pet thoải mái" = "ALLOWED"; "không nuôi thú cưng", "không nhận pet" = "NOT_ALLOWED"; a condition ("chó nhỏ thì được", "tùy chủ nhà") = null.
+- fees: each charge they name, its name in English. "phí quản lý 500k" = {"name": "Management fee", "included": false, "amount": "500,000 VND/month"}; "điện 3.5k/số" = Electricity, "3,500 VND/kWh"; "nước 100k/người" = Water, "100,000 VND/person"; "điện nước giá nhà nước" = Electricity and Water, each "government rate"; "bao phí quản lý", "đã gồm phí quản lý" = Management fee, "included": true; "gửi xe máy 150k" = {"name": "Motorbike parking", "included": false, "amount": "150,000 VND/month"}. Never a phone number, in a name or an amount.
+- available_from: "now" only when they say it is empty or can be moved into now ("trống sẵn", "vào ở ngay") - "còn" (still for rent) is not "now". A date when they name one ("trống từ 1/12" = the next 1 December). Else null.
 
 confident: false if the reply is ambiguous, sarcastic, or you had to guess a date.`;
 
@@ -174,6 +194,17 @@ export function interpretParse(raw: unknown, ctx: ParseContext): ParseSuggestion
     if (!times.includes(iso)) times.push(iso);
   }
 
+  // Terms: the readers' bounds, then no phone number in what a renter may be
+  // shown (invariant 4) - a fee's name and amount are printed in their plan.
+  // Dropped quietly rather than flagged: `problems` are about the outcome, and
+  // a parking line with a guard's number in it is no reason to doubt one.
+  const read = termsFromModel(r.terms, ctx.now);
+  const terms: LeaseTerms = {
+    ...read,
+    fees: read.fees.filter(f =>
+      ![f.label, f.amount ?? ''].some(s => containsPhoneNumber(s) || containsInternationalNumber(s))),
+  };
+
   const quoted = Number.isInteger(r.price_vnd) && (r.price_vnd as number) > 0 ? r.price_vnd as number : null;
   const priceMoved = quoted != null && ctx.priceVnd > 0
     && Math.abs(quoted - ctx.priceVnd) / ctx.priceVnd > PRICE_TOLERANCE;
@@ -210,7 +241,9 @@ export function interpretParse(raw: unknown, ctx: ParseContext): ParseSuggestion
     outcome = 'UNAVAILABLE_DATE';
   } else {
     outcome = null;
-    problems.push('This reply does not settle anything - save it and wait, or ask the agent again.');
+    problems.push(hasTerms(terms)
+      ? 'Only the terms - nothing settled about the viewing yet.'
+      : 'This reply does not settle anything - save it and wait, or ask the agent again.');
   }
 
   // Our own rules, run over the suggestion, so a bad one says why before the
@@ -238,5 +271,6 @@ export function interpretParse(raw: unknown, ctx: ParseContext): ParseSuggestion
     confidence: r.confident === true && problems.length === 0 && outcome != null ? 'HIGH' : 'LOW',
     problems,
     model: PARSE_MODEL,
+    terms,
   };
 }

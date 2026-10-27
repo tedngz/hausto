@@ -140,12 +140,34 @@ Where they are used:
   "Request viewing" has us ask the agent.
 - **The AI operator's drafts to renters** (`renter-reply.ts`) carry the same
   line per place; a term the ad leaves out is "not in the facts", so the draft
-  says we will check and is marked as needing the agent.
+  says we will check and is marked as needing the agent - unless the agent
+  has told us, which follows as "The agent told us (date): ..."
+  (`agentTermsForPrompt`) and is given as "the agent says".
 - **The first message to each agent** (`draftForRealtor`) asks about whatever
   the ad leaves out (`unknownTerms`, `askAgentVi`): "Anh/chị cho em hỏi thêm:
   cọc mấy tháng, ...". Availability is not on that list - it is asked every
   time already - and a re-ask after new times does not repeat it. The ops
   console shows each place's stated terms on its card.
+- **The agent's answer** (2026-10-26) is read by paste-parse with the rest of
+  the reply and recorded per item as `LEASE_TERMS_RECORDED` (§3, §4) - by
+  approving the AI operator's proposal, or by hand on the card - and goes to
+  the renter in the plan, one line per stop, over the ad's terms (§9).
+
+**An agent's answer never updates these columns** (2026-10-26). The columns
+say what the ad states and when it was
+read: chat-ai tells renters "the ad says" from them, and
+`verify-external-listings` rewrites them whole on every re-read because they go
+stale. An agent's answer is one person's word on one day, for one request - two
+agents for the same unit can quote different deposits, and an agent's "no pets"
+can be a landlord's "ask me". Writing it into the columns would make "the ad
+says" untrue, and would need a provenance mark per column and a rule in every
+writer (the crawl, the admin recrawl, verification) to keep the agent's value
+from being overwritten - and a value nothing overwrites is one that never goes
+stale out, the opposite of why verification refreshes them. So it stays on the
+request's log. The cost is that the next request's first message asks that
+agent again: one line in a message that goes anyway, and a current answer. If
+the repetition starts to cost, read the latest `LEASE_TERMS_RECORDED` for the
+listing across requests, dated, when drafting - rather than write the columns.
 
 Everything reads these columns on its own query (`loadTerms`) and treats a
 failed read as "not stated", because edge functions and the migration that
@@ -606,6 +628,7 @@ Event types:
 | `ITEM_NUDGED` | item | `{attempt, message_id?}` |
 | `REALTOR_NOTIFIED` | item | `{decision, message_id}` - `decision` ∈ `CONFIRM`, `RELEASE`. Moves no state; sets `notified` on the item view |
 | `VIEWING_DETAILS_RECORDED` | item | `{meeting_point, agent_first_name, share_phone}` - what the viewing-day message needs (§9). The latest stands; moves no state; sets `details` on the item view |
+| `LEASE_TERMS_RECORDED` | item | `{availability, available_from, min_lease_months, deposit_months_min, deposit_months_max, pets_allowed, fees, reply_message_id?, note?}` - what the agent said about the terms (§0 "Lease terms", §4), under the listing columns' names (`termsPayload`). Read by `termsFromPayload` against the columns' bounds: a value outside them is dropped, and a payload stating nothing valid is ignored rather than clearing what stood. The latest stands whole, in any item state, and survives `AVAILABILITY_CHANGED` - it is about the place, not the day. Moves no state; sets `terms` (with `recordedAt`) on the item view |
 | `VIEWING_DAY_SENT` | request | `{date, message_id, item_ids[], shared_phone_item_ids[]}` - the viewing-day message for one Ho Chi Minh City date, written on every request it covered. Moves no state; the scheduler reads it so a day is sent once |
 | `ITINERARY_ASSEMBLED` | request | `{ordered_item_ids[], warnings[]}` |
 | `ITINERARY_DELIVERED` | request | `{message_id}` |
@@ -712,6 +735,16 @@ Slots are not limited to the renter's windows: the operator can add any date
 and time the agent named, in Ho Chi Minh City time, with a length of 30-90
 minutes.
 
+**The same reading reports the lease terms the agent states** (2026-10-26) -
+the first message asks about whatever the ad leaves out (§0 "Lease terms").
+The model answers in the shape the listing extraction uses
+(`MODEL_TERMS_SHAPE`), held to the same bounds (`termsFromModel`), and a fee
+whose name or amount carries a phone number is dropped. The terms are no part
+of the outcome - "deposit two months" is none of the seven - and do not touch
+its confidence or problems; a reply that is only terms reads `UNCLEAR`, with
+"Only the terms" as its problem. The console offers them to the card's terms
+form; the planner proposes them as `LEASE_TERMS` (§10).
+
 ### The rest of the operator's actions
 
 Everything an operator can do is one call in `_shared/viewing/ops-actions.ts`,
@@ -729,6 +762,7 @@ same actions under `AGENT:<version>`, never a second implementation.
 | `RECORD_CONTACT` | item | `realtors` (by E.164), `request_items.realtor_id`, `REALTOR_RESOLVED {method: MANUAL}`; enriches `external_properties.realtor_id` and `realtor_identities`; completes `RESOLVE_REALTOR` |
 | `NOTIFY_REALTOR` | item | OUT row, `REALTOR_NOTIFIED`; refused unless the log says that decision is owed |
 | `VIEWING_DETAILS` | item | `VIEWING_DETAILS_RECORDED`; refused unless the item is `CONFIRMED`, when the free text carries any phone number, or when `sharePhone` is true and the item has no agent contact (§9) |
+| `LEASE_TERMS` | item | `LEASE_TERMS_RECORDED` from `{terms, replyMessageId?, note?}`, in any item state. Typed fields only (invariant 2), checked by `checkTerms`: a deposit of 0.5-6 months in halves, a minimum lease of 1-60 whole months, pets yes or no, availability with a date only when "soon", up to 10 fees of a `FEE_KINDS` kind - refused rather than trimmed when outside them or when nothing is stated, and when a fee's name or amount carries any phone number, since the renter reads them (§9). The latest record stands whole, so the console and the planner send what was on file with what is new. `note` is free text nothing reads; `reply_message_id` is kept when the reply given is this item's |
 | `REPLY` | request | `messages` via `sendFreeForm` (window and 3-in-a-row rules apply), `REPLY_SENT` |
 | `ACK_REPLIES` | request | `REPLIES_ACKNOWLEDGED`; refused when nothing is waiting |
 | `CANCEL_REQUEST` | request | `REQUEST_CANCELLED {reason, note?}`; completes open `CONFIRM_REALTOR`, `NUDGE_REALTOR` and `RESOLVE_REALTOR` jobs. Refunds nothing: requests are free, and a Pass is refunded by a person, in Polar, under the written policy (§9) - a locked-in plan that collapses is not one of its conditions. The lock-in deadline reaches this same action as `SYSTEM` |
@@ -1091,6 +1125,22 @@ number even by mistake (§6 by shape, not by discipline).
 
 Nothing says "booked". At delivery the request is `DELIVERED`, not `CONFIRMED`
 - the renter has not agreed to anything - and §6 forbids implying otherwise.
+
+**Each stop carries one line of terms** (2026-10-26), under its price, when
+anything is known: the deposit, the minimum lease, pets, the move-in date, and
+up to three fees - the ones that cost money first - with money written as the
+plan writes it (`Electricity 3.500 ₫/kWh`). The renter is deciding which
+viewings to keep, and the deposit is part of that. It is the agent's answer
+(`LEASE_TERMS_RECORDED`) over the ad's terms (`stopTerms`, `termsLine` in
+`itinerary.ts`), since the first message asked the agent only what the ad
+left out. Never the ad's availability: a crawl's "available now" can be weeks
+old, and the agent has just agreed to show the place. A stop nobody has said
+anything about has no line, and other times on offer carry none. Facts about
+the place, like the price above them - nothing says they are agreed.
+`deliver()` reads the ad's terms on their own query (`loadTerms`), and the
+console's preview is given them too, so it is still the message. A plan sent
+before an agent's terms are recorded goes without them; the planner's
+`DELIVER` proposal says so (§10).
 
 **Nothing confirmed is one of two messages** (2026-10-09, owner's decision), as
 `deliver()` decides it from the log:
@@ -1457,9 +1507,26 @@ same check as times are ticked and offers the same message. A clash that gets
 to assembly anyway is still `ESCALATE` (`ITINERARY_CLASH`), and the console's
 send stays disabled.
 
+**Terms an agent states are proposed on their own** (2026-10-26), as
+`LEASE_TERMS` under `TERMS:<item>:<reply>`, beside whatever the same reply's
+`OUTCOME:` key proposes. The input carries what was on file with the reply's
+terms over it, since the latest record stands whole, and the reply's id. It
+lives until terms are recorded after that reply, by approving it or by hand,
+and an outcome neither answers it nor is answered by it (`settlementFor`):
+recording the same terms by hand is `AGREED`, other terms `CORRECTED`
+(`sameTerms`), anything else nothing. A reply is still read once: a later pass
+knows its terms from the proposal made of them (`heardTerms`), so they outlive
+the reply being read for its outcome. A reply that is only terms about a place
+already settled proposes no `ESCALATE` - there is nothing for a person to
+decide - and a pass that finds its `TERMS:` key and no `OUTCOME:` key reads
+nothing more from it; while the agent still owes a time, it escalates as
+before. The `DELIVER` proposal asks for pending terms to be recorded first,
+since the plan prints them (§9). `LEASE_TERMS` is not in
+`AUTONOMOUS_ACTIONS` and has no gate of its own, so it never runs alone.
+
 | `operator_proposals` | |
 |---|---|
-| `dedupe_key` | One proposal per situation, ever (`CONTACT:<item>`, `NUDGE:<item>:<n>`, `OUTCOME:<item>:<reply>`, `NOTIFY:<item>:<decision>`, `DELIVER:<request>`, `RENTER:<message>`, `NO_CONTACT:<item>`). Unique per request, so a rejected proposal is not made again. |
+| `dedupe_key` | One proposal per situation, ever (`CONTACT:<item>`, `NUDGE:<item>:<n>`, `OUTCOME:<item>:<reply>`, `TERMS:<item>:<reply>`, `NOTIFY:<item>:<decision>`, `DELIVER:<request>`, `RENTER:<message>`, `NO_CONTACT:<item>`). Unique per request, so a rejected proposal is not made again. |
 | `action`, `input` | An ops action and its input; approving runs exactly this, with the operator's rewording. |
 | `status` | `PENDING` → `APPROVED` / `REJECTED` (a button), `AGREED` / `CORRECTED` (the operator did it by hand, the same or differently), or `SUPERSEDED` (the request moved on). From stage 2, also `EXECUTED` (ran alone) and `FLAGGED` (ran alone, marked wrong). |
 | `executed_action`, `executed_input`, `edited` | What was actually done, when it differed or was reworded. |

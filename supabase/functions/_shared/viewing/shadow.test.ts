@@ -14,6 +14,7 @@ import { SupabaseRealtorMessageStore } from '../realtor/store.ts';
 import { performOpsAction, type OpsDeps } from './ops-actions.ts';
 import { runPlanner } from './plan-run.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
+import { NO_TERMS } from '../lease-terms.ts';
 
 const ACTOR = 'OPS:op-1';
 let db: FakeDb;
@@ -284,5 +285,68 @@ describe('drafted renter replies', () => {
     await draftPlan();
     await draftPlan();
     expect(seen).toHaveLength(1);
+  });
+});
+
+describe('terms an agent states', () => {
+  const tick = () => new Promise(r => setTimeout(r, 5));
+  const terms = { ...NO_TERMS, fees: [], depositMonthsMin: 2, depositMonthsMax: 2, petsAllowed: false };
+  const planWith = (s: ParseSuggestion) => {
+    // deno-lint-ignore no-explicit-any
+    return runPlanner(db as any, { now: new Date('2026-09-27T02:00:00Z'), parse: () => { parses += 1; return Promise.resolve(s); } });
+  };
+
+  it('proposes them beside the outcome, keeps them past it, and records them on approval', async () => {
+    await act({ action: 'CONTACTED', itemId: 'i1', message: 'Chào anh' });
+    await tick();
+    await act({ action: 'REALTOR_REPLY', itemId: 'i1', message: 'Thứ 3 9h được em, cọc 2 tháng, không nuôi thú cưng' });
+    await planWith({ ...suggestion, terms });
+    await planWith({ ...suggestion, terms });
+    expect(parses).toBe(1);
+
+    const reply = db.tables.realtor_messages.find(m => m.direction === 'IN')!;
+    expect(byKey(`OUTCOME:i1:${reply.id}`)).toMatchObject({ action: 'OUTCOME', status: 'PENDING' });
+    expect(byKey(`TERMS:i1:${reply.id}`)).toMatchObject({ action: 'LEASE_TERMS', status: 'PENDING' });
+
+    // The outcome first: it says nothing about the terms, which stay asked.
+    await act({ action: 'APPROVE_PROPOSAL', proposalId: byKey(`OUTCOME:i1:${reply.id}`).id });
+    await tick();
+    const after = await planWith({ ...suggestion, terms });
+    expect(parses).toBe(1);
+    expect(after.superseded).toBe(0);
+    expect(byKey(`TERMS:i1:${reply.id}`).status).toBe('PENDING');
+
+    expect((await act({ action: 'APPROVE_PROPOSAL', proposalId: byKey(`TERMS:i1:${reply.id}`).id })).status).toBe(200);
+    const recorded = db.tables.events.find(e => e.type === 'LEASE_TERMS_RECORDED')!;
+    expect(recorded).toMatchObject({ actor: ACTOR, item_id: 'i1', payload: { deposit_months_min: 2, pets_allowed: false, reply_message_id: reply.id } });
+    expect(byKey(`TERMS:i1:${reply.id}`).status).toBe('APPROVED');
+    expect(byKey(`OUTCOME:i1:${reply.id}`).status).toBe('APPROVED');
+
+    // Answered: nothing more about it, ever.
+    await tick();
+    const last = await planWith({ ...suggestion, terms });
+    expect(last.proposed).toBe(0);
+    expect(proposals().filter(p => p.action === 'LEASE_TERMS')).toHaveLength(1);
+  });
+
+  it('records a reply that is only terms about a settled viewing, without a person, and reads it once', async () => {
+    await act({ action: 'CONTACTED', itemId: 'i1', message: 'Chào anh' });
+    await act({ action: 'OUTCOME', itemId: 'i1', outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-29T02:00:00.000Z', durationMinutes: 30 }] });
+    await tick();
+    await act({ action: 'REALTOR_REPLY', itemId: 'i1', message: 'À cọc 2 tháng nha em, không nuôi thú cưng' });
+    const onlyTerms: ParseSuggestion = {
+      outcome: null, slots: [], actualPriceVnd: null, note: 'Deposit two months, no pets.', confidence: 'LOW',
+      problems: ['Only the terms - nothing settled about the viewing yet.'], model: 'm', terms,
+    };
+    await planWith(onlyTerms);
+    await planWith(onlyTerms);
+    expect(parses).toBe(1);
+
+    const reply = db.tables.realtor_messages.filter(m => m.direction === 'IN').pop()!;
+    expect(proposals().filter(p => p.item_id === 'i1').map(p => p.dedupe_key)).toEqual([`TERMS:i1:${reply.id}`]);
+
+    // Done by hand instead, with the pets answer the other way: a correction.
+    await act({ action: 'LEASE_TERMS', itemId: 'i1', terms: { ...terms, petsAllowed: true } });
+    expect(byKey(`TERMS:i1:${reply.id}`)).toMatchObject({ status: 'CORRECTED', executed_action: 'LEASE_TERMS' });
   });
 });

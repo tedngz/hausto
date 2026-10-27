@@ -26,7 +26,7 @@ import { NUDGES_BEFORE_NO_RESPONSE } from './outcomes.ts';
 import { assembleItinerary, busySlots, clashesWith, freeOnOtherDays, type BusySlot } from './itinerary.ts';
 import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft, clashDraft } from '../realtor/drafts.ts';
 import type { AgentUnit } from '../realtor/unit.ts';
-import type { AskableTerm } from '../lease-terms.ts';
+import { describeTerms, hasTerms, mergeTerms, NO_TERMS, type AskableTerm, type LeaseTerms } from '../lease-terms.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
 import type { DraftResult } from './renter-reply.ts';
 import { DAY_PART_HOURS, type DayPart } from './intake.ts';
@@ -35,7 +35,7 @@ import { DAY_PART_HOURS, type DayPart } from './intake.ts';
 export const AGENT_VERSION = 'shadow-v1';
 
 export const PROPOSED_ACTIONS = [
-  'CONTACTED', 'NUDGE', 'OUTCOME', 'NOTIFY_REALTOR', 'DELIVER', 'CANCEL_REQUEST', 'REPLY', 'ESCALATE',
+  'CONTACTED', 'NUDGE', 'OUTCOME', 'LEASE_TERMS', 'NOTIFY_REALTOR', 'DELIVER', 'CANCEL_REQUEST', 'REPLY', 'ESCALATE',
 ] as const;
 export type ProposedAction = typeof PROPOSED_ACTIONS[number];
 
@@ -61,6 +61,21 @@ export interface UnreadReply {
   suggestion: ParseSuggestion | null;
 }
 
+/**
+ * Lease terms an agent's reply stated, as paste-parse read them. From this
+ * pass's reading, or from the proposal an earlier pass made of it - a reply
+ * is read once - and whether or not the reply is still unread: an outcome
+ * recorded from the same words does not record its terms.
+ */
+export interface HeardTerms {
+  itemId: string;
+  messageId: string;
+  /** When the reply was stored. Terms recorded after it have answered it. */
+  at: string;
+  terms: LeaseTerms;
+  confidence: 'HIGH' | 'LOW';
+}
+
 export interface PlanInput {
   requestId: string;
   view: RequestView;
@@ -70,6 +85,7 @@ export interface PlanInput {
   /** When the renter expects to move in, for the first message to each agent. */
   moveInDate?: string | null;
   unreadReplies: UnreadReply[];
+  heardTerms?: HeardTerms[];
   /** A drafted answer to the renter's newest waiting reply, if one was attempted. */
   renterDraft?: RenterDraft;
   /**
@@ -294,6 +310,9 @@ export function planRequest(p: PlanInput): Proposal[] {
               : ''),
           confidence: s.confidence,
         });
+      } else if (s && !s.outcome && hasTerms(s.terms) && state.state !== 'PENDING' && state.state !== 'CONTACTED') {
+        // Only terms, about a place whose viewing is settled already: the
+        // terms proposal below is all there is to do with it.
       } else {
         propose({
           itemId: item.itemId, key, action: 'ESCALATE',
@@ -359,6 +378,27 @@ export function planRequest(p: PlanInput): Proposal[] {
     }
   }
 
+  // ── What agents said about the terms ──────────────────────────────────────
+  // The first message asks about whatever the ad leaves out, and the answer
+  // comes with the time or after it. It is recorded on its own (LEASE_TERMS),
+  // beside the outcome rather than in it - "deposit two months" is none of the
+  // seven - and proposed for every reply that stated terms until terms are
+  // recorded after that reply, by approving this or by hand. What is on file
+  // is carried, because the latest record stands whole.
+  for (const h of p.heardTerms ?? []) {
+    const state = view.items[h.itemId];
+    if (!state || !p.items.some(i => i.itemId === h.itemId) || !hasTerms(h.terms)) continue;
+    if (state.terms && Date.parse(state.terms.recordedAt) >= Date.parse(h.at)) continue;
+    const { recordedAt: _recordedAt, ...onFile } = state.terms ?? { ...NO_TERMS, recordedAt: '' };
+    propose({
+      itemId: h.itemId, key: `TERMS:${h.itemId}:${h.messageId}`, action: 'LEASE_TERMS',
+      input: { itemId: h.itemId, terms: mergeTerms(h.terms, onFile), replyMessageId: h.messageId },
+      rationale: `The agent stated terms: ${describeTerms(h.terms).join('; ')}.`
+        + (state.terms ? ' Recorded with what is already on file.' : ''),
+      confidence: h.confidence,
+    });
+  }
+
   // ── The itinerary ─────────────────────────────────────────────────────────
   // Once every agent has answered, and only once: the renter hears the plan
   // one time. Ordered by the clock - the rules warn about the orderings that
@@ -396,6 +436,11 @@ export function planRequest(p: PlanInput): Proposal[] {
     // the same one. New times are a new round of answers, and a new decision.
     const key = `DELIVER:${requestId}${busyOnly > 0 ? ':days' : ''}`
       + `${view.availabilityChanges > 0 ? `:t${view.availabilityChanges}` : ''}`;
+    // The plan prints each stop's terms, so ones heard and not yet recorded
+    // would be left out of the one message the renter gets.
+    const termsFirst = s.confirmed > 0 && out.some(x => x.action === 'LEASE_TERMS')
+      ? ' Record the agents\' terms first - the plan carries them.'
+      : '';
     if (clash) {
       propose({
         itemId: null, key, action: 'ESCALATE',
@@ -407,7 +452,7 @@ export function planRequest(p: PlanInput): Proposal[] {
         itemId: null, key, action: 'DELIVER',
         input: { requestId, order: byTime },
         rationale: s.confirmed > 0
-          ? `Every agent has answered: ${s.confirmed} of ${s.total} confirmed. Send the plan.`
+          ? `Every agent has answered: ${s.confirmed} of ${s.total} confirmed. Send the plan.${termsFirst}`
           : assembled.alternatives.length > 0
             ? 'Every agent has answered: none is free at the renter\'s times, but some offered others. Send them.'
             : busyOnly > 0

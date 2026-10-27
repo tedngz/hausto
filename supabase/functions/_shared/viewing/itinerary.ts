@@ -20,6 +20,7 @@
 import { formatVnd, hcmcLong, hcmcTime, hcmcDate } from './format.ts';
 import type { RequestView } from '../viewing-domain.ts';
 import { districtLabel, replyWithinText, SEARCH_NAME } from './place.ts';
+import { hasTerms, mergeTerms, NO_TERMS, type Fee, type LeaseTerms } from '../lease-terms.ts';
 
 /** ` - District 2` after a price, or nothing. Renters read names, not `D2` or `BINH_THANH`. */
 const inDistrict = (code: string | null): string => (code ? ` - ${districtLabel(code)}` : '');
@@ -31,6 +32,8 @@ export interface StopListing {
   districtCode: string | null;
   /** What the renter was shown at intake. */
   priceVndAtRequest: number;
+  /** What its ad states about the lease (lease-terms.ts loadTerms). Null when never read. */
+  terms?: LeaseTerms | null;
 }
 
 export interface ItineraryStop {
@@ -40,6 +43,21 @@ export interface ItineraryStop {
   priceVnd: number;
   startsAt: string;
   durationMinutes: number;
+  /** The agent's answer where we asked, the ad's where it said (stopTerms). Null when neither says. */
+  terms?: LeaseTerms | null;
+}
+
+/**
+ * What renting a stop involves, as far as anyone has said: the agent's answer
+ * (LEASE_TERMS_RECORDED) over the ad's terms, since the first message asked
+ * the agent only what the ad left out, and their word is the newer one. Not
+ * the ad's availability: a crawl's "available now" can be weeks old, and the
+ * agent has just agreed to show the place. Null when nothing is known.
+ */
+export function stopTerms(agent: LeaseTerms | null | undefined, ad: LeaseTerms | null | undefined): LeaseTerms | null {
+  const fromAd = ad ? { ...ad, availability: null, availableFrom: null } : NO_TERMS;
+  const merged = mergeTerms(agent ?? {}, fromAd);
+  return hasTerms(merged) ? merged : null;
 }
 
 export type WarningKind = 'OVERLAP' | 'DISTRICT_HOP' | 'UNKNOWN_DISTRICT';
@@ -140,6 +158,7 @@ export function assembleItinerary(
     }
     const slot = firstSlot(item.slots);
     const listing = byItem.get(itemId);
+    const terms = listing ? stopTerms(item.terms, listing.terms) : null;
     if (!slot || !listing) {
       // A confirmed item with no usable slot is a data fault, not a viewing.
       // It is reported rather than silently rendered as "time to be confirmed".
@@ -166,6 +185,7 @@ export function assembleItinerary(
       priceVnd: listing.priceVndAtRequest,
       startsAt: slot.starts_at,
       durationMinutes: slot.duration_minutes,
+      ...(terms ? { terms } : {}),
     });
   }
 
@@ -286,6 +306,53 @@ export interface ItineraryMessage {
   lockInLine?: string;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A fee in the plan: money as the plan writes money (`3.500 ₫/kWh`), and the label as a phrase. */
+function feeText(f: Fee): string {
+  const label = /^[A-Z][a-z]/.test(f.label) ? f.label[0].toLowerCase() + f.label.slice(1) : f.label;
+  if (f.included) return `${label} included`;
+  if (!f.amount) return `${label} extra`;
+  if (f.amount === 'government rate') return `${label} at the government rate`;
+  const amount = f.amount.replace(/(\d{1,3}(?:,\d{3})+|\d+)\s*VND\b/g, (_, n: string) => formatVnd(Number(n.replace(/,/g, ''))));
+  return `${label} ${amount}`;
+}
+
+/** At most this many fees in the line: three stops make three lines, and they have to stay short. */
+const FEES_IN_LINE = 3;
+
+/**
+ * One short line of what renting a stop involves (`stopTerms`), or null. The
+ * fees that cost money first, since those are what a renter budgets for.
+ * Facts about the place, like the price line above it - nothing here is
+ * agreed, and nothing says it is.
+ */
+export function termsLine(t: LeaseTerms | null | undefined): string | null {
+  if (!t) return null;
+  const n = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
+  const parts: string[] = [];
+  if (t.depositMonthsMin !== null) {
+    const hi = t.depositMonthsMax ?? t.depositMonthsMin;
+    const range = hi > t.depositMonthsMin ? `${n(t.depositMonthsMin)}-${n(hi)}` : n(hi);
+    parts.push(`deposit ${range} month${hi === 1 ? '' : 's'}`);
+  }
+  if (t.minLeaseMonths !== null) {
+    const m = t.minLeaseMonths;
+    parts.push(m >= 12 && m % 12 === 0 ? `minimum lease ${m / 12} year${m === 12 ? '' : 's'}` : `minimum lease ${m} month${m === 1 ? '' : 's'}`);
+  }
+  if (t.petsAllowed !== null) parts.push(t.petsAllowed ? 'pets allowed' : 'no pets');
+  if (t.availability === 'AVAILABLE_NOW') parts.push('move in now');
+  else if (t.availability === 'AVAILABLE_SOON' && t.availableFrom) {
+    const [, m, d] = t.availableFrom.split('-').map(Number);
+    parts.push(`move in from ${d} ${MONTHS[m - 1]}`);
+  }
+  const rank = (f: Fee) => (!f.included && f.amount ? 0 : !f.included ? 1 : 2);
+  parts.push(...[...t.fees].sort((a, b) => rank(a) - rank(b)).slice(0, FEES_IN_LINE).map(feeText));
+  if (parts.length === 0) return null;
+  const line = parts.join(', ');
+  return line[0].toUpperCase() + line.slice(1);
+}
+
 /** `Sat 28 Sep 10:00 or Sun 29 Sep 15:00` - the day named each time, since these are choices, not a route. */
 function offeredTimes(startsAt: string[]): string {
   const times = startsAt.map(t => hcmcLong(t));
@@ -325,6 +392,10 @@ export function renderItinerary(m: ItineraryMessage): string {
     lastDate = date;
     lines.push(`${i + 1}. ${when} - ${stop.listingTitle}`);
     lines.push(`   ${formatVnd(stop.priceVnd)}/month${inDistrict(stop.districtCode)}`);
+    // What the agent told us, over what the ad says - the renter is deciding
+    // which to keep, and the deposit is part of that.
+    const terms = termsLine(stop.terms);
+    if (terms) lines.push(`   ${terms}`);
   });
 
   const alternatives = m.alternatives ?? [];
