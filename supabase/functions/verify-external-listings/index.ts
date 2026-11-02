@@ -5,6 +5,7 @@ import { normalizeListingCopy } from '../_shared/listing-language.ts';
 import { repricedCopy } from '../_shared/repriced-copy.ts';
 import { AGENCY_FEED_SOURCES, agencySourceOf, verifyAgencyListing } from '../_shared/agency-sources.ts';
 import { type LeaseTerms, termsColumns } from '../_shared/lease-terms.ts';
+import { SUSPECT_REVERIFY_HOURS, verificationDueFilter } from '../_shared/verify-due.ts';
 import { browserlessEnabled } from '../_shared/browserless.ts';
 
 const corsHeaders = {
@@ -20,11 +21,8 @@ const CONCURRENCY = 2;
 // Tiered re-verification cadence, tuned to the HCMC market where units lease
 // within 2-6 weeks of posting: a listing's entire high-churn life is its first
 // ~42 days, so that whole window gets the fast cadence. Survivors past it
-// (overpriced / long-tail) churn slower.
-const RECENT_LISTING_DAYS = 42;      // the 6-week lease window = high churn risk
-const RECENT_REVERIFY_DAYS = 2;      // inside the lease window: check every 2 days
-const OLD_REVERIFY_DAYS = 5;         // past the window: every 5 days
-const SUSPECT_REVERIFY_HOURS = 6;    // already failed once: confirm or clear it fast
+// (overpriced / long-tail) churn slower. The tiers, and which listings they
+// make due, live in _shared/verify-due.ts.
 const RESURRECTION_BATCH = 20;       // dead nhatot rows re-probed per run - see resurrectNhatotAds
 const MAX_UNVERIFIED_AGE_DAYS = 45;  // unconfirmed past the lease window + grace: archive
 
@@ -415,9 +413,6 @@ Deno.serve(async (req) => {
   try {
     const nowMs = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
-    const recentCrawlCutoff = new Date(nowMs - RECENT_LISTING_DAYS * dayMs).toISOString();
-    const recentReverifyCutoff = new Date(nowMs - RECENT_REVERIFY_DAYS * dayMs).toISOString();
-    const oldReverifyCutoff = new Date(nowMs - OLD_REVERIFY_DAYS * dayMs).toISOString();
     const suspectReverifyCutoff = new Date(nowMs - SUSPECT_REVERIFY_HOURS * 60 * 60 * 1000).toISOString();
     const ageCapCutoff = new Date(nowMs - MAX_UNVERIFIED_AGE_DAYS * dayMs).toISOString();
 
@@ -454,7 +449,9 @@ Deno.serve(async (req) => {
     // Pull only listings due for a check, oldest-verified first (never-verified first).
     // Due = never verified, OR one dead result already on record (confirm or clear
     // it within hours rather than leaving a probably-gone listing up for days),
-    // OR recent listing past its 2-day cadence, OR old listing past its 5-day one.
+    // OR recent listing past its 2-day cadence, OR old listing past its 5-day one -
+    // counted from the last price read for the sources a check re-reads, which a
+    // crawl seeing them in the feed does not reset (verify-due.ts).
     // batdongsan is pulled separately below, under its own budget.
     const { data: tiered, error } = await supabase
       .from('external_properties')
@@ -462,12 +459,7 @@ Deno.serve(async (req) => {
       .eq('is_active', true)
       .neq('source', 'concierge')
       .neq('source', 'batdongsan')
-      .or(
-        `last_verified_at.is.null,` +
-        `and(verification_failures.gte.1,last_verified_at.lte.${suspectReverifyCutoff}),` +
-        `and(crawled_at.gte.${recentCrawlCutoff},last_verified_at.lte.${recentReverifyCutoff}),` +
-        `last_verified_at.lte.${oldReverifyCutoff}`
-      )
+      .or(verificationDueFilter(nowMs, [...PRICE_CONFIRMING_SOURCES]))
       .order('last_verified_at', { ascending: true, nullsFirst: true })
       .limit(BATCH_SIZE);
 
