@@ -183,12 +183,12 @@ jobs:
           # command per version would be 240 round trips.
           if [ -n "${stale//[[:space:]]/}" ]; then
             echo "::group::Marking stale remote versions reverted"
-            xargs -n 50 supabase migration repair --linked --status reverted <<<"$stale"
+            xargs -n 50 supabase migration repair --linked --yes --status reverted <<<"$stale"
             echo "::endgroup::"
           fi
           if [ -n "${unrecorded//[[:space:]]/}" ]; then
             echo "::group::Marking local versions applied"
-            xargs -n 50 supabase migration repair --linked --status applied <<<"$unrecorded"
+            xargs -n 50 supabase migration repair --linked --yes --status applied <<<"$unrecorded"
             echo "::endgroup::"
           fi
 
@@ -215,6 +215,8 @@ jobs:
           # applied. An older one the remote never recorded stays skipped and
           # shows in the listing above, rather than being replayed blind onto a
           # schema that has moved on since.
-          supabase db push --linked
+          # --yes: the CLI asks before writing to production and, with no
+          # terminal, applies nothing and exits 1 (#233, 2026-11-04).
+          supabase db push --linked --yes
           supabase migration list --linked >> "$GITHUB_STEP_SUMMARY" || true
           echo "Applied from \`${GITHUB_SHA:0:7}\`." >> "$GITHUB_STEP_SUMMARY"
