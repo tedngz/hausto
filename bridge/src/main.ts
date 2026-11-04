@@ -5,7 +5,7 @@ import { Journal } from './journal.ts';
 import { HttpHaustoApi } from './hausto.ts';
 import { ZcaClient } from './zalo-zca.ts';
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 function env(name: string, fallback?: string): string {
   const v = (process.env[name] ?? fallback ?? '').trim();
@@ -23,7 +23,27 @@ if (token.length < 32) {
   process.exit(1);
 }
 
-const pollMs = Number(process.env.POLL_MS ?? 30_000);
+// Each check-in is a function call and a handful of queries on Supabase's free
+// plan, and at every 30 seconds they were the largest share of the project's
+// logs (2026-11-03). An approved message waits at most this long; a reply from
+// an agent does not wait at all - it wakes the loop (below).
+const pollMs = Number(process.env.POLL_MS ?? 120_000);
+/** After a reply wakes the loop, this long for the rest of a burst to arrive, so it goes in one call. */
+const REPLY_SETTLE_MS = 5_000;
+
+let wake: (() => void) | null = null;
+function nap(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    const done = () => { wake = null; resolve(); };
+    const timer = setTimeout(done, ms);
+    wake = () => {
+      clearTimeout(timer);
+      wake = null;
+      setTimeout(resolve, REPLY_SETTLE_MS);
+    };
+  });
+}
+
 const bridge = new Bridge(
   new HttpHaustoApi(url, token),
   new ZcaClient(env('ZALO_CREDENTIALS_FILE', './credentials.json')),
@@ -34,6 +54,8 @@ const bridge = new Bridge(
     dailyCap: Number(process.env.DAILY_CAP ?? 60),
     minGapMs: Number(process.env.MIN_GAP_MS ?? 20_000),
     resolvePerPass: Number(process.env.RESOLVE_PER_PASS ?? 3),
+    watchRefreshMs: Number(process.env.WATCH_REFRESH_MS ?? 600_000),
+    onIncoming: () => wake?.(),
   },
 );
 
@@ -55,7 +77,7 @@ async function loop(): Promise<void> {
       // rather than looping forever on a broken one.
       if (failures >= 10) process.exit(1);
     }
-    await new Promise(r => setTimeout(r, pollMs));
+    await nap(pollMs);
   }
 }
 

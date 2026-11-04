@@ -23,12 +23,23 @@ export interface BridgeOptions {
   minGapMs: number;
   /** Numbers looked up on Zalo per pass, so a long watch list is resolved gradually. */
   resolvePerPass: number;
+  /**
+   * How often to ask Hausto for the watch list again. Working it out is most of
+   * a pull's queries and it changes when a request does, not every poll. An
+   * agent the device is handed a message for is watched from that pass on
+   * regardless, so this only delays noticing someone added or dropped by hand.
+   */
+  watchRefreshMs?: number;
+  /** Called when a watched agent's message arrives, so the loop can forward it without waiting out the poll. */
+  onIncoming?: () => void;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
 }
 
 /** A number not found on Zalo is tried again after this long - people do join. */
 const RETRY_UNRESOLVED_MS = 6 * 3_600_000;
+
+const DEFAULT_WATCH_REFRESH_MS = 10 * 60_000;
 
 export interface PassResult { forwarded: number; sent: number; failed: number; capped: boolean }
 
@@ -37,6 +48,7 @@ export class Bridge {
   private readonly phoneByUid = new Map<string, string>();
   private readonly notOnZalo = new Map<string, number>();
   private watch = new Set<string>();
+  private watchFetchedAt = Number.NEGATIVE_INFINITY;
   private inbox: Inbound[] = [];
   private lastSendAt = 0;
   private lastError: string | null = null;
@@ -66,6 +78,7 @@ export class Bridge {
     const photos = (m.photos ?? []).filter(u => u.startsWith('https://')).slice(0, 10);
     if (!text && photos.length === 0) return;
     this.inbox.push({ fromPhone: phone, text, providerMessageId: m.msgId, ...(photos.length ? { photos } : {}) });
+    this.opts.onIncoming?.();
   }
 
   private async resolve(phone: string): Promise<string | null> {
@@ -101,12 +114,20 @@ export class Bridge {
 
     // 2. What to send, and whose replies to listen for.
     const day = hcmcDay(this.now());
+    const pulledAt = this.now().getTime();
+    const withWatch = pulledAt - this.watchFetchedAt >= (this.opts.watchRefreshMs ?? DEFAULT_WATCH_REFRESH_MS);
     const pulled = await this.api.pull({
       device: this.opts.device, version: this.opts.version,
-      sentToday: this.journal.sentOn(day), error: this.lastError,
+      sentToday: this.journal.sentOn(day), error: this.lastError, withWatch,
     });
     this.lastError = null;
-    this.watch = new Set(pulled.watch);
+    if (pulled.watch) {
+      this.watch = new Set(pulled.watch);
+      this.watchFetchedAt = pulledAt;
+    }
+    // Anyone Hausto hands a message for is an agent it is talking to - watched
+    // now, so a quick reply is not dropped while the list is between refreshes.
+    for (const m of pulled.outbox) this.watch.add(m.phone);
 
     // Resolve watched numbers ahead of time, a few per pass, so a reply from
     // an agent contacted by hand before the bridge existed is still recognised.

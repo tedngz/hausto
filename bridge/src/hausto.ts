@@ -1,12 +1,14 @@
 // The device's side of the zalo-bridge edge function.
 
 export interface OutboxMessage { messageId: string; phone: string; body: string }
-export interface PullResponse { paused: boolean; outbox: OutboxMessage[]; watch: string[] }
+/** `watch` is there when the pull asked for it (`withWatch`); otherwise the device keeps the list it has. */
+export interface PullResponse { paused: boolean; outbox: OutboxMessage[]; watch?: string[] }
+export interface Heartbeat { device: string; version: string; sentToday: number; error: string | null; withWatch: boolean }
 export interface Ack { messageId: string; sent: boolean; providerId?: string; error?: string }
 export interface Inbound { fromPhone: string; text: string; providerMessageId: string; photos?: string[] }
 
 export interface HaustoApi {
-  pull(heartbeat: { device: string; version: string; sentToday: number; error: string | null }): Promise<PullResponse>;
+  pull(heartbeat: Heartbeat): Promise<PullResponse>;
   ack(acks: Ack[]): Promise<void>;
   inbound(messages: Inbound[]): Promise<void>;
 }
@@ -26,7 +28,7 @@ export class HttpHaustoApi implements HaustoApi {
     return data as T;
   }
 
-  pull(heartbeat: { device: string; version: string; sentToday: number; error: string | null }) {
+  pull(heartbeat: Heartbeat) {
     return this.call<PullResponse>({ action: 'pull', ...heartbeat });
   }
 

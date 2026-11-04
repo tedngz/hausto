@@ -28,7 +28,7 @@ Do not restructure it. Add only:
 |---|---|---|
 | `price_vnd` | `integer` | Canonical. `price` is `numeric` and holds USD for housingsgn rows (a live row reads `price = 730`, `price_display = '$730 / month'`). Convert on write; never read `price` for money decisions. |
 | `price_confidence` | `text` | `HIGH` / `LOW`, set by the trigger through `price_confidence_for(price_vnd, described_price_min_vnd, described_price_max_vnd)`. `LOW` when the price is outside 1M-500M, or more than 15% outside the range the title or description quotes. `LOW` rows stay searchable but cannot be shortlisted. |
-| `described_price_min_vnd`, `described_price_max_vnd` | `integer` | The lowest and highest monthly rent the title and description quote, read by `_shared/price-mentions.ts` and stored by `price-crosscheck` every 30 minutes over active rows. NULL when the text quotes none. A range, not one figure: an advert naming several units does not say which this row is, so any price inside it agrees. The reader skips deposits, fees, utilities, discounts, starting prices, nightly/yearly/per-m² rates and sales, because a figure it invents makes a real listing unrequestable while one it misses costs nothing. The text read is our English copy, written from the ad when it was stored, so wherever `verify-external-listings` takes a new price off a nhatot ad (a re-price, or a repost brought back) it rewrites the description from the same payload and stores the range with it (`_shared/repriced-copy.ts`). Otherwise the old copy quotes the old rent and the row goes LOW for disagreeing with itself, as the Terra Royal listing did on 2026-10-13. |
+| `described_price_min_vnd`, `described_price_max_vnd` | `integer` | The lowest and highest monthly rent the title and description quote, read by `_shared/price-mentions.ts` and stored by `price-crosscheck` every 3 hours over active rows (every 30 minutes until 2026-11-04, when the free plan's egress ran out). NULL when the text quotes none. A range, not one figure: an advert naming several units does not say which this row is, so any price inside it agrees. The reader skips deposits, fees, utilities, discounts, starting prices, nightly/yearly/per-m² rates and sales, because a figure it invents makes a real listing unrequestable while one it misses costs nothing. The text read is our English copy, written from the ad when it was stored, so wherever `verify-external-listings` takes a new price off a nhatot ad (a re-price, or a repost brought back) it rewrites the description from the same payload and stores the range with it (`_shared/repriced-copy.ts`). Otherwise the old copy quotes the old rent and the row goes LOW for disagreeing with itself, as the Terra Royal listing did on 2026-10-13. |
 | `bedrooms` | `smallint` | `rooms` is free text: `'2 Bedrooms'`, `'Studio'`, `'4+ Bedrooms'`. Zero of 115 active rows parse as a bare integer. `Studio` maps to `0`. |
 | `bedrooms_is_min` | `boolean` | True for `'4+ Bedrooms'`, so a `= 4` filter does not silently claim precision. |
 | `area_sqm` | `numeric` | `size` is free text; 17 of 115 active rows are numeric. |
@@ -1639,7 +1639,10 @@ for (`REALTOR_CONTACTED`, `ITEM_NUDGED`, `REALTOR_NOTIFIED`) waits on the row in
 - **pull** - a heartbeat, then up to 10 `QUEUED` messages claimed for a 10-minute
   lease (`claimed_at`), with the agent's number, and the **watch list**: agent
   numbers on requests from the last 21 days. Nothing while
-  `zalo_bridge_status.paused`.
+  `zalo_bridge_status.paused`. The device checks in every 2 minutes and asks
+  for the watch list every 10 (`withWatch`); an agent it is handed a message
+  for is watched from that pull, and a watched agent's reply wakes it at once
+  rather than waiting out the poll (2026-11-04, the free plan's log quota).
 - **ack** - `SENT` writes the deferred event, once; a repeat ack writes nothing.
   `FAILED` records why, and sending again from the console requeues the same
   row with the new wording (`requeue`).

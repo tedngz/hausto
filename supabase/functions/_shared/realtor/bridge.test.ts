@@ -99,6 +99,15 @@ describe('an approved message through the bridge', () => {
     expect(r).toMatchObject({ paused: true, outbox: [], watch: ['+84901234567'] });
   });
 
+  it('leaves the watch list out when the device does not ask, and still hands out the outbox', async () => {
+    await act({ action: 'CONTACTED', itemId: 'i1', message: 'Chào anh' });
+    // deno-lint-ignore no-explicit-any
+    const r = await bridgePull(db as any, T0, { withWatch: false });
+    expect(r).not.toHaveProperty('watch');
+    // The agent's number found on its own, without the watch list's lookup.
+    expect(r.outbox).toEqual([{ messageId: out()[0].id, phone: '+84901234567', body: 'Chào anh' }]);
+  });
+
   it('defers a broker notification the same way', async () => {
     db.tables.events.push(
       { id: 'e3', request_id: 'req-1', item_id: 'i1', type: 'OUTCOME_RECORDED', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-09-29T02:00:00Z', duration_minutes: 30 }] }, actor: 'OPS:op-1', occurred_at: '2026-09-27T01:00:00Z' },
