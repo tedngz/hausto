@@ -118,7 +118,11 @@ jobs:
             fn=$(basename "$dir")
             # _shared and friends are library code, bundled into their callers.
             case "$fn" in _*) continue ;; esac
-            flags=(--project-ref "$PROJECT_REF")
+            # --yes: since a CLI release around 2026-11-03, a production deploy asks
+            # for confirmation and, with no terminal to ask, deploys nothing and
+            # exits 1 ("Re-run with --yes to confirm"). Every function failed that
+            # way on #233.
+            flags=(--project-ref "$PROJECT_REF" --yes)
             attempts=1
             if grep -qx "$fn" <<<"${API_BUNDLE_FUNCTIONS// /$'\n'}"; then
               flags+=(--use-api)
