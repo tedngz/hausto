@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
-import { MIN_DISPLAY_IMAGES, ANALYZE_COUNT, expectedHighlightCount, highlightPolicyOf } from "../_shared/vibe-policy.ts";
+import { MIN_DISPLAY_IMAGES, ANALYZE_COUNT, LEGACY_ANALYZE_COUNT, expectedHighlightCount, highlightPolicyOf } from "../_shared/vibe-policy.ts";
 import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
@@ -88,17 +88,9 @@ serve(async (req) => {
       return isPoisoned(p);
     };
 
-    if (Array.isArray(property_ids) && property_ids.length > 0) {
-      const { data, error } = await supabase
-        .from('external_properties')
-        .select('id, title, images, vibe_analysis, vibe_status, highlights')
-        .in('id', property_ids);
-      if (error) throw error;
-      needsBackfill = (data || []).filter((p) =>
-        Array.isArray(p.images) && p.images.length > 0 &&
-        (missing_only ? hasMissingHighlights(p) : (p.vibe_status !== 'complete' || isPoisoned(p)))
-      );
-    } else {
+    // The old way, kept for when the candidate function is not there to ask
+    // (a migration not yet applied).
+    const scanForCandidates = async (): Promise<any[]> => {
       // Fetch a wider candidate pool then filter to truly-missing-highlights only.
       // We page through in chunks to avoid the 1000-row Supabase cap when scanning broadly.
       const candidates: any[] = [];
@@ -122,7 +114,45 @@ serve(async (req) => {
         if (data.length < pageSize) break;
         from += pageSize;
       }
-      needsBackfill = candidates;
+      return candidates;
+    };
+
+    if (Array.isArray(property_ids) && property_ids.length > 0) {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('id, title, images, vibe_analysis, vibe_status, highlights')
+        .in('id', property_ids);
+      if (error) throw error;
+      needsBackfill = (data || []).filter((p) =>
+        Array.isArray(p.images) && p.images.length > 0 &&
+        (missing_only ? hasMissingHighlights(p) : (p.vibe_status !== 'complete' || isPoisoned(p)))
+      );
+    } else {
+      // The database picks the candidates (image_highlight_backfill_candidates,
+      // the same test as above), and only they are downloaded, still judged
+      // here. Paging the whole table with its vibe_analysis was ~9 MB a call -
+      // most of the project's egress on 2026-11-03, and the likely reason every
+      // run that day ended in a 546.
+      const { data: ids, error: idsError } = await supabase.rpc('image_highlight_backfill_candidates', {
+        _limit: limit, _missing_only: missing_only, _legacy_policy: LEGACY_ANALYZE_COUNT, _scan: 5000,
+      });
+      if (!idsError && Array.isArray(ids)) {
+        const wanted = (ids as unknown[]).map(String);
+        if (wanted.length > 0) {
+          const { data, error } = await supabase
+            .from('external_properties')
+            .select('id, title, images, vibe_analysis, vibe_status, highlights, created_at')
+            .in('id', wanted)
+            .order('created_at', { ascending: false });
+          if (error) throw error;
+          needsBackfill = (data || []).filter((p) =>
+            missing_only ? hasMissingHighlights(p) : (p.vibe_status !== 'complete' && Array.isArray(p.images) && p.images.length > 0)
+          );
+        }
+      } else {
+        console.warn('[backfill] candidate lookup unavailable, scanning instead:', idsError?.message);
+        needsBackfill = await scanForCandidates();
+      }
     }
 
     console.log(`[backfill] ${needsBackfill.length} properties need vibe analysis`);

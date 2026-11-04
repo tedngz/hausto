@@ -42,31 +42,32 @@ export interface PullResult {
   /** Sending stopped by an operator. The device keeps reading replies. */
   paused: boolean;
   outbox: OutboxMessage[];
-  /** Agents whose messages the device may forward. Everyone else stays on the device. */
-  watch: string[];
+  /**
+   * Agents whose messages the device may forward. Everyone else stays on the
+   * device. Absent when the device did not ask (`withWatch: false`): it keeps
+   * the list it has.
+   */
+  watch?: string[];
 }
 
-export async function bridgePull(db: Supa, now: Date): Promise<PullResult> {
+export interface PullOptions {
+  /**
+   * Work out the watch list. Four of a pull's queries are this, and the list
+   * changes when a request or an inquiry does, not every poll, so the device
+   * asks every few minutes (bridge/src/bridge.ts). Default true: a device
+   * that predates the option gets the list on every pull, as before.
+   */
+  withWatch?: boolean;
+}
+
+export async function bridgePull(db: Supa, now: Date, opts: PullOptions = {}): Promise<PullResult> {
+  const withWatch = opts.withWatch !== false;
   const { data: status } = await db.from('zalo_bridge_status').select('paused').eq('id', 'singleton').maybeSingle();
   const paused = status?.paused === true;
 
-  const since = new Date(now.getTime() - WATCH_DAYS * 86_400_000).toISOString();
-  const { data: recent } = await db.from('viewing_requests').select('id').gte('created_at', since);
-  const requestIds = ((recent ?? []) as { id: string }[]).map(r => r.id);
-  const { data: items } = requestIds.length
-    ? await db.from('request_items').select('realtor_id').in('request_id', requestIds)
-    : { data: [] };
-  // And the building agents asked about an availability request (S7.2).
-  const { data: asked } = await db.from('realtor_messages')
-    .select('realtor_id').not('inquiry_id', 'is', null).eq('direction', 'OUT').gte('created_at', since);
-  const realtorIds = [...new Set([
-    ...((items ?? []) as { realtor_id: string | null }[]).map(i => i.realtor_id),
-    ...((asked ?? []) as { realtor_id: string | null }[]).map(m => m.realtor_id),
-  ].filter(Boolean))];
-  const { data: realtors } = realtorIds.length
-    ? await db.from('realtors').select('id, phone_e164').in('id', realtorIds)
-    : { data: [] };
-  const phoneOf = new Map(((realtors ?? []) as { id: string; phone_e164: string }[]).map(r => [r.id, r.phone_e164]));
+  // Without the watch list, phoneOf stays empty and each queued message looks
+  // its agent up on its own, below - rare, since the outbox is almost always empty.
+  const phoneOf = withWatch ? await watchedAgents(db, now) : new Map<string, string>();
 
   const outbox: OutboxMessage[] = [];
   if (!paused) {
@@ -94,7 +95,31 @@ export async function bridgePull(db: Supa, now: Date): Promise<PullResult> {
     }
   }
 
-  return { paused, outbox, watch: [...new Set(phoneOf.values())] };
+  return withWatch ? { paused, outbox, watch: [...new Set(phoneOf.values())] } : { paused, outbox };
+}
+
+/**
+ * The agents Hausto is talking to: on a viewing request from the last
+ * WATCH_DAYS, or asked about a building in that time. Realtor id to number.
+ */
+async function watchedAgents(db: Supa, now: Date): Promise<Map<string, string>> {
+  const since = new Date(now.getTime() - WATCH_DAYS * 86_400_000).toISOString();
+  const { data: recent } = await db.from('viewing_requests').select('id').gte('created_at', since);
+  const requestIds = ((recent ?? []) as { id: string }[]).map(r => r.id);
+  const { data: items } = requestIds.length
+    ? await db.from('request_items').select('realtor_id').in('request_id', requestIds)
+    : { data: [] };
+  // And the building agents asked about an availability request (S7.2).
+  const { data: asked } = await db.from('realtor_messages')
+    .select('realtor_id').not('inquiry_id', 'is', null).eq('direction', 'OUT').gte('created_at', since);
+  const realtorIds = [...new Set([
+    ...((items ?? []) as { realtor_id: string | null }[]).map(i => i.realtor_id),
+    ...((asked ?? []) as { realtor_id: string | null }[]).map(m => m.realtor_id),
+  ].filter(Boolean))];
+  const { data: realtors } = realtorIds.length
+    ? await db.from('realtors').select('id, phone_e164').in('id', realtorIds)
+    : { data: [] };
+  return new Map(((realtors ?? []) as { id: string; phone_e164: string }[]).map(r => [r.id, r.phone_e164]));
 }
 
 export type AckResult = { ok: true; eventWritten: boolean } | { ok: false; error: string };

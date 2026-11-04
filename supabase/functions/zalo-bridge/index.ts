@@ -3,7 +3,8 @@
 // Three calls, all POST with a JSON body carrying `action`:
 //
 //   pull     heartbeat, then: the messages to send (claimed for this device),
-//            and the agent numbers whose replies it may forward
+//            and - unless it says withWatch: false - the agent numbers whose
+//            replies it may forward
 //   ack      for each message it tried: sent, or failed and why
 //   inbound  the agents' messages it saw
 //
@@ -147,7 +148,8 @@ Deno.serve(async (req) => {
         device: body.device as string, version: body.version as string,
         sentToday: body.sentToday as number, error: body.error as string | null,
       }, now);
-      return json(await bridgePull(db, now));
+      // An older device sends no withWatch and gets the list on every pull.
+      return json(await bridgePull(db, now, { withWatch: body.withWatch !== false }));
     }
 
     case 'ack': {

@@ -176,7 +176,8 @@ ZALO_BRIDGE_TOKEN=... DEVICE_LABEL=office-mini-pc npm start
 | `DEVICE_LABEL` | `zalo-bridge` | Shown on the console. |
 | `DAILY_CAP` | `60` | Messages per day. |
 | `MIN_GAP_MS` | `20000` | Between two sends. |
-| `POLL_MS` | `30000` | How often it checks in. |
+| `POLL_MS` | `120000` | How often it checks in. An agent's reply does not wait for it: it wakes the loop. Each check-in costs Supabase log and egress quota, which is why it is not 30 s any more (2026-11-04). |
+| `WATCH_REFRESH_MS` | `600000` | How often it asks for the watch list again. An agent it is handed a message for is watched at once regardless. |
 
 Run it under a supervisor that restarts it - systemd on a mini PC, for
 example:

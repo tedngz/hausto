@@ -538,6 +538,67 @@ function normalizeLocation(location: string): string {
 
 
 // Run vibe analysis for a property and update it
+const VIBE_BACKFILL_COLUMNS = 'id, title, location, price, size, rooms, images, amenities, vibe_analysis, highlights';
+const VIBE_BACKFILL_SCAN = 200;
+
+const isGenericHighlight = (h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space';
+
+/** Whether a listing still needs a vibe pass. `vibe_backfill_candidates` in SQL is the same test. */
+function needsVibeBackfill(p: any): boolean {
+  if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
+  if (!p.vibe_analysis?.colors || p.vibe_analysis.colors.length === 0) return true;
+  if (!p.vibe_analysis?.activities || p.vibe_analysis.activities.length === 0) return true;
+  if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
+  if (!p.highlights || p.highlights.length === 0) return true;
+  if (p.highlights.every((h: string) => isGenericHighlight(h))) return true;
+
+  const hasUsableSecondaryHighlight = p.vibe_analysis.image_analyses.some((analysis: any) => {
+    const imageIndex = Number(analysis?.image_index);
+    const highlight = analysis?.image_highlight || analysis?.highlight;
+    return Number.isFinite(imageIndex) && imageIndex > 0 && highlight && !isGenericHighlight(highlight);
+  });
+
+  return !hasUsableSecondaryHighlight;
+}
+
+/**
+ * Ids among the newest active listings that still need a vibe pass, picked by
+ * the database so nothing else is downloaded. Reading all 200 with their
+ * vibe_analysis (~2.4 MB) to find none was most of the backfill's cost, forty
+ * times a day. null when the function cannot be asked (a migration not yet
+ * applied) - the caller then does it the old way.
+ */
+async function vibeBackfillIds(supabase: any): Promise<string[] | null> {
+  const { data, error } = await supabase.rpc('vibe_backfill_candidates', { _scan: VIBE_BACKFILL_SCAN });
+  if (error || !Array.isArray(data)) {
+    console.warn('[scheduled-crawl] vibe_backfill_candidates unavailable:', error?.message);
+    return null;
+  }
+  return (data as unknown[]).map(String);
+}
+
+/** The listings needing a vibe pass, newest first, each one judged by needsVibeBackfill. */
+async function loadVibeBackfill(supabase: any): Promise<{ scanned: number; rows: any[] }> {
+  const ids = await vibeBackfillIds(supabase);
+  if (ids !== null) {
+    if (ids.length === 0) return { scanned: VIBE_BACKFILL_SCAN, rows: [] };
+    const { data } = await supabase
+      .from('external_properties')
+      .select(VIBE_BACKFILL_COLUMNS)
+      .in('id', ids)
+      .order('created_at', { ascending: false });
+    return { scanned: VIBE_BACKFILL_SCAN, rows: (data ?? []).filter(needsVibeBackfill) };
+  }
+  const { data } = await supabase
+    .from('external_properties')
+    .select(VIBE_BACKFILL_COLUMNS)
+    .eq('is_active', true)
+    .not('images', 'eq', '{}')
+    .order('created_at', { ascending: false })
+    .limit(VIBE_BACKFILL_SCAN);
+  return { scanned: data?.length ?? 0, rows: (data ?? []).filter(needsVibeBackfill) };
+}
+
 async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: any): Promise<boolean> {
   if (!ANTHROPIC_API_KEY || !propertyData.images || propertyData.images.length === 0) return false;
 
@@ -1023,41 +1084,10 @@ Deno.serve(async (req) => {
     if (body.action === 'backfill-vibe') {
       console.log('[scheduled-crawl] Starting bulk vibe backfill for external properties');
       
-      // Fetch more properties to check — we filter client-side anyway
-      const { data: needsVibe } = await supabase
-        .from('external_properties')
-        .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis, highlights')
-        .eq('is_active', true)
-        .not('images', 'eq', '{}')
-        .order('created_at', { ascending: false })
-        .limit(200);
+      // The database picks the candidates; only they are downloaded.
+      const { scanned, rows: toBackfill } = await loadVibeBackfill(supabase);
 
-      if (!needsVibe || needsVibe.length === 0) {
-        return new Response(JSON.stringify({ success: true, message: 'No properties to backfill', analyzed: 0 }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const isGenericHighlight = (h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space';
-
-      const toBackfill = needsVibe.filter((p: any) => {
-        if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
-        if (!p.vibe_analysis?.colors || p.vibe_analysis.colors.length === 0) return true;
-        if (!p.vibe_analysis?.activities || p.vibe_analysis.activities.length === 0) return true;
-        if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
-        if (!p.highlights || p.highlights.length === 0) return true;
-        if (p.highlights.every((h: string) => isGenericHighlight(h))) return true;
-
-        const hasUsableSecondaryHighlight = p.vibe_analysis.image_analyses.some((analysis: any) => {
-          const imageIndex = Number(analysis?.image_index);
-          const highlight = analysis?.image_highlight || analysis?.highlight;
-          return Number.isFinite(imageIndex) && imageIndex > 0 && highlight && !isGenericHighlight(highlight);
-        });
-
-        return !hasUsableSecondaryHighlight;
-      });
-
-      console.log(`[scheduled-crawl] Found ${toBackfill.length}/${needsVibe.length} properties needing vibe backfill`);
+      console.log(`[scheduled-crawl] Found ${toBackfill.length}/${scanned} properties needing vibe backfill`);
 
       if (toBackfill.length === 0) {
         return new Response(JSON.stringify({ success: true, message: 'All properties already have vibe data', analyzed: 0 }), {
@@ -1681,12 +1711,20 @@ Deno.serve(async (req) => {
       console.log(`[scheduled-crawl] Daily count updated for ${bestTarget.marketplace}: ${updatedDailyCount}/${dailyCap}`);
     }
 
-    // Step 3: Always chain vibe backfill via QStash after each crawl
-    // This ensures any properties with missing/generic highlights get processed
-    console.log(`[scheduled-crawl] Chaining vibe backfill (new: ${newListings}, updated: ${updatedListings})`);
-    const backfillChained = await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
-    if (!backfillChained) {
-      console.warn('[scheduled-crawl] Failed to chain vibe backfill via QStash — will attempt inline analysis');
+    // Step 3: Chain the vibe backfill via QStash when any listing needs it -
+    // missing or generic highlights, from this crawl or an earlier one. Asking
+    // first costs one small query; chaining regardless was a function run and
+    // a 2.4 MB read after every crawl, three in four of which found nothing.
+    // When the database cannot say (null), chain as before.
+    const pendingVibe = await vibeBackfillIds(supabase);
+    const backfillNeeded = pendingVibe === null || pendingVibe.length > 0;
+    let backfillChained = false;
+    if (backfillNeeded) {
+      console.log(`[scheduled-crawl] Chaining vibe backfill (new: ${newListings}, updated: ${updatedListings}, pending: ${pendingVibe?.length ?? 'unknown'})`);
+      backfillChained = await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
+      if (!backfillChained) {
+        console.warn('[scheduled-crawl] Failed to chain vibe backfill via QStash — will attempt inline analysis');
+      }
     }
 
     // Step 4: Only when the chain could not be published, do inline vibe
@@ -1694,7 +1732,7 @@ Deno.serve(async (req) => {
     // ran anyway, ten seconds ahead of the chained backfill and over the same
     // rows, so the two analysed one listing twice (16:04:38 and 16:04:49 on
     // 2026-10-15) - and the inline copy is what outlived the wall clock.
-    if (ANTHROPIC_API_KEY && scrapeResult?.success && !backfillChained) {
+    if (ANTHROPIC_API_KEY && scrapeResult?.success && backfillNeeded && !backfillChained) {
       if (msLeft() > INLINE_VIBE_MS) {
         // Fetch more properties to find all that need analysis
         const { data: needsVibe } = await supabase

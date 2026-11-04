@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Bridge } from './bridge.ts';
 import { Journal } from './journal.ts';
 import type { ZaloClient, IncomingZalo } from './zalo.ts';
-import type { HaustoApi, PullResponse, Ack, Inbound } from './hausto.ts';
+import type { HaustoApi, PullResponse, Ack, Inbound, Heartbeat } from './hausto.ts';
 import { toLocalPhone, textOf, photoUrlsOf } from './zalo-text.ts';
 
 class FakeZalo implements ZaloClient {
@@ -24,8 +24,8 @@ class FakeApi implements HaustoApi {
   next: PullResponse = { paused: false, outbox: [], watch: [] };
   acks: Ack[] = [];
   inbounds: Inbound[] = [];
-  heartbeats: { sentToday: number; error: string | null }[] = [];
-  pull(h: { device: string; version: string; sentToday: number; error: string | null }) {
+  heartbeats: Heartbeat[] = [];
+  pull(h: Heartbeat) {
     this.heartbeats.push(h);
     return Promise.resolve(this.next);
   }
@@ -39,8 +39,9 @@ let journal: Journal;
 let clock: number;
 let slept: number[];
 
-const make = (opts: Partial<{ dailyCap: number; minGapMs: number }> = {}) => new Bridge(api, zalo, journal, {
+const make = (opts: Partial<{ dailyCap: number; minGapMs: number; onIncoming: () => void }> = {}) => new Bridge(api, zalo, journal, {
   device: 'test', version: '0', dailyCap: opts.dailyCap ?? 60, minGapMs: opts.minGapMs ?? 20_000, resolvePerPass: 3,
+  watchRefreshMs: 600_000, onIncoming: opts.onIncoming,
   now: () => new Date(clock),
   sleep: ms => { slept.push(ms); clock += ms; return Promise.resolve(); },
 });
@@ -153,6 +154,51 @@ describe('listening', () => {
       { fromPhone: '+84901234567', text: '', providerMessageId: 'z200', photos: ['https://photo.zdn.vn/a.jpg'] },
       { fromPhone: '+84901234567', text: 'Tầng 18', providerMessageId: 'z201', photos: ['https://photo.zdn.vn/b.jpg'] },
     ]);
+  });
+
+  it('asks for the watch list on the first pass, then only once it is ten minutes old', async () => {
+    api.next = { paused: false, watch: ['+84901234567'], outbox: [] };
+    const b = make();
+    await b.start();
+    await b.pass();
+    clock += 120_000;
+    api.next = { paused: false, outbox: [] };   // what a pull without the list gets back
+    await b.pass();
+    clock += 480_000;
+    api.next = { paused: false, watch: ['+84901234567'], outbox: [] };
+    await b.pass();
+    expect(api.heartbeats.map(h => h.withWatch)).toEqual([true, false, true]);
+
+    // The list it was not sent again is the list it kept.
+    zalo.onMessage({ fromUid: 'uid-agent', text: 'ok em', msgId: 'z1' });
+    await b.pass();
+    expect(api.inbounds.map(m => m.providerMessageId)).toEqual(['z1']);
+  });
+
+  it('hears an agent it was just handed a message for, before the list comes round again', async () => {
+    api.next = { paused: false, watch: [], outbox: [] };
+    const b = make();
+    await b.start();
+    await b.pass();
+    api.next = { paused: false, outbox: [{ messageId: 'm1', phone: '+84987654321', body: 'Chào chị' }] };
+    await b.pass();
+    api.next = { paused: false, outbox: [] };
+    zalo.onMessage({ fromUid: 'uid-agent-2', text: 'Còn em', msgId: 'z9' });
+    zalo.onMessage({ fromUid: 'uid-mum', text: 'Con ăn cơm chưa?', msgId: 'z10' });
+    await b.pass();
+    expect(api.inbounds).toEqual([{ fromPhone: '+84987654321', text: 'Còn em', providerMessageId: 'z9' }]);
+  });
+
+  it('wakes the loop for a watched agent, and for nobody else', async () => {
+    let woken = 0;
+    api.next = { paused: false, watch: ['+84901234567'], outbox: [] };
+    const b = make({ onIncoming: () => { woken += 1; } });
+    await b.start();
+    await b.pass();
+    zalo.onMessage({ fromUid: 'uid-mum', text: 'Con ăn cơm chưa?', msgId: 'z1' });
+    expect(woken).toBe(0);
+    zalo.onMessage({ fromUid: 'uid-agent', text: 'ok em', msgId: 'z2' });
+    expect(woken).toBe(1);
   });
 
   it('keeps a reply it could not forward and tries again next pass', async () => {
