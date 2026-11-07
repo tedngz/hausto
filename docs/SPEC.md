@@ -1009,6 +1009,15 @@ change. It is held in one place:
   **Never `realtors.phone_e164`**: an agent an operator found - on a request,
   for a building, for Priority search - agreed to talk to Hausto, not to be
   published, and reaches a renter only on the viewing day.
+- `sync_listing_phones_from_realtors()` copies a linked realtor's number onto
+  the listing, and `auto_link_name_matches()` links an ad to a known realtor
+  from its name and masked digits. Both take only a realtor for whom
+  `realtor_number_is_public()` holds: the number was seen on an ad (a
+  `contact_checks` REVEAL, PUBLISHED or WEB_SEARCH, or the contact import), or
+  the realtor was on file before any operator path touched it
+  (`REALTOR_RESOLVED`, `complex_agents`, `inquiry_events`). Until 2026-11-07
+  the sync copied any linked realtor, and so published 2 operator-found numbers
+  on 6 listings.
 - `get-public-property` says whether there is a number (`has_agent_number`) and
   strips `contact_name`, `contact_phone`, `contact_phone_e164`, `source_url` and
   `source_agent_id` - for everyone, signed in or not. Until 2026-10-07 it
