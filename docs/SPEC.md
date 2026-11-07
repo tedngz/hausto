@@ -249,7 +249,9 @@ checks rather than SQL written fresh each run. Both are service-role only.
   `result` is `FOUND`, `NOT_FOUND`, `BLOCKED` or `GONE`. A found number must
   be a Vietnamese mobile and must start with the digits the listing's mask
   shows (`phone_mask_prefix`); a web-search find needs those digits to be
-  checked against at all. It links the agent to the listing and its
+  checked against at all. The owner's own entry from the contact sheet
+  (`checked_by = 'TED_SHEET'`) skips the mask: the owner has checked it, and
+  an agent can change the number on an ad that keeps the old mask. It links the agent to the listing and its
   `realtor_identities`, never to a request: an item in a live request is
   resolved in the console, and the result says `in_live_request` so the run
   can name it.
