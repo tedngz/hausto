@@ -13,9 +13,12 @@ export const MIN_DISPLAY_IMAGES = 5;
 
 // Keep up to this many images in the gallery. A source listing carries the
 // whole unit - every room, the building, the view - and truncating it at 8 threw
-// away photos a renter deciding on the place would want. The cap only exists so
-// one pathological listing cannot drag a crawl run out.
-export const STORE_TARGET = 20;
+// away photos a renter deciding on the place would want. 20 (2026-10) filled
+// the free plan's 1 GB of storage within weeks of the agency feeds arriving;
+// 12 still shows every room of a typical unit (owner's decision, 2026-11-09).
+// Listings stored under 20 keep their galleries: highlight_policy grandfathers
+// them (see highlightPolicyOf).
+export const STORE_TARGET = 12;
 
 // Analyze every stored image. Highlights are positional - one per photo, shown
 // under it in the gallery - so anything below STORE_TARGET leaves later photos

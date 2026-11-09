@@ -212,6 +212,11 @@ verify_jwt = false
 # would reject the request before the code could.
 verify_jwt = false
 
+[functions.storage-gc]
+# pg_cron calls this with the cron secret, which it checks itself, as
+# price-crosscheck does.
+verify_jwt = false
+
 # The eight below ran with verify_jwt = false in production with no entry here
 # (found 2026-10-06). Each checks its caller in the function or is public on
 # purpose; these entries only make the file say what production does.
