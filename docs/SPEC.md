@@ -1654,6 +1654,12 @@ for (`REALTOR_CONTACTED`, `ITEM_NUDGED`, `REALTOR_NOTIFIED`) waits on the row in
   for the watch list every 10 (`withWatch`); an agent it is handed a message
   for is watched from that pull, and a watched agent's reply wakes it at once
   rather than waiting out the poll (2026-11-04, the free plan's log quota).
+- **status** - the device is running but its Zalo login failed, and why. Sets
+  `last_error` without `last_seen_at`, so the console shows the device offline
+  with the reason; the device retries after 1, 5, 15 minutes, then hourly, and
+  the next pull's heartbeat clears it. A failed pull (Hausto unreachable)
+  backs off up to 15 minutes and never restarts the device, since every
+  restart is a Zalo login.
 - **ack** - `SENT` writes the deferred event, once; a repeat ack writes nothing.
   `FAILED` records why, and sending again from the console requeues the same
   row with the new wording (`requeue`).

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Bridge } from './bridge.ts';
+import { Bridge, loginRetryDelay, passRetryDelay } from './bridge.ts';
 import { Journal } from './journal.ts';
 import type { ZaloClient, IncomingZalo } from './zalo.ts';
-import type { HaustoApi, PullResponse, Ack, Inbound, Heartbeat } from './hausto.ts';
+import type { HaustoApi, PullResponse, Ack, Inbound, Heartbeat, StatusReport } from './hausto.ts';
 import { toLocalPhone, textOf, photoUrlsOf } from './zalo-text.ts';
 
 class FakeZalo implements ZaloClient {
@@ -10,7 +10,15 @@ class FakeZalo implements ZaloClient {
   onMessage: (m: IncomingZalo) => void = () => {};
   directory: Record<string, string> = { '+84901234567': 'uid-agent', '+84987654321': 'uid-agent-2' };
   failNext = false;
-  start(cb: (m: IncomingZalo) => void) { this.onMessage = cb; return Promise.resolve(); }
+  /** Logins that fail before one succeeds - an expired session. */
+  loginFailures = 0;
+  logins = 0;
+  start(cb: (m: IncomingZalo) => void) {
+    this.logins += 1;
+    if (this.loginFailures > 0) { this.loginFailures -= 1; return Promise.reject(new Error('Đăng nhập thất bại')); }
+    this.onMessage = cb;
+    return Promise.resolve();
+  }
   resolvePhone(p: string) { return Promise.resolve(this.directory[p] ?? null); }
   send(uid: string, text: string) {
     if (this.failNext) { this.failNext = false; return Promise.reject(new Error('zalo said no')); }
@@ -29,6 +37,8 @@ class FakeApi implements HaustoApi {
     this.heartbeats.push(h);
     return Promise.resolve(this.next);
   }
+  reports: StatusReport[] = [];
+  status(r: StatusReport) { this.reports.push(r); return Promise.resolve(); }
   ack(a: Ack[]) { this.acks.push(...a); return Promise.resolve(); }
   inbound(m: Inbound[]) { this.inbounds.push(...m); return Promise.resolve(); }
 }
@@ -215,6 +225,53 @@ describe('listening', () => {
     expect(api.inbounds.map(m => m.providerMessageId)).toEqual(['z1']);
     // Reported on the very next pull, so the console shows it.
     expect(api.heartbeats[1].error).toMatch(/forwarding replies failed/);
+  });
+});
+
+describe('logging in', () => {
+  it('waits a minute, five, fifteen, then an hour between failed logins - never every 30 seconds', () => {
+    expect([0, 1, 2, 3, 10].map(loginRetryDelay)).toEqual([60_000, 300_000, 900_000, 3_600_000, 3_600_000]);
+  });
+
+  it('backs off on failed passes instead of restarting, up to fifteen minutes', () => {
+    expect([1, 2, 3, 4, 10].map(f => passRetryDelay(f, 120_000))).toEqual([120_000, 240_000, 480_000, 900_000, 900_000]);
+  });
+
+  it('tells Hausto why it cannot log in, waits longer each time, and carries on once it can', async () => {
+    zalo.loginFailures = 3;
+    const b = make();
+    expect(await b.connect()).toBe(true);
+    expect(zalo.logins).toBe(4);
+    expect(slept).toEqual([60_000, 300_000, 900_000]);
+    expect(api.reports).toHaveLength(3);
+    expect(api.reports[0].error).toMatch(/Zalo login failed \(Đăng nhập thất bại\).*login\.sh.*1 min/);
+    expect(api.reports[2].error).toMatch(/15 min/);
+
+    // Logged in for real: replies flow as usual.
+    api.next = { paused: false, watch: ['+84901234567'], outbox: [] };
+    await b.pass();
+    zalo.onMessage({ fromUid: 'uid-agent', text: 'ok em', msgId: 'z1' });
+    await b.pass();
+    expect(api.inbounds.map(m => m.providerMessageId)).toEqual(['z1']);
+  });
+
+  it('still backs off when Hausto cannot hear the report either', async () => {
+    zalo.loginFailures = 1;
+    api.status = () => Promise.reject(new Error('offline'));
+    expect(await make().connect()).toBe(true);
+    expect(slept).toEqual([60_000]);
+  });
+
+  it('gives up waiting when the service is stopping', async () => {
+    zalo.loginFailures = 99;
+    let stop = false;
+    const b = new Bridge(api, zalo, journal, {
+      device: 'test', version: '0', dailyCap: 60, minGapMs: 0, resolvePerPass: 3,
+      now: () => new Date(clock),
+      sleep: ms => { slept.push(ms); stop = true; return Promise.resolve(); },
+    });
+    expect(await b.connect(() => stop)).toBe(false);
+    expect(zalo.logins).toBe(1);
   });
 });
 

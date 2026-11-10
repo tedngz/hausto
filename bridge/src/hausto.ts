@@ -7,8 +7,12 @@ export interface Heartbeat { device: string; version: string; sentToday: number;
 export interface Ack { messageId: string; sent: boolean; providerId?: string; error?: string }
 export interface Inbound { fromPhone: string; text: string; providerMessageId: string; photos?: string[] }
 
+/** The device is running but cannot do its work (its Zalo login failed), and why. */
+export interface StatusReport { device: string; version: string; error: string }
+
 export interface HaustoApi {
   pull(heartbeat: Heartbeat): Promise<PullResponse>;
+  status(report: StatusReport): Promise<void>;
   ack(acks: Ack[]): Promise<void>;
   inbound(messages: Inbound[]): Promise<void>;
 }
@@ -30,6 +34,10 @@ export class HttpHaustoApi implements HaustoApi {
 
   pull(heartbeat: Heartbeat) {
     return this.call<PullResponse>({ action: 'pull', ...heartbeat });
+  }
+
+  async status(report: StatusReport) {
+    await this.call({ action: 'status', ...report });
   }
 
   async ack(acks: Ack[]) {
