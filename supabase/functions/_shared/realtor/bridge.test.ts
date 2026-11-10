@@ -10,7 +10,7 @@ import { BridgeChannel } from './channel.ts';
 import { SupabaseRealtorMessageStore } from './store.ts';
 import { performOpsAction, type OpsDeps } from '../viewing/ops-actions.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
-import { bridgePull, bridgeAck, bridgeInbound, agentPhotoAllowed, CLAIM_LEASE_MS, type StorePhoto } from './bridge.ts';
+import { bridgePull, bridgeAck, bridgeInbound, bridgeHeartbeat, bridgeReportStatus, agentPhotoAllowed, CLAIM_LEASE_MS, type StorePhoto } from './bridge.ts';
 
 let db: FakeDb;
 let deps: OpsDeps;
@@ -205,5 +205,23 @@ describe("an agent's photos (S7.2b)", () => {
     }];
     expect(await inbound({ providerMessageId: 'p4', photos: ['https://photo.zdn.vn/a.jpg'] })).toEqual({ stored: false, reason: 'empty' });
     expect(copied).toHaveLength(0);
+  });
+});
+
+describe('a device that cannot log in to Zalo', () => {
+  it('says why on the console, stays offline, and the next good check-in clears it', async () => {
+    // deno-lint-ignore no-explicit-any
+    await bridgeHeartbeat(db as any, { device: 'vps', version: '0.3.1', sentToday: 0, error: null }, T0);
+    const seen = db.tables.zalo_bridge_status[0].last_seen_at;
+
+    // deno-lint-ignore no-explicit-any
+    await bridgeReportStatus(db as any, { device: 'vps', version: '0.3.1', error: 'Zalo login failed: Đăng nhập thất bại' }, at(600_000));
+    expect(db.tables.zalo_bridge_status[0]).toMatchObject({
+      last_seen_at: seen, last_error: 'Zalo login failed: Đăng nhập thất bại',
+    });
+
+    // deno-lint-ignore no-explicit-any
+    await bridgeHeartbeat(db as any, { device: 'vps', version: '0.3.1', sentToday: 0, error: null }, at(900_000));
+    expect(db.tables.zalo_bridge_status[0]).toMatchObject({ last_seen_at: at(900_000).toISOString(), last_error: null });
   });
 });

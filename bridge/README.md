@@ -161,6 +161,14 @@ Two things to know:
   the user it runs as. To revoke it, sign the web session out from the Zalo
   app on the phone (settings, device / login management).
 
+**When the session expires**, the bridge keeps running but cannot log in. It
+says so on the ops console ("Zalo login failed ... log the account in again"),
+shows as offline there, and tries again after a minute, five, fifteen, then
+hourly - never in a tight loop, which puts the account at risk (until 0.3.1 it
+retried every 30 seconds, and did for six days in November 2026). Run
+`login.sh` as above; the next try picks up the new session, no deploy needed.
+On Windows, run the scripts from Git Bash, not PowerShell.
+
 ### 3. Run it
 
 ```bash

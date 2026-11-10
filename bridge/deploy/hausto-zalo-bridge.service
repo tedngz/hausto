@@ -12,10 +12,16 @@ Group=hausto
 WorkingDirectory=/opt/hausto-bridge/app
 EnvironmentFile=/opt/hausto-bridge/.env
 ExecStart=/usr/bin/node --experimental-transform-types src/main.ts
-# main.ts exits after ten failed passes so a broken Zalo session is replaced
-# by a fresh one; this is what brings it back.
+# The bridge retries a failed Zalo login and an unreachable Hausto itself,
+# backing off (bridge.ts loginRetryDelay, passRetryDelay), so this only brings
+# it back from a crash. Repeated crashes wait longer each time, up to 30
+# minutes, so a crash at start-up cannot become a login storm: every start
+# logs in to Zalo. (RestartSteps needs systemd 254+; older ones ignore it and
+# keep the flat 30 s.)
 Restart=always
 RestartSec=30
+RestartSteps=6
+RestartMaxDelaySec=30min
 
 # It needs to read its code, write its state, and make outbound HTTPS calls.
 NoNewPrivileges=true

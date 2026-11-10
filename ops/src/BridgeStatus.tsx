@@ -17,8 +17,13 @@ interface Status {
   paused: boolean;
 }
 
-/** The device checks in every 30 seconds or so. Two minutes of silence is down. */
-const ONLINE_WITHIN_MS = 2 * 60_000;
+/**
+ * The device checks in every 2 minutes (bridge POLL_MS, since 2026-11-04), so
+ * five minutes of silence - two missed check-ins - is down. A device that
+ * cannot log in to Zalo reports that without checking in, so it reads as
+ * offline here with its reason underneath.
+ */
+const ONLINE_WITHIN_MS = 5 * 60_000;
 
 export function BridgeStatus() {
   const [status, setStatus] = useState<Status | null>(null);

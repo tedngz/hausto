@@ -1,11 +1,11 @@
 // The Zalo bridge daemon. Runs on the always-on device; see README.md.
 
-import { Bridge } from './bridge.ts';
+import { Bridge, passRetryDelay } from './bridge.ts';
 import { Journal } from './journal.ts';
 import { HttpHaustoApi } from './hausto.ts';
 import { ZcaClient } from './zalo-zca.ts';
 
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 function env(name: string, fallback?: string): string {
   const v = (process.env[name] ?? fallback ?? '').trim();
@@ -72,10 +72,10 @@ async function loop(): Promise<void> {
       }
     } catch (e) {
       failures += 1;
-      console.error(`[bridge] pass failed (${failures} in a row):`, (e as Error).message);
-      // Let the supervisor (systemd, pm2) restart with a clean Zalo session
-      // rather than looping forever on a broken one.
-      if (failures >= 10) process.exit(1);
+      const wait = passRetryDelay(failures, pollMs);
+      console.error(`[bridge] pass failed (${failures} in a row), next in ${Math.round(wait / 1000)}s:`, (e as Error).message);
+      await nap(wait);
+      continue;
     }
     await nap(pollMs);
   }
@@ -86,5 +86,4 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 console.log(`[bridge] ${VERSION} starting, polling every ${pollMs / 1000}s`);
-await bridge.start();
-await loop();
+if (await bridge.connect(() => stopping)) await loop();

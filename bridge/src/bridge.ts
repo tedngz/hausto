@@ -41,6 +41,33 @@ const RETRY_UNRESOLVED_MS = 6 * 3_600_000;
 
 const DEFAULT_WATCH_REFRESH_MS = 10 * 60_000;
 
+/**
+ * How long to wait after the `attempt`th failed Zalo login (0-based): a minute,
+ * five, fifteen, then hourly. A login that fails has usually expired, and only
+ * a person scanning a new QR code fixes it (deploy/login.sh); retrying every
+ * 30 seconds fixes nothing and puts the account at risk. On 2026-11-03 the
+ * bridge did that for six days - almost 17,000 logins - and nobody was told.
+ */
+export function loginRetryDelay(attempt: number): number {
+  const steps = [60_000, 5 * 60_000, 15 * 60_000];
+  return steps[attempt] ?? 60 * 60_000;
+}
+
+/**
+ * How long to wait after `failures` passes in a row have failed. A pass only
+ * fails when Hausto cannot be reached; Zalo trouble is caught inside it. So the
+ * answer is to wait longer, never to restart: a restart logs in to Zalo again,
+ * which is how a Supabase outage became a login storm.
+ */
+export function passRetryDelay(failures: number, pollMs: number): number {
+  return Math.min(pollMs * 2 ** Math.max(0, failures - 1), 15 * 60_000);
+}
+
+function minutes(ms: number): string {
+  const m = Math.round(ms / 60_000);
+  return m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`;
+}
+
 export interface PassResult { forwarded: number; sent: number; failed: number; capped: boolean }
 
 export class Bridge {
@@ -67,6 +94,33 @@ export class Bridge {
 
   start(): Promise<void> {
     return this.zalo.start(m => this.onMessage(m));
+  }
+
+  /**
+   * Log in to Zalo, waiting longer after each failure (loginRetryDelay) and
+   * telling Hausto why each time, so the console shows it. Resolves true once
+   * logged in, false if `stopping` turns true first. Each attempt re-reads the
+   * saved session, so a new login from deploy/login.sh is picked up by the
+   * next try without a restart.
+   */
+  async connect(stopping: () => boolean = () => false): Promise<boolean> {
+    for (let attempt = 0; !stopping(); attempt++) {
+      try {
+        await this.start();
+        return true;
+      } catch (e) {
+        const wait = loginRetryDelay(attempt);
+        const error = `Zalo login failed (${(e as Error).message}). Log the account in again with bridge/deploy/login.sh - next try in ${minutes(wait)}.`;
+        console.error(`[bridge] ${error}`);
+        try {
+          await this.api.status({ device: this.opts.device, version: this.opts.version, error });
+        } catch {
+          // Hausto unreachable as well; the device's own log has it.
+        }
+        await this.sleep(wait);
+      }
+    }
+    return false;
   }
 
   /** Called by the Zalo listener. Keeps only agents Hausto is talking to. */

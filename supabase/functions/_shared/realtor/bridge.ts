@@ -257,6 +257,25 @@ export async function bridgeInbound(
   return { stored: true, ...target, messageId: reply.id };
 }
 
+/**
+ * The device is up but cannot work - its Zalo login failed - and says why.
+ * Records the error for the console without touching `last_seen_at`: a device
+ * that cannot reach Zalo is not online, whatever it can tell us. The next
+ * successful pull's heartbeat clears the error.
+ */
+export async function bridgeReportStatus(
+  db: Supa,
+  r: { device?: string; version?: string; error?: string | null },
+  now: Date,
+): Promise<void> {
+  await db.from('zalo_bridge_status').update({
+    device: r.device ? String(r.device).slice(0, 80) : null,
+    version: r.version ? String(r.version).slice(0, 40) : null,
+    last_error: r.error ? String(r.error).slice(0, 500) : null,
+    updated_at: now.toISOString(),
+  }).eq('id', 'singleton');
+}
+
 export async function bridgeHeartbeat(
   db: Supa,
   h: { device?: string; version?: string; sentToday?: number; error?: string | null },

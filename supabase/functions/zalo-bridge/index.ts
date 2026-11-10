@@ -1,12 +1,14 @@
 // The door the always-on Zalo device talks to (stage 3, bridge/README.md).
 //
-// Three calls, all POST with a JSON body carrying `action`:
+// Four calls, all POST with a JSON body carrying `action`:
 //
 //   pull     heartbeat, then: the messages to send (claimed for this device),
 //            and - unless it says withWatch: false - the agent numbers whose
 //            replies it may forward
 //   ack      for each message it tried: sent, or failed and why
 //   inbound  the agents' messages it saw
+//   status   it is running but cannot log in to Zalo, and why - shown on the
+//            console, without counting the device as online
 //
 // Authenticated by ZALO_BRIDGE_TOKEN, a long random secret shared with the
 // device and nothing else. The device cannot present a Supabase JWT, and a
@@ -15,7 +17,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import {
-  bridgePull, bridgeAck, bridgeInbound, bridgeHeartbeat, agentPhotoAllowed, type StorePhoto,
+  bridgePull, bridgeAck, bridgeInbound, bridgeHeartbeat, bridgeReportStatus, agentPhotoAllowed, type StorePhoto,
 } from '../_shared/realtor/bridge.ts';
 import { prepareForStorage } from '../_shared/mirror-image.ts';
 import { renderAgentReplyAlert } from '../_shared/viewing/inquiry-deadline.ts';
@@ -150,6 +152,15 @@ Deno.serve(async (req) => {
       }, now);
       // An older device sends no withWatch and gets the list on every pull.
       return json(await bridgePull(db, now, { withWatch: body.withWatch !== false }));
+    }
+
+    // The device could not log in to Zalo: the console shows why, and the
+    // device stays offline until a pull says otherwise.
+    case 'status': {
+      await bridgeReportStatus(db, {
+        device: body.device as string, version: body.version as string, error: body.error as string | null,
+      }, now);
+      return json({ ok: true });
     }
 
     case 'ack': {
