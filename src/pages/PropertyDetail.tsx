@@ -278,12 +278,24 @@ const PropertyDetail = () => {
           <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
         </Helmet>
       )}
-      {/* The hub's two-pane shape: the listing scrolls in its own pane so the
-          chat beside it keeps its own scroll and its composer stays put. */}
-      <div className="flex h-[var(--app-h)] flex-col overflow-hidden bg-gradient-to-br from-orange-50 via-white to-red-50">
-        <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto">
-        <main className="container mx-auto px-4 py-5 sm:py-8 max-w-4xl">
+      {/* At rail widths, the hub's two-pane shape: the listing scrolls in its
+          own pane so the chat beside it keeps its own scroll and its composer
+          stays put. Below them the page is an ordinary page that scrolls, with
+          the chat pinned to the bottom of the screen over it (ChatDock's
+          `pinned`) - a one-screen layout needs the screen's height, and Brave
+          on iOS reports one that ends above its toolbar. The listing leaves
+          room at its end for the sheet, however tall it is (--hub-dock). */}
+      <div
+        className={`bg-gradient-to-br from-orange-50 via-white to-red-50 ${
+          hasRail ? 'flex h-[var(--app-h)] flex-col overflow-hidden' : 'min-h-[var(--app-h)]'
+        }`}
+      >
+        <div className={hasRail ? 'flex min-h-0 flex-1' : undefined}>
+        <div className={hasRail ? 'min-w-0 flex-1 overflow-y-auto' : undefined}>
+        <main
+          className="container mx-auto px-4 py-5 sm:py-8 max-w-4xl"
+          style={hasRail ? undefined : { paddingBottom: 'calc(var(--hub-dock) + 1.25rem)' }}
+        >
           <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
             <Button
               variant="ghost"
@@ -351,6 +363,7 @@ const PropertyDetail = () => {
             isOpen={isChatOpen}
             onOpenChange={setIsChatOpen}
             collapsedHint="Ask about this listing"
+            pinned
             onHeaderPortalChange={setChatHeaderPortal}
           >
             {chat}
