@@ -59,6 +59,11 @@ All colors MUST be HSL.
     --hub-nav: 4rem;
     --hub-dock: 0px;
 
+    /* The height of the visible page, kept current by src/lib/appHeight.ts.
+       One-screen layouts size against this rather than 100dvh, which Brave on
+       iOS can leave short of the screen. */
+    --app-h: 100dvh;
+
     --sidebar-background: 0 0% 98%;
 
     --sidebar-foreground: 240 5.3% 26.1%;

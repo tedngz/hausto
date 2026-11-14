@@ -151,7 +151,7 @@ export const ChatDock = ({
     return () => window.removeEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
   }, [hasRail]);
 
-  // The page under the sheet is one screen tall (h-[100dvh]) and its panes
+  // The page under the sheet is one screen tall (--app-h) and its panes
   // scroll themselves, so the window should never move. iOS moves it anyway:
   // focusing the composer, it scrolls the window to lift the field clear of
   // the keyboard, and when the keyboard goes - sending disables the field,
@@ -240,7 +240,7 @@ export const ChatDock = ({
   // vanished behind the sheet the moment the renter opened it.
   useEffect(() => {
     const root = document.documentElement;
-    const openHeight = dockHeight === null ? 'max(50dvh, 15rem)' : `${dockHeight}px`;
+    const openHeight = dockHeight === null ? 'max(calc(var(--app-h) * 0.5), 15rem)' : `${dockHeight}px`;
     root.style.setProperty(
       '--hub-dock',
       hasRail || hidden ? '0px' : isOpen ? openHeight : '4rem',
@@ -312,7 +312,7 @@ export const ChatDock = ({
             ? `${keyboardFrame.height}px`
             : isOpen
               ? dockHeight === null
-                ? 'max(50dvh, 15rem)'
+                ? 'max(calc(var(--app-h) * 0.5), 15rem)'
                 : `${dockHeight}px`
               : '4rem',
           backgroundColor: keyboardFrame ? 'hsl(var(--background))' : undefined,

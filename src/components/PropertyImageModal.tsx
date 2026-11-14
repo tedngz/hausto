@@ -41,7 +41,7 @@ export const PropertyImageModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-none w-screen h-[100dvh] max-h-none p-0 m-0 rounded-none bg-white/95 backdrop-blur-xl border-none flex flex-col justify-between overflow-hidden gap-0">
+      <DialogContent className="max-w-none w-screen h-[var(--app-h)] max-h-none p-0 m-0 rounded-none bg-white/95 backdrop-blur-xl border-none flex flex-col justify-between overflow-hidden gap-0">
         
         {/* Top Section - Highlight Badge */}
         <div className="w-full flex-shrink-0 p-4 min-h-[60px] sm:min-h-[80px] flex items-start justify-center relative z-0 pointer-events-none">

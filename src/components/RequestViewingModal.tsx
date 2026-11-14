@@ -331,7 +331,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
       {/* Full height on a phone with the footer pinned, a normal dialog above
           that. The submit button being a scroll away was the worst of the old
           layout on mobile. */}
-      <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
+      <DialogContent className="flex h-[var(--app-h)] max-h-[var(--app-h)] w-full max-w-lg flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
         {submitted ? (
           submitted.joined ? (
             <div className="space-y-4 p-6">
