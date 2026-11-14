@@ -9,6 +9,7 @@ import { MAX_AREA_DISTRICTS, THIN_SEARCH } from "../_shared/viewing/place.ts";
 import { aiCreditKey, creditAllows, CREDITS_USED_REPLY } from "../_shared/ai-credits.ts";
 import { extractAmenities, parseBedrooms, parsePrice, splitAvoidedAreas } from "../_shared/chat-search-parse.ts";
 import { loadTerms, termsForPrompt, termsFromRow } from "../_shared/lease-terms.ts";
+import { splitEmbeddedBlocks } from "../_shared/chat-reply-blocks.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2945,9 +2946,34 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
+    // Prose with the blocks written after it rather than around it - "...tap
+    // Request viewing.\n[{"type":"followups",...}]" - parses as neither, and
+    // reached the renter as raw JSON. Lift the blocks out of the prose.
+    if (!extractedJson) {
+      const { prose, blocks } = splitEmbeddedBlocks(responseContent);
+      if (blocks.length > 0) {
+        extractedJson = { blocks: prose ? [{ type: 'text', body: prose }, ...blocks] : blocks };
+        console.log(`[AI] Lifted ${blocks.length} block(s) out of a prose reply`);
+      }
+    }
+    // The same JSON can sit inside the summary of an otherwise good reply.
+    if (extractedJson && typeof extractedJson.summary === 'string') {
+      const { prose, blocks } = splitEmbeddedBlocks(extractedJson.summary);
+      if (blocks.length > 0) {
+        extractedJson.summary = prose;
+        extractedJson.blocks = [...(Array.isArray(extractedJson.blocks) ? extractedJson.blocks : []), ...blocks];
+      }
+    }
+
     // Sanitize blocks (best-effort): keep only known types and required fields.
     function sanitizeBlocks(raw: any): any[] | undefined {
       if (!Array.isArray(raw)) return undefined;
+      // ...or inside a text block's body.
+      raw = raw.flatMap((b: any) => {
+        if (b?.type !== 'text' || typeof b.body !== 'string') return [b];
+        const { prose, blocks } = splitEmbeddedBlocks(b.body);
+        return blocks.length > 0 ? [{ ...b, body: prose }, ...blocks] : [b];
+      });
       const allowed = new Set(['text', 'complex', 'district', 'distance', 'followups']);
       const clipStr = (s: any, n = 600) => (typeof s === 'string' ? s.slice(0, n) : undefined);
       
@@ -3062,7 +3088,7 @@ Maximum ${maxResults} properties in results.`;
         );
         if (origTextBlock) {
           // Strip only bold markers, keep the rest
-          let recoveredBody = origTextBlock.body.replace(/\*\*/g, '').trim();
+          let recoveredBody = splitEmbeddedBlocks(origTextBlock.body).prose.replace(/\*\*/g, '').trim();
           // Remove only standalone [Ask]/[Search] lines but keep surrounding text
           recoveredBody = recoveredBody.replace(/^\s*-?\s*\[(?:Ask|Search)\][^\n]*\n?/gim, '').trim();
           if (recoveredBody.length > 0) {
