@@ -68,6 +68,15 @@ interface ChatDockProps {
   onOpenChange: (open: boolean) => void;
   /** Shown beside the title while the sheet is collapsed. */
   collapsedHint?: string;
+  /** The sheet is fixed to the bottom of the screen and the page scrolls
+   *  behind it, rather than closing a one-screen layout. A listing's page
+   *  uses it: on Brave for iOS no measure of the screen's height (100dvh,
+   *  window.innerHeight) reliably matched what it showed, and a page sized by
+   *  one ended above the toolbar with blank page under the chat. The bottom
+   *  edge of the screen is the one thing a fixed element always finds. The
+   *  page has to leave --hub-dock of room at its end so its last line can be
+   *  scrolled clear of the sheet. */
+  pinned?: boolean;
   /** Receives the node the chat's own controls (history, new chat) portal into,
    *  so they share the title's row instead of taking one off the thread. */
   onHeaderPortalChange: (el: HTMLDivElement | null) => void;
@@ -80,6 +89,7 @@ export const ChatDock = ({
   isOpen,
   onOpenChange,
   collapsedHint,
+  pinned = false,
   onHeaderPortalChange,
   children,
 }: ChatDockProps) => {
@@ -161,8 +171,9 @@ export const ChatDock = ({
   // So once nothing wants the keyboard, the window goes back to the top. The
   // check waits for scrolling and the keyboard to settle, so it never fights
   // a finger or the keyboard's own animation.
+  // A pinned sheet sits over a page that scrolls, so it leaves the window be.
   useEffect(() => {
-    if (hasRail) return;
+    if (hasRail || pinned) return;
     const viewport = window.visualViewport;
     let timer: number | undefined;
     const settle = () => {
@@ -182,7 +193,7 @@ export const ChatDock = ({
       window.removeEventListener('focusout', settle);
       viewport?.removeEventListener('resize', settle);
     };
-  }, [hasRail]);
+  }, [hasRail, pinned]);
 
   // While the keyboard is up for a field in the sheet, the sheet is pinned over
   // exactly the part of the page the renter can see: from the top of the
@@ -291,7 +302,9 @@ export const ChatDock = ({
       className={
         hidden
           ? 'hidden'
-          : `pointer-events-auto z-[60] ${keyboardFrame ? 'fixed inset-x-0' : 'shrink-0'}`
+          : `pointer-events-auto z-[60] ${
+              keyboardFrame ? 'fixed inset-x-0' : pinned ? 'fixed inset-x-0 bottom-0' : 'shrink-0'
+            }`
       }
       style={keyboardFrame ? { top: keyboardFrame.top } : undefined}
     >
