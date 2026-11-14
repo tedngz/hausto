@@ -280,7 +280,7 @@ const PropertyDetail = () => {
       )}
       {/* The hub's two-pane shape: the listing scrolls in its own pane so the
           chat beside it keeps its own scroll and its composer stays put. */}
-      <div className="flex h-[100dvh] flex-col bg-gradient-to-br from-orange-50 via-white to-red-50">
+      <div className="flex h-[var(--app-h)] flex-col overflow-hidden bg-gradient-to-br from-orange-50 via-white to-red-50">
         <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto">
         <main className="container mx-auto px-4 py-5 sm:py-8 max-w-4xl">

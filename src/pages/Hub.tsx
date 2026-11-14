@@ -184,7 +184,7 @@ const Hub = () => {
   if (user && prefsResolved && !hasPreferences && !skippedOnboarding) {
     return (
       <CurrencyProvider>
-        <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <div className="min-h-[var(--app-h)] bg-gradient-to-br from-slate-50 via-white to-slate-100">
           <OnboardingQuiz
             onComplete={(prefs) => {
               // Straight into the chat, pre-seeded with what they just told us,
@@ -237,7 +237,7 @@ const Hub = () => {
         <link rel="canonical" href="https://www.hausto.com/hub" />
       </Helmet>
 
-      <div className="flex h-[100dvh] flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <div className="flex h-[var(--app-h)] flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
         <h1 className="sr-only">Your rental search on Hausto</h1>
         <HubNavigation
           onViewProfile={() => setShowProfile(true)}
