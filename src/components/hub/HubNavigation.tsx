@@ -6,11 +6,14 @@ import { HubPlanPill } from '@/components/hub/HubPlanPill';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRoles } from '@/hooks/useUserRoles';
+import { cn } from '@/lib/utils';
 
 interface HubNavigationProps {
   onViewProfile: () => void;
   onRestartOnboarding: () => void;
   onOpenSubscription: () => void;
+  /** Below rail widths the hub sticks the bar to the top of a page that scrolls. */
+  className?: string;
 }
 
 /**
@@ -21,13 +24,23 @@ interface HubNavigationProps {
  * retired. What remains is the building directory, and - for accounts that have
  * realtor access - the way back to the realtor dashboard.
  */
-export const HubNavigation = ({ onViewProfile, onRestartOnboarding, onOpenSubscription }: HubNavigationProps) => {
+export const HubNavigation = ({
+  onViewProfile,
+  onRestartOnboarding,
+  onOpenSubscription,
+  className,
+}: HubNavigationProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isRealtor } = useUserRoles();
 
   return (
-    <nav className="relative flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white/80 px-4 backdrop-blur-md md:px-6">
+    <nav
+      className={cn(
+        'relative flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white/80 px-4 backdrop-blur-md md:px-6',
+        className
+      )}
+    >
       <button
         className="z-10 flex items-center gap-2"
         onClick={() => navigate('/')}

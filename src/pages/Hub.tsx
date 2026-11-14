@@ -237,9 +237,23 @@ const Hub = () => {
         <link rel="canonical" href="https://www.hausto.com/hub" />
       </Helmet>
 
-      <div className="flex h-[var(--app-h)] flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      {/* At rail widths, one screen: the nav, then the main pane and the chat
+          rail side by side, each scrolling itself. Below them it is an
+          ordinary page that scrolls, the nav stuck to the top and the chat
+          pinned to the bottom of the screen over it (ChatDock's `pinned`) -
+          a one-screen layout needs the screen's height, and Brave on iOS
+          reports one that ends above its toolbar, leaving blank page under
+          the chat. The floating panels still find both edges where they
+          expect them: --hub-nav at the top, --hub-dock at the bottom. */}
+      <div
+        className={cn(
+          'flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100',
+          hasRail ? 'h-[var(--app-h)] overflow-hidden' : 'min-h-[var(--app-h)]'
+        )}
+      >
         <h1 className="sr-only">Your rental search on Hausto</h1>
         <HubNavigation
+          className={hasRail ? undefined : 'sticky top-0 z-40'}
           onViewProfile={() => setShowProfile(true)}
           onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
           onRestartOnboarding={() => {
@@ -249,15 +263,21 @@ const Hub = () => {
           }}
         />
 
-        <div className="flex min-h-0 flex-1">
+        <div className={cn('flex flex-1', hasRail && 'min-h-0')}>
           {/* ---- Main pane ---- */}
           {/* The search view carries its own inner scroller at xl, so the pane
               stops scrolling there - profile has none, so it keeps the pane's. */}
+          {/* Below rail widths the page scrolls, not the pane, and the pane
+              leaves room at its end for the chat sheet, however tall it is.
+              Wide content (the browse table, the strips) scrolls sideways in
+              its own box; the clip keeps anything else from widening the page. */}
           <main
             className={cn(
-              'flex min-w-0 flex-1 flex-col overflow-y-auto',
-              !showProfile && 'xl:overflow-hidden'
+              'flex min-w-0 flex-1 flex-col',
+              hasRail ? 'overflow-y-auto' : 'overflow-x-clip',
+              hasRail && !showProfile && 'xl:overflow-hidden'
             )}
+            style={hasRail || showProfile ? undefined : { paddingBottom: 'var(--hub-dock)' }}
           >
             {showProfile ? (
               <div className="mx-auto w-full max-w-6xl p-4 lg:p-6">
@@ -413,6 +433,7 @@ const Hub = () => {
             isOpen={isChatOpen}
             onOpenChange={setIsChatOpen}
             collapsedHint="Ask about what’s on screen"
+            pinned
             onHeaderPortalChange={setChatHeaderPortal}
           >
             {chat}
